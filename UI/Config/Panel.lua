@@ -446,6 +446,37 @@ function Config:BuildControls()
     SelectedViewer().stack.showCount = checked
     Touch()
   end)
+  c.stackDisplayLabel = W.CreateLabel(parent, "Display", 12, W.colors.inkDim)
+  c.stackDisplay = W.CreateDropdown(parent, 150, function(_, value)
+    SelectedViewer().stack.display = value
+    Touch()
+    Config:Render()
+  end)
+  c.stackDisplay:SetOptions({
+    { text = "Segments (combo style)", value = "segments" },
+    { text = "Bar (continuous fill)", value = "bar" },
+  })
+  c.stackUnitLabel = W.CreateLabel(parent, "On unit", 12, W.colors.inkDim)
+  c.stackUnit = W.CreateDropdown(parent, 90, function(_, value)
+    SelectedViewer().stack.unit = value
+    Touch()
+  end)
+  c.stackUnit:SetOptions({
+    { text = "Player", value = "player" },
+    { text = "Target", value = "target" },
+  })
+
+  -- Power bar heights
+  c.powerHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
+  c.powerH = W.CreateEditBox(parent, 40, 20, function(_, text)
+    SelectedViewer().power.height = tonumber(text) or 26
+    Touch()
+  end)
+  c.powerSubHLabel = W.CreateLabel(parent, "Bar 2 height", 12, W.colors.inkDim)
+  c.powerSubH = W.CreateEditBox(parent, 40, 20, function(_, text)
+    SelectedViewer().power.subHeight = tonumber(text) or 18
+    Touch()
+  end)
 
   -- Elements
   c.elementsHeader = W.CreateSection(parent, "ELEMENTS")
@@ -1009,6 +1040,11 @@ function Config:Render()
     c.powerBar2:SetPoint("TOPLEFT", 210, y); c.powerBar2:SetValue(viewer.power.bar2 or "auto"); c.powerBar2:Show()
     c.powerWLabel:SetPoint("TOPLEFT", 340, y - 4); c.powerWLabel:Show()
     c.powerW:SetPoint("TOPLEFT", 382, y); c.powerW:SetText(tostring(viewer.power.width or 340)); c.powerW:Show()
+    y = y - 26
+    c.powerHLabel:SetPoint("TOPLEFT", 0, y - 4); c.powerHLabel:Show()
+    c.powerH:SetPoint("TOPLEFT", 44, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
+    c.powerSubHLabel:SetPoint("TOPLEFT", 110, y - 4); c.powerSubHLabel:Show()
+    c.powerSubH:SetPoint("TOPLEFT", 186, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
     y = y - 28
     c.ticks:SetPoint("TOPLEFT", 0, y); c.ticks:SetChecked(viewer.power.showTicks); c.ticks:Show()
     c.combo:SetPoint("TOPLEFT", 120, y); c.combo:SetChecked(viewer.power.showCombo); c.combo:Show()
@@ -1042,12 +1078,30 @@ function Config:Render()
     c.stackColorLabel:SetPoint("TOPLEFT", 300, y - 4); c.stackColorLabel:Show()
     c.stackColor:SetPoint("TOPLEFT", 336, y); c.stackColor:SetValue(viewer.stack.colorName or "gold"); c.stackColor:Show()
     y = y - 26
+    c.stackDisplayLabel:SetPoint("TOPLEFT", 0, y - 4); c.stackDisplayLabel:Show()
+    c.stackDisplay:SetPoint("TOPLEFT", 48, y)
+    c.stackDisplay:SetValue(viewer.stack.display or "segments")
+    c.stackDisplay:Show()
+    c.stackUnitLabel:SetPoint("TOPLEFT", 216, y - 4); c.stackUnitLabel:Show()
+    c.stackUnit:SetPoint("TOPLEFT", 262, y)
+    c.stackUnit:SetValue(viewer.stack.unit or "player")
+    c.stackUnit:Show()
+    y = y - 26
     c.stackCount:SetPoint("TOPLEFT", 0, y); c.stackCount:SetChecked(viewer.stack.showCount); c.stackCount:Show()
     y = y - 26
-    c.sizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.sizeLabel:Show()
-    c.iconSize:SetPoint("TOPLEFT", 32, y); c.iconSize:SetText(tostring(viewer.iconSize or 16)); c.iconSize:Show()
-    c.spacingLabel:SetPoint("TOPLEFT", 90, y - 4); c.spacingLabel:Show()
-    c.spacing:SetPoint("TOPLEFT", 120, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
+    if viewer.stack.display == "bar" then
+      c.barWLabel:SetPoint("TOPLEFT", 0, y - 4); c.barWLabel:Show()
+      c.barW:SetPoint("TOPLEFT", 16, y); c.barW:SetText(tostring(viewer.barWidth or 200)); c.barW:Show()
+      c.barHLabel:SetPoint("TOPLEFT", 68, y - 4); c.barHLabel:Show()
+      c.barH:SetPoint("TOPLEFT", 84, y); c.barH:SetText(tostring(viewer.barHeight or 16)); c.barH:Show()
+      c.fontLabel:SetPoint("TOPLEFT", 140, y - 4); c.fontLabel:Show()
+      c.fontSize:SetPoint("TOPLEFT", 172, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
+    else
+      c.sizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.sizeLabel:Show()
+      c.iconSize:SetPoint("TOPLEFT", 32, y); c.iconSize:SetText(tostring(viewer.iconSize or 16)); c.iconSize:Show()
+      c.spacingLabel:SetPoint("TOPLEFT", 90, y - 4); c.spacingLabel:Show()
+      c.spacing:SetPoint("TOPLEFT", 120, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
+    end
     y = y - 34
   elseif style ~= "reminders" then
     c.lookHeader:SetPoint("TOPLEFT", 0, y)
