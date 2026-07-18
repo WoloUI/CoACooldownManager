@@ -22,6 +22,9 @@ local function ScanFilter(unit, filter, store)
       name = name, icon = icon, count = count or 0,
       duration = duration or 0, expirationTime = expirationTime or 0,
       mine = unitCaster == "player" or unitCaster == "pet" or unitCaster == "vehicle",
+      -- Many Ascension auras report no caster; consumers that filter by
+      -- ownership can fall back to showing those (see Core/Tracking.lua)
+      hasCaster = unitCaster ~= nil,
       spellId = spellId, filter = filter,
       rank = rankNum and tonumber(rankNum) or 1,
     }

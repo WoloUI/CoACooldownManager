@@ -83,6 +83,31 @@ local function Touch()
   ns:Fire("VIEWERS_CHANGED")
 end
 
+-- Tracking view (party/raid HoT indicators, engine in Core/Tracking.lua)
+local TRACK_ANCHORS = {
+  "TOPLEFT", "TOP", "TOPRIGHT",
+  "LEFT", "CENTER", "RIGHT",
+  "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT",
+}
+local TRACK_STYLE_OPTIONS = {
+  { text = "Spell icon", value = "icon" },
+  { text = "Color square", value = "square" },
+}
+
+local function TrackingCfg()
+  return ns.profile and ns.profile.tracking
+end
+
+-- Resolved at CLICK time (pooled controls outlive profile switches)
+local function SelectedIndicator()
+  local tracking = TrackingCfg()
+  return tracking and state.selectedTrack and tracking.indicators[state.selectedTrack]
+end
+
+local function TouchTracking()
+  if ns.Tracking then ns.Tracking:Apply() end
+end
+
 --------------------------------------------------------------------------------
 -- Window skeleton
 --------------------------------------------------------------------------------
@@ -124,8 +149,15 @@ local function BuildWindow()
   end)
   win.profilesBtn:SetPoint("TOPLEFT", PAD, -72)
 
+  win.trackingBtn = W.CreateButton(win.sidebar, "Tracking", SIDEBAR_W - 2 * PAD, 21, function()
+    state.selected = "__tracking"
+    state.selectedElement = nil
+    Config:Render()
+  end)
+  win.trackingBtn:SetPoint("TOPLEFT", PAD, -95)
+
   win.sidebar.header = W.CreateSection(win.sidebar, "BARS")
-  win.sidebar.header:SetPoint("TOPLEFT", PAD, -102)
+  win.sidebar.header:SetPoint("TOPLEFT", PAD, -125)
   win.sidebar.buttons = {}
 
   win.newBar = W.CreateButton(win.sidebar, "+ New bar...", SIDEBAR_W - 2 * PAD, 22, function()
@@ -668,6 +700,161 @@ function Config:BuildControls()
   end)
   c.shareHint = W.CreateLabel(parent, "Export copies your current spec's bars, triggers, positions and buff groups\ninto a string you can share; import replaces the current spec's profile.", 10, W.colors.inkDim)
 
+  -- Tracking view (party/raid HoT indicators)
+  c.trackRestartHint = W.CreateLabel(parent,
+    "The tracking engine is a new file: close the game completely and start it\nagain once (a /reload is not enough), then this tab becomes available.",
+    11, W.colors.red)
+  c.trackEnable = W.CreateCheckbox(parent, "Enable HoT tracking", function(_, checked)
+    local tracking = TrackingCfg()
+    if not tracking then return end
+    tracking.enabled = checked
+    TouchTracking()
+  end)
+  c.trackHint = W.CreateLabel(parent,
+    "Tracks YOUR HoTs on the party/raid unit frames (ElvUI or Blizzard).\nAdd a spell, then place its indicator with the frame preview below.\nTip: Test mode shows fake indicators so you can position without a group.",
+    10, W.colors.inkDim)
+  c.trackListHeader = W.CreateSection(parent, "TRACKED SPELLS")
+  c.trackRows = {}
+  c.trackAddLabel = W.CreateLabel(parent, "Add spell", 12, W.colors.inkDim)
+  c.trackAddInput = W.CreateEditBox(parent, 170, 20)
+  c.trackAddBtn = W.CreateButton(parent, "Add", 50, 20, function()
+    local tracking = TrackingCfg()
+    if not tracking or not ns.Tracking then return end
+    local input = c.trackAddInput:GetText()
+    if not input or input == "" then return end
+    -- Names preferred (survive spell-ID changes); unknown text matches
+    -- aura names at runtime; unknown numeric IDs match by aura spellId
+    local _, name = ns.ResolveSpell(input)
+    local spell = name or tonumber(input) or input
+    table.insert(tracking.indicators, ns.Tracking.NewIndicator(spell))
+    state.selectedTrack = #tracking.indicators
+    c.trackAddInput:SetText("")
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackAddHint = W.CreateLabel(parent, "Type a HoT name or spell ID (e.g. Renew, Rejuvenation).", 10, W.colors.inkDim)
+
+  c.trackIndHeader = W.CreateSection(parent, "INDICATOR")
+  c.trackPreview = CreateFrame("Frame", nil, parent)
+  c.trackPreview:SetSize(180, 90)
+  W.ApplyBackdrop(c.trackPreview, { 0.05, 0.06, 0.09, 1 })
+  c.trackPreview.hint = W.CreateLabel(c.trackPreview, "unit frame", 9, W.colors.inkDim)
+  c.trackPreview.hint:SetPoint("BOTTOM", 0, 3)
+  c.trackPreview.marks = {}
+  c.trackPreview.anchorBtns = {}
+  for i, point in ipairs(TRACK_ANCHORS) do
+    local btn = CreateFrame("Button", nil, c.trackPreview)
+    btn:SetSize(10, 10)
+    W.ApplyBackdrop(btn, { 0.2, 0.24, 0.32, 1 })
+    btn:SetFrameLevel(c.trackPreview:GetFrameLevel() + 1)
+    btn:SetPoint(point, c.trackPreview, point, 0, 0)
+    btn.point = point
+    btn:SetScript("OnClick", function(self)
+      local ind = SelectedIndicator()
+      if not ind then return end
+      ind.anchor = self.point
+      TouchTracking()
+      Config:Render()
+    end)
+    btn:SetScript("OnEnter", function(self)
+      self:SetBackdropBorderColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3], 1)
+    end)
+    btn:SetScript("OnLeave", function(self)
+      self:SetBackdropBorderColor(W.colors.line[1], W.colors.line[2], W.colors.line[3], 1)
+    end)
+    c.trackPreview.anchorBtns[i] = btn
+  end
+
+  c.trackStyleLabel = W.CreateLabel(parent, "Style", 12, W.colors.inkDim)
+  c.trackStyle = W.CreateDropdown(parent, 110, function(_, value)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.style = value
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackStyle:SetOptions(TRACK_STYLE_OPTIONS)
+  c.trackColorLabel = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
+  c.trackColor = W.CreateColorSwatch(parent, function(_, color)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.color = color
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackSizeLabel = W.CreateLabel(parent, "Size", 12, W.colors.inkDim)
+  c.trackW = W.CreateEditBox(parent, 40, 20, function(_, text)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.w = math.max(tonumber(text) or 12, 1)
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackSizeX = W.CreateLabel(parent, "x", 12, W.colors.inkDim)
+  c.trackH = W.CreateEditBox(parent, 40, 20, function(_, text)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.h = math.max(tonumber(text) or 12, 1)
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackOffLabel = W.CreateLabel(parent, "Offset X/Y", 12, W.colors.inkDim)
+  c.trackX = W.CreateEditBox(parent, 40, 20, function(_, text)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.x = tonumber(text) or 0
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackY = W.CreateEditBox(parent, 40, 20, function(_, text)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.y = tonumber(text) or 0
+    TouchTracking()
+    Config:Render()
+  end)
+
+  c.trackTime = W.CreateCheckbox(parent, "Time left text", function(_, checked)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.showTime = checked
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackTimeFontLabel = W.CreateLabel(parent, "Font", 12, W.colors.inkDim)
+  c.trackTimeFont = W.CreateEditBox(parent, 34, 20, function(_, text)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.timeFontSize = math.max(tonumber(text) or 9, 6)
+    TouchTracking()
+  end)
+  c.trackSweep = W.CreateCheckbox(parent, "Cooldown sweep", function(_, checked)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.sweep = checked
+    TouchTracking()
+  end)
+  c.trackStacks = W.CreateCheckbox(parent, "Stacks", function(_, checked)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.showStacks = checked
+    TouchTracking()
+  end)
+  c.trackBlink = W.CreateCheckbox(parent, "Blink when expiring", function(_, checked)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.blink = checked
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackBlinkThLabel = W.CreateLabel(parent, "Sec", 12, W.colors.inkDim)
+  c.trackBlinkTh = W.CreateEditBox(parent, 34, 20, function(_, text)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.blinkThreshold = math.max(tonumber(text) or 3, 0.5)
+    TouchTracking()
+  end)
+
   c.trigger = ns.TriggerBuilder:Create(parent)
 
   -- Utility buttons at the bottom of the sidebar. Stored on `win`, not in
@@ -709,11 +896,12 @@ local function HideAllControls()
   for _, row in ipairs(controls.grpSpellRows) do row:Hide() end
   for _, row in ipairs(controls.profRows) do row:Hide() end
   for _, row in ipairs(controls.specRows) do row:Hide() end
+  for _, row in ipairs(controls.trackRows) do row:Hide() end
 end
 
 local function RenderSidebar()
   -- General entry highlights
-  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups", [win.profilesBtn] = "__profiles" }) do
+  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups", [win.profilesBtn] = "__profiles", [win.trackingBtn] = "__tracking" }) do
     if state.selected == key then
       btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       btn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
@@ -723,7 +911,7 @@ local function RenderSidebar()
     end
   end
 
-  local y = -122
+  local y = -145
   local buttons = win.sidebar.buttons
   local index = 0
   for _, cfg in ipairs(ns.profile.viewers) do
@@ -856,6 +1044,56 @@ local function RenderElementList(c, viewer, y, isReminders)
     ns.TriggerBuilder:Load(nil)
   end
   return y
+end
+
+-- Draws every indicator inside the unit-frame preview rectangle; the selected
+-- one at full alpha, the rest dimmed. Marks are clickable to select.
+local function RenderTrackingPreview(c, tracking)
+  local preview = c.trackPreview
+  local sel = state.selectedTrack
+  local selInd = sel and tracking.indicators[sel]
+  for _, btn in ipairs(preview.anchorBtns) do
+    if selInd and (selInd.anchor or "CENTER") == btn.point then
+      btn:SetBackdropColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3], 1)
+    else
+      btn:SetBackdropColor(0.2, 0.24, 0.32, 1)
+    end
+  end
+  for i, ind in ipairs(tracking.indicators) do
+    local mark = preview.marks[i]
+    if not mark then
+      mark = CreateFrame("Button", nil, preview)
+      mark:SetFrameLevel(preview:GetFrameLevel() + 2)
+      mark.tex = mark:CreateTexture(nil, "ARTWORK")
+      mark.tex:SetAllPoints()
+      mark:SetScript("OnClick", function(self)
+        state.selectedTrack = self.index
+        Config:Render()
+      end)
+      preview.marks[i] = mark
+    end
+    mark.index = i
+    mark:SetSize(math.min(ind.w or 12, 180), math.min(ind.h or 12, 90))
+    mark:ClearAllPoints()
+    local point = ind.anchor or "CENTER"
+    mark:SetPoint(point, preview, point, ind.x or 0, ind.y or 0)
+    if ind.style == "square" then
+      local color = ind.color or { 0.3, 0.8, 0.4 }
+      mark.tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+      mark.tex:SetVertexColor(color[1], color[2], color[3], 1)
+      mark.tex:SetTexCoord(0, 1, 0, 1)
+    else
+      local _, _, icon = GetSpellInfo(ind.spell)
+      mark.tex:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+      mark.tex:SetVertexColor(1, 1, 1, 1)
+      mark.tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+    end
+    mark:SetAlpha(i == sel and 1 or 0.35)
+    mark:Show()
+  end
+  for i = #tracking.indicators + 1, #preview.marks do
+    preview.marks[i]:Hide()
+  end
 end
 
 function Config:Render()
@@ -1014,6 +1252,140 @@ function Config:Render()
       y2 = y2 - 26
     end
     for i = #specs + 1, #c2.specRows do c2.specRows[i]:Hide() end
+
+    win.content:SetHeight(math.max(-y2 + 40, 400))
+    return
+  end
+
+  -- Tracking view (party/raid HoT indicators)
+  if state.selected == "__tracking" then
+    local c2 = controls
+    local y2 = -10
+    c2.title:SetPoint("TOPLEFT", 0, y2)
+    c2.title:SetText("HoT Tracking")
+    c2.title:Show()
+    if not ns.Tracking then
+      c2.trackRestartHint:SetPoint("TOPLEFT", 0, y2 - 34)
+      c2.trackRestartHint:Show()
+      win.content:SetHeight(400)
+      return
+    end
+    local tracking = TrackingCfg()
+    c2.trackEnable:SetPoint("TOPLEFT", 260, y2 - 2)
+    c2.trackEnable:SetChecked(tracking.enabled)
+    c2.trackEnable:Show()
+    y2 = y2 - 30
+    c2.trackHint:SetPoint("TOPLEFT", 0, y2); c2.trackHint:Show()
+    y2 = y2 - 48
+    c2.trackListHeader:SetPoint("TOPLEFT", 0, y2); c2.trackListHeader:Show()
+    y2 = y2 - 20
+
+    if state.selectedTrack and not tracking.indicators[state.selectedTrack] then
+      state.selectedTrack = nil
+    end
+    if not state.selectedTrack and tracking.indicators[1] then state.selectedTrack = 1 end
+
+    for i, ind in ipairs(tracking.indicators) do
+      local row = c2.trackRows[i]
+      if not row then
+        row = CreateFrame("Frame", nil, win.content)
+        row:SetHeight(22)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(16, 16)
+        row.icon:SetPoint("LEFT")
+        ns.CropIcon(row.icon)
+        row.btn = W.CreateButton(row, "", 300, 20, function(self)
+          state.selectedTrack = self.index
+          Config:Render()
+        end)
+        row.btn:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
+        row.btn.text:ClearAllPoints()
+        row.btn.text:SetPoint("LEFT", 6, 0)
+        -- Pooled rows: resolve the CURRENT tracking table at click time
+        row.remove = W.CreateButton(row, "X", 20, 20, function(self)
+          local t = TrackingCfg()
+          if not t then return end
+          table.remove(t.indicators, self.index)
+          state.selectedTrack = nil
+          TouchTracking()
+          Config:Render()
+        end)
+        row.remove:SetPoint("LEFT", row.btn, "RIGHT", 4, 0)
+        c2.trackRows[i] = row
+      end
+      row.btn.index = i
+      row.remove.index = i
+      local _, _, icon = GetSpellInfo(ind.spell)
+      row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+      row.btn:SetLabel(tostring(ind.spell) .. "  |cff9aa3b5(" .. (ind.anchor or "CENTER"):lower() .. ")|r")
+      if state.selectedTrack == i then
+        row.btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
+      else
+        row.btn:SetBackdropColor(W.colors.panel2[1], W.colors.panel2[2], W.colors.panel2[3], 1)
+      end
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", 0, y2)
+      row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      row:Show()
+      y2 = y2 - 24
+    end
+    for i = #tracking.indicators + 1, #c2.trackRows do c2.trackRows[i]:Hide() end
+    y2 = y2 - 4
+
+    c2.trackAddLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.trackAddLabel:Show()
+    c2.trackAddInput:SetPoint("TOPLEFT", 92, y2); c2.trackAddInput:Show()
+    c2.trackAddBtn:SetPoint("TOPLEFT", 268, y2); c2.trackAddBtn:Show()
+    y2 = y2 - 24
+    c2.trackAddHint:SetPoint("TOPLEFT", 92, y2); c2.trackAddHint:Show()
+    y2 = y2 - 30
+
+    local ind = state.selectedTrack and tracking.indicators[state.selectedTrack]
+    if ind then
+      c2.trackIndHeader:SetText("INDICATOR - " .. tostring(ind.spell))
+      c2.trackIndHeader:SetPoint("TOPLEFT", 0, y2); c2.trackIndHeader:Show()
+      y2 = y2 - 20
+      c2.trackPreview:ClearAllPoints()
+      c2.trackPreview:SetPoint("TOPLEFT", 0, y2)
+      c2.trackPreview:Show()
+      RenderTrackingPreview(c2, tracking)
+
+      -- Options to the right of the preview
+      local RL, RC = 210, 280
+      local ry = y2
+      c2.trackStyleLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackStyleLabel:Show()
+      c2.trackStyle:SetPoint("TOPLEFT", RC, ry); c2.trackStyle:SetValue(ind.style or "icon"); c2.trackStyle:Show()
+      ry = ry - 26
+      if ind.style == "square" then
+        c2.trackColorLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackColorLabel:Show()
+        c2.trackColor:SetPoint("TOPLEFT", RC, ry); c2.trackColor:SetColor(ind.color); c2.trackColor:Show()
+        ry = ry - 26
+      end
+      c2.trackSizeLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackSizeLabel:Show()
+      c2.trackW:SetPoint("TOPLEFT", RC, ry); c2.trackW:SetText(tostring(ind.w or 12)); c2.trackW:Show()
+      c2.trackSizeX:SetPoint("TOPLEFT", RC + 46, ry - 4); c2.trackSizeX:Show()
+      c2.trackH:SetPoint("TOPLEFT", RC + 58, ry); c2.trackH:SetText(tostring(ind.h or 12)); c2.trackH:Show()
+      ry = ry - 26
+      c2.trackOffLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackOffLabel:Show()
+      c2.trackX:SetPoint("TOPLEFT", RC, ry); c2.trackX:SetText(tostring(math.floor((ind.x or 0) + 0.5))); c2.trackX:Show()
+      c2.trackY:SetPoint("TOPLEFT", RC + 58, ry); c2.trackY:SetText(tostring(math.floor((ind.y or 0) + 0.5))); c2.trackY:Show()
+      ry = ry - 26
+
+      y2 = math.min(y2 - 100, ry - 8)
+      c2.trackTime:SetPoint("TOPLEFT", 0, y2); c2.trackTime:SetChecked(ind.showTime); c2.trackTime:Show()
+      if ind.showTime then
+        c2.trackTimeFontLabel:SetPoint("TOPLEFT", 118, y2 - 4); c2.trackTimeFontLabel:Show()
+        c2.trackTimeFont:SetPoint("TOPLEFT", 148, y2); c2.trackTimeFont:SetText(tostring(ind.timeFontSize or 9)); c2.trackTimeFont:Show()
+      end
+      c2.trackSweep:SetPoint("TOPLEFT", 210, y2); c2.trackSweep:SetChecked(ind.sweep); c2.trackSweep:Show()
+      c2.trackStacks:SetPoint("TOPLEFT", 350, y2); c2.trackStacks:SetChecked(ind.showStacks); c2.trackStacks:Show()
+      y2 = y2 - 26
+      c2.trackBlink:SetPoint("TOPLEFT", 0, y2); c2.trackBlink:SetChecked(ind.blink); c2.trackBlink:Show()
+      if ind.blink then
+        c2.trackBlinkThLabel:SetPoint("TOPLEFT", 148, y2 - 4); c2.trackBlinkThLabel:Show()
+        c2.trackBlinkTh:SetPoint("TOPLEFT", 174, y2); c2.trackBlinkTh:SetText(tostring(ind.blinkThreshold or 3)); c2.trackBlinkTh:Show()
+      end
+      y2 = y2 - 30
+    end
 
     win.content:SetHeight(math.max(-y2 + 40, 400))
     return

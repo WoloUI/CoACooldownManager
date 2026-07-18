@@ -16,6 +16,7 @@ Core\Keybinds.lua
 Core\Auras.lua
 Core\Triggers.lua
 Core\Reminders.lua
+Core\Tracking.lua
 Core\Scanner.lua
 UI\Viewer.lua
 UI\Glow.lua

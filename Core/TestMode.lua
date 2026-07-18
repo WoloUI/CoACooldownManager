@@ -23,6 +23,7 @@ end
 function TestMode:Toggle()
   self.active = not self.active
   ns.Viewer:UpdateVisibility()
+  if ns.Tracking then ns.Tracking:Apply() end -- nil until the client restarts after adding the file
   ns:Print(self.active and "test mode ON - showing fake data. /cdm test to stop."
     or "test mode off.")
 end

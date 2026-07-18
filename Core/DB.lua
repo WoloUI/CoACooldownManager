@@ -70,10 +70,16 @@ local function DefaultViewers()
   }
 end
 
+-- Party/raid HoT tracking (see Core/Tracking.lua)
+local function DefaultTracking()
+  return { enabled = false, indicators = {} }
+end
+
 local function DefaultProfile()
   return {
     viewers = DefaultViewers(),
     scanner = { seen = {}, rejected = {} },
+    tracking = DefaultTracking(),
   }
 end
 
@@ -178,6 +184,7 @@ function DB:ActivateProfile()
   local named = assigned and self.db.global.profiles[assigned]
   if named then
     named.scanner = named.scanner or { seen = {}, rejected = {} }
+    named.tracking = named.tracking or DefaultTracking()
     self.char.lastSpec = specKey
     self.profile = named
     ns.profile = named
@@ -193,6 +200,8 @@ function DB:ActivateProfile()
     profile.scanner = profile.scanner or { seen = {}, rejected = {} }
     self.char.specs[specKey] = profile
   end
+  -- Profiles created before the Tracking tab existed
+  profile.tracking = profile.tracking or DefaultTracking()
   self.char.lastSpec = specKey
   self.profile = profile
   ns.profile = profile
@@ -493,6 +502,7 @@ function DB:ImportProfile(text)
   end
 
   data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {} }
+  data.profile.tracking = data.profile.tracking or DefaultTracking()
   -- Import lands as this spec's own profile; a named-profile assignment
   -- would shadow it, so drop it for predictability
   self.char.assignments[self:GetSpecKey()] = nil
