@@ -167,18 +167,45 @@ function ns.FontSize(base)
 end
 
 ns.GlowOptions = {
+  { text = "Proc (WeakAuras style)", value = "proc" },
   { text = "Pixel (bright dashes)", value = "pixel" },
   { text = "Pulse (classic border)", value = "pulse" },
   { text = "Shine (starburst)", value = "shine" },
   { text = "Solid border", value = "solid" },
 }
+ns.GlowSpeedOptions = {
+  { text = "50%", value = 0.5 }, { text = "75%", value = 0.75 },
+  { text = "100%", value = 1 }, { text = "150%", value = 1.5 },
+  { text = "200%", value = 2 },
+}
+ns.GlowLinesOptions = {
+  { text = "4 lines", value = 4 }, { text = "6 lines", value = 6 },
+  { text = "8 lines", value = 8 }, { text = "10 lines", value = 10 },
+  { text = "12 lines", value = 12 },
+}
+ns.GlowThicknessOptions = {
+  { text = "1 px", value = 1 }, { text = "2 px", value = 2 },
+  { text = "3 px", value = 3 }, { text = "4 px", value = 4 },
+}
 
 function ns.GetGlowStyle()
-  return Appearance().glow or "pixel"
+  return Appearance().glow or "proc"
 end
 
 function ns.GetGlowColor()
   return Appearance().glowColor or { 1, 0.82, 0.35 }
+end
+
+function ns.GetGlowSpeed()
+  return Appearance().glowSpeed or 1
+end
+
+function ns.GetGlowLines()
+  return Appearance().glowLines or 8
+end
+
+function ns.GetGlowThickness()
+  return Appearance().glowThickness or 2
 end
 
 -- 20% zoom on spell icons: crops the baked-in dark border

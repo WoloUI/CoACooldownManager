@@ -384,6 +384,25 @@ function Config:BuildControls()
     Touch()
     Config:Render()
   end)
+  c.genGlowSpeedLabel = W.CreateLabel(parent, "Glow speed", 12, W.colors.inkDim)
+  c.genGlowSpeed = W.CreateDropdown(parent, 80, function(_, value)
+    AppearanceCfg().glowSpeed = value
+    Touch()
+  end)
+  c.genGlowSpeed:SetOptions(ns.GlowSpeedOptions)
+  c.genGlowLinesLabel = W.CreateLabel(parent, "Lines", 12, W.colors.inkDim)
+  c.genGlowLines = W.CreateDropdown(parent, 80, function(_, value)
+    AppearanceCfg().glowLines = value
+    Touch()
+  end)
+  c.genGlowLines:SetOptions(ns.GlowLinesOptions)
+  c.genGlowThickLabel = W.CreateLabel(parent, "Thickness", 12, W.colors.inkDim)
+  c.genGlowThick = W.CreateDropdown(parent, 70, function(_, value)
+    AppearanceCfg().glowThickness = value
+    Touch()
+  end)
+  c.genGlowThick:SetOptions(ns.GlowThicknessOptions)
+  c.genGlowHint = W.CreateLabel(parent, "Lines and thickness apply to the Pixel style; speed applies to all.", 10, W.colors.inkDim)
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
 
   -- Stack bar options
@@ -718,14 +737,29 @@ function Config:Render()
     y2 = y2 - 28
     c2.genGlowLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genGlowLabel:Show()
     c2.genGlow:SetPoint("TOPLEFT", 80, y2)
-    c2.genGlow:SetValue(appearance.glow or "pixel")
+    c2.genGlow:SetValue(ns.GetGlowStyle())
     c2.genGlow:Show()
     c2.genGlowColorLabel:SetPoint("TOPLEFT", 290, y2 - 4); c2.genGlowColorLabel:Show()
     c2.genGlowColor:SetPoint("TOPLEFT", 352, y2)
     c2.genGlowColor:SetColor(ns.GetGlowColor())
     c2.genGlowColor:Show()
     c2.genGlowReset:SetPoint("TOPLEFT", 378, y2); c2.genGlowReset:Show()
-    y2 = y2 - 34
+    y2 = y2 - 28
+    c2.genGlowSpeedLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genGlowSpeedLabel:Show()
+    c2.genGlowSpeed:SetPoint("TOPLEFT", 80, y2)
+    c2.genGlowSpeed:SetValue(ns.GetGlowSpeed())
+    c2.genGlowSpeed:Show()
+    c2.genGlowLinesLabel:SetPoint("TOPLEFT", 175, y2 - 4); c2.genGlowLinesLabel:Show()
+    c2.genGlowLines:SetPoint("TOPLEFT", 210, y2)
+    c2.genGlowLines:SetValue(ns.GetGlowLines())
+    c2.genGlowLines:Show()
+    c2.genGlowThickLabel:SetPoint("TOPLEFT", 300, y2 - 4); c2.genGlowThickLabel:Show()
+    c2.genGlowThick:SetPoint("TOPLEFT", 358, y2)
+    c2.genGlowThick:SetValue(ns.GetGlowThickness())
+    c2.genGlowThick:Show()
+    y2 = y2 - 24
+    c2.genGlowHint:SetPoint("TOPLEFT", 0, y2); c2.genGlowHint:Show()
+    y2 = y2 - 24
     c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
     win.content:SetHeight(400)
     return
