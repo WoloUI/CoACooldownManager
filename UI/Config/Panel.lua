@@ -110,8 +110,15 @@ local function BuildWindow()
   end)
   win.generalBtn:SetPoint("TOPLEFT", PAD, -26)
 
+  win.groupsBtn = W.CreateButton(win.sidebar, "Buff groups", SIDEBAR_W - 2 * PAD, 21, function()
+    state.selected = "__groups"
+    state.selectedElement = nil
+    Config:Render()
+  end)
+  win.groupsBtn:SetPoint("TOPLEFT", PAD, -49)
+
   win.sidebar.header = W.CreateSection(win.sidebar, "BARS")
-  win.sidebar.header:SetPoint("TOPLEFT", PAD, -56)
+  win.sidebar.header:SetPoint("TOPLEFT", PAD, -79)
   win.sidebar.buttons = {}
 
   win.newBar = W.CreateButton(win.sidebar, "+ New bar...", SIDEBAR_W - 2 * PAD, 22, function()
@@ -522,6 +529,45 @@ function Config:BuildControls()
     Config:Render()
   end)
 
+  -- Buff group editor (GENERAL > Buff groups)
+  local function UserGroups()
+    return ns.DB.db.global.equivGroups
+  end
+  c.grpHint = W.CreateLabel(parent,
+    "Groups bundle buffs that share an effect (rank: higher = stronger).\nGroup reminders stay quiet when the unit has an equal or stronger group buff.", 10, W.colors.inkDim)
+  c.grpNewName = W.CreateEditBox(parent, 170, 20)
+  c.grpNewBtn = W.CreateButton(parent, "Create group", 90, 20, function()
+    local name = c.grpNewName:GetText()
+    if not name or name == "" then return end
+    if UserGroups()[name] then
+      ns:Print("a group with that name already exists.")
+      return
+    end
+    UserGroups()[name] = { name = name, spells = {} }
+    state.selectedGroup = name
+    c.grpNewName:SetText("")
+    Config:Render()
+  end)
+  c.groupRows = {}
+  c.grpSpellHeader = W.CreateSection(parent, "SPELLS IN GROUP")
+  c.grpSpellRows = {}
+  c.grpSpellInput = W.CreateEditBox(parent, 140, 20)
+  c.grpRankLabel = W.CreateLabel(parent, "Rank", 12, W.colors.inkDim)
+  c.grpRankInput = W.CreateEditBox(parent, 34, 20)
+  c.grpAddSpell = W.CreateButton(parent, "Add", 50, 20, function()
+    local group = state.selectedGroup and UserGroups()[state.selectedGroup]
+    if not group then return end
+    local id, name = ns.ResolveSpell(c.grpSpellInput:GetText())
+    if not id then
+      ns:Print("unknown spell: " .. tostring(c.grpSpellInput:GetText()) .. " (try the numeric spell ID)")
+      return
+    end
+    table.insert(group.spells, { id = id, rank = tonumber(c.grpRankInput:GetText()) or 1 })
+    c.grpSpellInput:SetText("")
+    c.grpRankInput:SetText("1")
+    Config:Render()
+  end)
+
   c.trigger = ns.TriggerBuilder:Create(parent)
 
   -- Utility buttons at the bottom of the sidebar. Stored on `win`, not in
@@ -561,16 +607,18 @@ local function HideAllControls()
 end
 
 local function RenderSidebar()
-  -- General entry highlight
-  if state.selected == "__general" then
-    win.generalBtn:SetBackdropColor(0.137, 0.173, 0.247, 1)
-    win.generalBtn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
-  else
-    win.generalBtn:SetBackdropColor(W.colors.panel2[1], W.colors.panel2[2], W.colors.panel2[3], 1)
-    win.generalBtn.text:SetTextColor(W.colors.ink[1], W.colors.ink[2], W.colors.ink[3])
+  -- General entry highlights
+  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups" }) do
+    if state.selected == key then
+      btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
+      btn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
+    else
+      btn:SetBackdropColor(W.colors.panel2[1], W.colors.panel2[2], W.colors.panel2[3], 1)
+      btn.text:SetTextColor(W.colors.ink[1], W.colors.ink[2], W.colors.ink[3])
+    end
   end
 
-  local y = -76
+  local y = -99
   local buttons = win.sidebar.buttons
   local index = 0
   for _, cfg in ipairs(ns.profile.viewers) do
@@ -772,6 +820,114 @@ function Config:Render()
     return
   end
 
+  -- Buff groups editor
+  if state.selected == "__groups" then
+    local c2 = controls
+    local groups = ns.DB.db.global.equivGroups
+    local y2 = -10
+    c2.title:SetPoint("TOPLEFT", 0, y2)
+    c2.title:SetText("Buff groups")
+    c2.title:Show()
+    y2 = y2 - 26
+    c2.grpHint:SetPoint("TOPLEFT", 0, y2); c2.grpHint:Show()
+    y2 = y2 - 34
+    c2.grpNewName:SetPoint("TOPLEFT", 0, y2); c2.grpNewName:Show()
+    c2.grpNewBtn:SetPoint("TOPLEFT", 176, y2); c2.grpNewBtn:Show()
+    y2 = y2 - 30
+
+    local names = {}
+    for key in pairs(groups) do names[#names + 1] = key end
+    table.sort(names)
+    if state.selectedGroup and not groups[state.selectedGroup] then
+      state.selectedGroup = nil
+    end
+    if not state.selectedGroup then state.selectedGroup = names[1] end
+
+    for i, key in ipairs(names) do
+      local row = c2.groupRows[i]
+      if not row then
+        row = CreateFrame("Frame", nil, win.content)
+        row:SetHeight(22)
+        row.btn = W.CreateButton(row, "", 200, 20, function(self)
+          state.selectedGroup = self.groupKey
+          Config:Render()
+        end)
+        row.btn:SetPoint("LEFT")
+        row.btn.text:ClearAllPoints()
+        row.btn.text:SetPoint("LEFT", 6, 0)
+        row.remove = W.CreateButton(row, "X", 20, 20, function(self)
+          ns.DB.db.global.equivGroups[self.groupKey] = nil
+          if state.selectedGroup == self.groupKey then state.selectedGroup = nil end
+          Config:Render()
+        end)
+        row.remove:SetPoint("LEFT", row.btn, "RIGHT", 4, 0)
+        c2.groupRows[i] = row
+      end
+      row.btn.groupKey = key
+      row.remove.groupKey = key
+      row.btn:SetLabel(groups[key].name .. "  |cff9aa3b5(" .. #groups[key].spells .. " spells)|r")
+      if state.selectedGroup == key then
+        row.btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
+      else
+        row.btn:SetBackdropColor(W.colors.panel2[1], W.colors.panel2[2], W.colors.panel2[3], 1)
+      end
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", 0, y2)
+      row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      row:Show()
+      y2 = y2 - 24
+    end
+    for i = #names + 1, #c2.groupRows do c2.groupRows[i]:Hide() end
+
+    local group = state.selectedGroup and groups[state.selectedGroup]
+    if group then
+      y2 = y2 - 8
+      c2.grpSpellHeader:SetPoint("TOPLEFT", 0, y2); c2.grpSpellHeader:Show()
+      y2 = y2 - 20
+      for i, entry in ipairs(group.spells) do
+        local row = c2.grpSpellRows[i]
+        if not row then
+          row = CreateFrame("Frame", nil, win.content)
+          row:SetHeight(22)
+          row.icon = row:CreateTexture(nil, "ARTWORK")
+          row.icon:SetSize(16, 16)
+          row.icon:SetPoint("LEFT")
+          ns.CropIcon(row.icon)
+          row.label = W.CreateLabel(row, "", 12)
+          row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+          row.remove = W.CreateButton(row, "X", 20, 20, function(self)
+            local g = ns.DB.db.global.equivGroups[state.selectedGroup]
+            if g then table.remove(g.spells, self.spellIndex) end
+            Config:Render()
+          end)
+          row.remove:SetPoint("LEFT", row.label, "RIGHT", 8, 0)
+          c2.grpSpellRows[i] = row
+        end
+        row.remove.spellIndex = i
+        local name, _, icon = GetSpellInfo(entry.id)
+        row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+        row.label:SetText((name or "?") .. "  |cff9aa3b5#" .. entry.id .. "  rank " .. (entry.rank or 1) .. "|r")
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 16, y2)
+        row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+        row:Show()
+        y2 = y2 - 24
+      end
+      for i = #group.spells + 1, #c2.grpSpellRows do c2.grpSpellRows[i]:Hide() end
+      y2 = y2 - 4
+      c2.grpSpellInput:SetPoint("TOPLEFT", 16, y2); c2.grpSpellInput:Show()
+      c2.grpRankLabel:SetPoint("TOPLEFT", 164, y2 - 4); c2.grpRankLabel:Show()
+      c2.grpRankInput:SetPoint("TOPLEFT", 196, y2)
+      if c2.grpRankInput:GetText() == "" then c2.grpRankInput:SetText("1") end
+      c2.grpRankInput:Show()
+      c2.grpAddSpell:SetPoint("TOPLEFT", 240, y2); c2.grpAddSpell:Show()
+      y2 = y2 - 30
+    end
+
+    win.content:SetHeight(math.max(-y2 + 40, 400))
+    return
+  end
+
   local viewer = SelectedViewer()
   if not viewer then
     state.selected = "Power"
@@ -968,10 +1124,16 @@ function Config:Render()
         groupOptions[#groupOptions + 1] = { text = group.name, value = key }
       end
       table.sort(groupOptions, function(a, b) return a.text < b.text end)
-      c.remGroup:SetOptions(groupOptions)
-      if not c.remGroup.value and groupOptions[1] then c.remGroup:SetValue(groupOptions[1].value) end
-      c.remGroup:SetPoint("TOPLEFT", 136, y); c.remGroup:Show()
-      c.remScope:SetPoint("TOPLEFT", 292, y); c.remScope:Show()
+      if #groupOptions == 0 then
+        c.addHint:SetText("No buff groups yet - create them in GENERAL > Buff groups.")
+        c.addHint:SetPoint("TOPLEFT", 136, y - 4)
+        c.addHint:Show()
+      else
+        c.remGroup:SetOptions(groupOptions)
+        if not c.remGroup.value and groupOptions[1] then c.remGroup:SetValue(groupOptions[1].value) end
+        c.remGroup:SetPoint("TOPLEFT", 136, y); c.remGroup:Show()
+        c.remScope:SetPoint("TOPLEFT", 292, y); c.remScope:Show()
+      end
     elseif rtype == "aura" then
       c.remAura:SetPoint("TOPLEFT", 136, y); c.remAura:Show()
     elseif rtype == "range" then
