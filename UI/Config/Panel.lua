@@ -600,7 +600,10 @@ local function HideAllControls()
   for _, key in ipairs(ALL_CONTROL_KEYS) do
     controls[key]:Hide()
   end
+  -- Pooled row frames live in plain tables, not covered by ALL_CONTROL_KEYS
   for _, row in ipairs(controls.elementRows) do row:Hide() end
+  for _, row in ipairs(controls.groupRows) do row:Hide() end
+  for _, row in ipairs(controls.grpSpellRows) do row:Hide() end
 end
 
 local function RenderSidebar()
