@@ -168,11 +168,15 @@ function Config:HandleSpellDrop()
   if not viewer or (viewer.style ~= "icons" and viewer.style ~= "bars") then return end
   local id, name, icon = ns.ResolveSpell(spellID)
   if not id then return end
+  local isDots = viewer.name == "Target DoTs"
+  local kind = viewer.style == "bars" and (isDots and "debuff" or "buff") or "cooldown"
   table.insert(viewer.elements, {
     spellID = id, name = name, icon = icon,
-    kind = viewer.style == "bars" and "buff" or "cooldown",
-    unit = viewer.name == "Target DoTs" and "target" or "player",
-    onlyMine = true, showWhen = "always", conditions = {},
+    kind = kind,
+    unit = isDots and "target" or "player",
+    onlyMine = true, conditions = {},
+    -- Buffs default to "aura found"; DoTs stay visible (gray) to prompt a refresh
+    showWhen = (kind ~= "cooldown" and not isDots) and "present" or "always",
   })
   Touch()
   self:Render()
@@ -452,11 +456,14 @@ function Config:BuildControls()
       ns:Print("spell not found: " .. input .. " (try the numeric spell ID)")
       return
     end
+    local kind = c.addKind.value
+    local isDots = viewer.name == "Target DoTs"
     table.insert(viewer.elements, {
       spellID = id, name = name or input, icon = icon,
-      kind = c.addKind.value,
-      unit = viewer.name == "Target DoTs" and "target" or "player",
-      onlyMine = true, showWhen = "always", conditions = {},
+      kind = kind,
+      unit = isDots and "target" or "player",
+      onlyMine = true, conditions = {},
+      showWhen = (kind ~= "cooldown" and not isDots) and "present" or "always",
     })
     c.addInput:SetText("")
     Touch()

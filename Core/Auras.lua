@@ -5,7 +5,7 @@ local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local Auras = {}
 ns.Auras = Auras
 
-local THROTTLE = 0.5
+local THROTTLE = 0.25
 
 local cache = {}      -- [unit] = { byId = {}, byName = {}, scannedAt }
 local watched = {}    -- [unit] = true (units we keep fresh)
@@ -23,7 +23,8 @@ local function ScanFilter(unit, filter, store)
       mine = unitCaster == "player" or unitCaster == "pet" or unitCaster == "vehicle",
       spellId = spellId, filter = filter,
     }
-    if spellId and not store.byId[spellId] then store.byId[spellId] = aura end
+    -- Prefer the player's own copy when the same aura exists from two casters
+    if spellId and (not store.byId[spellId] or aura.mine) then store.byId[spellId] = aura end
     if not store.byName[name] or aura.mine then store.byName[name] = aura end
   end
 end
@@ -75,7 +76,9 @@ function Auras:GetAura(unit, spellRef, onlyMine)
   else
     aura = store.byName[spellRef]
   end
-  if aura and onlyMine and not aura.mine then return nil end
+  -- "Only mine" is meaningful for DoTs on enemies; on the player itself it
+  -- causes misses (many Ascension buffs report no caster), so skip it there.
+  if aura and onlyMine and unit ~= "player" and not aura.mine then return nil end
   return aura
 end
 

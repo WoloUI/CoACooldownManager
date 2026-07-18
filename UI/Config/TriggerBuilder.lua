@@ -25,9 +25,9 @@ local SHOW_COOLDOWN = {
   { text = "Only on cooldown", value = "cooldown" },
 }
 local SHOW_AURA = {
+  { text = "Aura found (only while active)", value = "present" },
   { text = "Always (gray when missing)", value = "always" },
-  { text = "Only when present", value = "present" },
-  { text = "Only when missing", value = "missing" },
+  { text = "Aura missing (only while absent)", value = "missing" },
 }
 local CONDITION_TYPES = {
   { text = "Time left (sec)", value = "remaining" },
@@ -203,7 +203,7 @@ function TriggerBuilder:Create(parent)
   builder.kindLabel = W.CreateLabel(builder, "Track", 12, W.colors.inkDim)
   builder.kind = W.CreateDropdown(builder, 120, function(_, value)
     builder.element.kind = value
-    builder.element.showWhen = "always"
+    builder.element.showWhen = value == "cooldown" and "always" or "present"
     Rebuild()
   end)
   builder.kind:SetOptions(KIND_OPTIONS)
