@@ -157,7 +157,7 @@ function StackBar:Update(frame, cfg)
   maxStacks = math.min(maxStacks, MAX_SEGMENTS)
   current = math.min(current, maxStacks)
   UpdateSegments(frame, cfg, stack, maxStacks, current, color)
-  if stack.showCount then
+  if stack.showCount ~= false then
     frame.countText:Show()
     frame.countText:ClearAllPoints()
     frame.countText:SetPoint("LEFT", frame, "RIGHT", 5, 0)

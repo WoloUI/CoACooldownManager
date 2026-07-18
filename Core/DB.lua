@@ -221,7 +221,7 @@ function DB:AddViewer(name, style)
   }
   if style == "stacks" then
     -- CoA pseudo-resource: an aura whose stacks render as filled segments
-    viewer.stack = { spellID = nil, maxStacks = 3, onlyMine = true, unit = "player", showCount = false }
+    viewer.stack = { spellID = nil, maxStacks = 3, onlyMine = true, unit = "player", showCount = true }
   end
   table.insert(self.profile.viewers, viewer)
   ns:Fire("VIEWERS_CHANGED")
