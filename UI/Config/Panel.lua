@@ -642,6 +642,17 @@ function Config:BuildControls()
     end
     Config:Render()
   end)
+  c.profCreateBtn = W.CreateButton(parent, "New (defaults)", 100, 20, function()
+    local name = c.profNewName:GetText()
+    local ok, err = ns.DB:CreateNamedProfile(name)
+    if ok then
+      ns:Print("profile '" .. name .. "' created with the default bars - assign it to a spec below.")
+      c.profNewName:SetText("")
+    else
+      ns:Print(err)
+    end
+    Config:Render()
+  end)
   c.profListHeader = W.CreateSection(parent, "SAVED PROFILES")
   c.profRows = {}
   c.assignHeader = W.CreateSection(parent, "SPEC ASSIGNMENTS")
@@ -696,6 +707,8 @@ local function HideAllControls()
   for _, row in ipairs(controls.elementRows) do row:Hide() end
   for _, row in ipairs(controls.groupRows) do row:Hide() end
   for _, row in ipairs(controls.grpSpellRows) do row:Hide() end
+  for _, row in ipairs(controls.profRows) do row:Hide() end
+  for _, row in ipairs(controls.specRows) do row:Hide() end
 end
 
 local function RenderSidebar()
@@ -931,6 +944,7 @@ function Config:Render()
     y2 = y2 - 48
     c2.profNewName:SetPoint("TOPLEFT", 0, y2); c2.profNewName:Show()
     c2.profSaveBtn:SetPoint("TOPLEFT", 176, y2); c2.profSaveBtn:Show()
+    c2.profCreateBtn:SetPoint("TOPLEFT", 292, y2); c2.profCreateBtn:Show()
     y2 = y2 - 32
 
     -- Saved profiles

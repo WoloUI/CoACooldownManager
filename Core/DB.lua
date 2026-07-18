@@ -215,6 +215,14 @@ function DB:SaveProfileAs(name)
   return true
 end
 
+-- Creates a fresh named profile with the default bars.
+function DB:CreateNamedProfile(name)
+  if not name or name == "" then return nil, "give the profile a name" end
+  if self.db.global.profiles[name] then return nil, "a profile with that name already exists" end
+  self.db.global.profiles[name] = DefaultProfile()
+  return true
+end
+
 -- Binds a named profile to a spec (nil = back to the per-spec profile).
 function DB:AssignProfile(specKey, profileName)
   self.char.assignments[specKey] = profileName
