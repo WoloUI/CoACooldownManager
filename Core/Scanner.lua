@@ -174,28 +174,8 @@ function Scanner:Dismiss(results)
   end
 end
 
---------------------------------------------------------------------------------
--- Automatic triggers (debounced)
---------------------------------------------------------------------------------
-local pendingScan = 0
-
-local function QueueScan(delay)
-  pendingScan = delay
-end
-
-ns:On("READY", function()
-  ns:RegisterEvent("ASCENSION_KNOWN_ENTRIES_UPDATED", function() QueueScan(3) end)
-  ns:On("PROFILE_CHANGED", function() QueueScan(5) end)
-  QueueScan(8) -- first scan a few seconds after login
-
-  ns:OnTick(function(dt)
-    if pendingScan <= 0 then return end
-    pendingScan = pendingScan - dt
-    if pendingScan <= 0 then
-      Scanner:Scan(false)
-    end
-  end)
-end)
+-- No automatic scans: the suggestions window only opens on demand, via the
+-- panel's "Scan spells" button or /cdm scan.
 
 -- Test seams
 Scanner._ParseCooldown = ParseCooldown
