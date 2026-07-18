@@ -86,4 +86,23 @@ unitAuras = { player = { [200] = true }, party1 = {}, party2 = {} }
 alert = Eval({ rtype = "group", group = "fort", scope = "group" })
 check("multiple missing counted", alert and alert.text:find("2 players") ~= nil)
 
+-- Real Auras module: rank auto-detected from the aura on the unit
+local ns2 = {}
+stub.loadAddonFile("Core/Init.lua", ns2)
+stub.loadAddonFile("Core/Auras.lua", ns2)
+__units = { player = true }
+__auraList = {
+  player = { { name = "Fort", rank = "Rank 2", icon = "i", count = 0, spellId = 200, caster = "player" } },
+}
+UnitAura = function(unit, index, filter)
+  local list = filter == "HELPFUL" and __auraList[unit] or nil
+  local a = list and list[index]
+  if not a then return nil end
+  return a.name, a.rank, a.icon, a.count, nil, 10, 100, a.caster, nil, nil, a.spellId
+end
+ns2.Auras:ForceScan("player")
+check("auto rank: rank 2 aura covers minRank 2", ns2.Auras:HasAnyOf("player", { { id = 200 } }, 2) == true)
+check("auto rank: rank 2 aura fails minRank 3", ns2.Auras:HasAnyOf("player", { { id = 200 } }, 3) == false)
+check("manual rank override wins", ns2.Auras:HasAnyOf("player", { { id = 200, rank = 5 } }, 3) == true)
+
 return T

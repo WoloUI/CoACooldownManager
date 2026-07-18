@@ -14,14 +14,16 @@ local groupWatch = false -- whether party/raid units are being watched
 
 local function ScanFilter(unit, filter, store)
   for index = 1, 40 do
-    local name, _, icon, count, debuffType, duration, expirationTime,
+    local name, rankStr, icon, count, debuffType, duration, expirationTime,
       unitCaster, _, _, spellId = UnitAura(unit, index, filter)
     if not name then break end
+    local rankNum = rankStr and rankStr:match("(%d+)")
     local aura = {
       name = name, icon = icon, count = count or 0,
       duration = duration or 0, expirationTime = expirationTime or 0,
       mine = unitCaster == "player" or unitCaster == "pet" or unitCaster == "vehicle",
       spellId = spellId, filter = filter,
+      rank = rankNum and tonumber(rankNum) or 1,
     }
     -- Prefer the player's own copy when the same aura exists from two casters
     if spellId and (not store.byId[spellId] or aura.mine) then store.byId[spellId] = aura end
@@ -82,12 +84,15 @@ function Auras:GetAura(unit, spellRef, onlyMine)
   return aura
 end
 
+-- True when the unit carries any listed buff of rank >= minRank. The rank
+-- comes from the aura actually on the unit (a manual entry.rank overrides).
 function Auras:HasAnyOf(unit, spellIDs, minRank)
   local store = cache[unit]
   if not store then return false end
   for _, entry in ipairs(spellIDs) do
-    if (entry.rank or 1) >= (minRank or 1) then
-      if self:GetAura(unit, entry.id) then return true end
+    local aura = self:GetAura(unit, entry.id)
+    if aura and (entry.rank or aura.rank or 1) >= (minRank or 1) then
+      return true
     end
   end
   return false

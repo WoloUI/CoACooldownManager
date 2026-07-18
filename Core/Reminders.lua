@@ -27,16 +27,28 @@ local function UnitEligible(unit)
     and UnitIsVisible(unit)
 end
 
+local function ParseRank(rankStr)
+  local n = rankStr and rankStr:match("(%d+)")
+  return n and tonumber(n)
+end
+
 -- Best rank of a group's spells the player can cast, plus that spell's icon.
+-- The rank is read from the version the player has LEARNED: a by-name
+-- GetSpellInfo lookup only resolves for known spells and returns the highest
+-- learned rank, so nothing needs to be configured. entry.rank still overrides.
 local function BestKnownRank(group)
   local best, icon
   for _, entry in ipairs(group.spells) do
-    if ns.IsSpellKnownByPlayer(entry.id) then
-      local rank = entry.rank or 1
+    local baseName, _, baseIcon = GetSpellInfo(entry.id)
+    local knownName, knownRankStr, knownIcon
+    if baseName then
+      knownName, knownRankStr, knownIcon = GetSpellInfo(baseName)
+    end
+    if knownName or ns.IsSpellKnownByPlayer(entry.id) then
+      local rank = entry.rank or ParseRank(knownRankStr) or 1
       if not best or rank > best then
         best = rank
-        local _, _, spellIcon = GetSpellInfo(entry.id)
-        icon = spellIcon or icon
+        icon = knownIcon or baseIcon or icon
       end
     end
   end

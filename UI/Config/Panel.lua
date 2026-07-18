@@ -534,7 +534,7 @@ function Config:BuildControls()
     return ns.DB.db.global.equivGroups
   end
   c.grpHint = W.CreateLabel(parent,
-    "Groups bundle buffs that share an effect (rank: higher = stronger).\nGroup reminders stay quiet when the unit has an equal or stronger group buff.", 10, W.colors.inkDim)
+    "Groups bundle buffs that share an effect. Ranks are detected automatically\nfrom the version you have learned; reminders stay quiet when the unit\nalready has an equal or stronger group buff.", 10, W.colors.inkDim)
   c.grpNewName = W.CreateEditBox(parent, 170, 20)
   c.grpNewBtn = W.CreateButton(parent, "Create group", 90, 20, function()
     local name = c.grpNewName:GetText()
@@ -552,8 +552,6 @@ function Config:BuildControls()
   c.grpSpellHeader = W.CreateSection(parent, "SPELLS IN GROUP")
   c.grpSpellRows = {}
   c.grpSpellInput = W.CreateEditBox(parent, 140, 20)
-  c.grpRankLabel = W.CreateLabel(parent, "Rank", 12, W.colors.inkDim)
-  c.grpRankInput = W.CreateEditBox(parent, 34, 20)
   c.grpAddSpell = W.CreateButton(parent, "Add", 50, 20, function()
     local group = state.selectedGroup and UserGroups()[state.selectedGroup]
     if not group then return end
@@ -562,9 +560,8 @@ function Config:BuildControls()
       ns:Print("unknown spell: " .. tostring(c.grpSpellInput:GetText()) .. " (try the numeric spell ID)")
       return
     end
-    table.insert(group.spells, { id = id, rank = tonumber(c.grpRankInput:GetText()) or 1 })
+    table.insert(group.spells, { id = id }) -- rank auto-detected at runtime
     c.grpSpellInput:SetText("")
-    c.grpRankInput:SetText("1")
     Config:Render()
   end)
 
@@ -904,9 +901,12 @@ function Config:Render()
           c2.grpSpellRows[i] = row
         end
         row.remove.spellIndex = i
-        local name, _, icon = GetSpellInfo(entry.id)
+        local name, rankStr, icon = GetSpellInfo(entry.id)
         row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-        row.label:SetText((name or "?") .. "  |cff9aa3b5#" .. entry.id .. "  rank " .. (entry.rank or 1) .. "|r")
+        local rankText = entry.rank and ("rank " .. entry.rank)
+          or (rankStr and rankStr ~= "" and rankStr:lower())
+          or "rank auto"
+        row.label:SetText((name or "?") .. "  |cff9aa3b5#" .. entry.id .. "  " .. rankText .. "|r")
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 16, y2)
         row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
@@ -916,11 +916,7 @@ function Config:Render()
       for i = #group.spells + 1, #c2.grpSpellRows do c2.grpSpellRows[i]:Hide() end
       y2 = y2 - 4
       c2.grpSpellInput:SetPoint("TOPLEFT", 16, y2); c2.grpSpellInput:Show()
-      c2.grpRankLabel:SetPoint("TOPLEFT", 164, y2 - 4); c2.grpRankLabel:Show()
-      c2.grpRankInput:SetPoint("TOPLEFT", 196, y2)
-      if c2.grpRankInput:GetText() == "" then c2.grpRankInput:SetText("1") end
-      c2.grpRankInput:Show()
-      c2.grpAddSpell:SetPoint("TOPLEFT", 240, y2); c2.grpAddSpell:Show()
+      c2.grpAddSpell:SetPoint("TOPLEFT", 164, y2); c2.grpAddSpell:Show()
       y2 = y2 - 30
     end
 
