@@ -1,0 +1,160 @@
+-- Trigger/condition evaluation. Pure logic over an injectable context so the
+-- same code runs in-game (live ctx) and in out-of-game tests (stub ctx).
+local ns = _G.CoACDM or {}; _G.CoACDM = ns
+local Triggers = {}
+ns.Triggers = Triggers
+
+--------------------------------------------------------------------------------
+-- Condition evaluation
+--------------------------------------------------------------------------------
+local function Compare(op, a, b)
+  if a == nil or b == nil then return false end
+  if op == "<" then return a < b end
+  if op == ">" then return a > b end
+  if op == "<=" then return a <= b end
+  if op == ">=" then return a >= b end
+  if op == "=" then return a == b end
+  return false
+end
+
+local function ConditionValue(cond, element, display, ctx)
+  local ctype = cond.ctype
+  if ctype == "remaining" then
+    if element.kind == "cooldown" then
+      return ctx.cooldownRemaining(element.spellID)
+    end
+    if display.expirationTime and display.expirationTime > 0 then
+      return math.max(0, display.expirationTime - ctx.now())
+    end
+    return nil
+  elseif ctype == "stacks" then
+    return display.stacks or 0
+  elseif ctype == "power" then
+    local cur = ctx.power(cond.powerType)
+    return cur
+  elseif ctype == "powerpct" then
+    local cur, max = ctx.power(cond.powerType)
+    if not cur or not max or max == 0 then return nil end
+    return cur / max * 100
+  elseif ctype == "targethp" then
+    return ctx.targetHpPct()
+  end
+  return nil
+end
+
+local function ConditionMatches(cond, element, display, ctx)
+  local ctype = cond.ctype
+  if ctype == "combat" then
+    return ctx.inCombat() == (cond.value ~= false)
+  elseif ctype == "hastarget" then
+    return ctx.hasTarget() == (cond.value ~= false)
+  end
+  local value = ConditionValue(cond, element, display, ctx)
+  return Compare(cond.op or "<", value, tonumber(cond.value))
+end
+
+local function ApplyCondition(cond, matched, display)
+  local action = cond.action or "glow"
+  if action == "show" then
+    -- Filter: the element is only visible while the condition holds
+    if not matched then display.shown = false end
+  elseif matched then
+    if action == "hide" then
+      display.shown = false
+    elseif action == "glow" then
+      display.glow = true
+    elseif action == "desaturate" then
+      display.desaturate = true
+    end
+  end
+end
+
+--------------------------------------------------------------------------------
+-- Element evaluation
+--------------------------------------------------------------------------------
+-- Returns a display table:
+-- { shown, desaturate, glow, missing, stacks, start, duration, expirationTime, icon, name }
+function Triggers:Evaluate(element, ctx)
+  ctx = ctx or self:LiveContext()
+  local display = {
+    shown = false, desaturate = false, glow = false, missing = false,
+    stacks = 0, start = 0, duration = 0, expirationTime = 0,
+    icon = element.icon, name = element.name,
+  }
+
+  if element.kind == "cooldown" then
+    local state = ctx.cooldown(element.spellID)
+    if not state or not state.known then return display end
+    local showWhen = element.showWhen or "always"
+    if showWhen == "always" then
+      display.shown = true
+      display.desaturate = state.onCooldown
+    elseif showWhen == "ready" then
+      display.shown = not state.onCooldown
+    elseif showWhen == "cooldown" then
+      display.shown = state.onCooldown
+    end
+    if state.onCooldown then
+      display.start = state.start
+      display.duration = state.duration
+      display.expirationTime = state.start + state.duration
+    end
+    if not state.usable and not state.onCooldown then
+      display.desaturate = true
+    end
+  else -- "buff" | "debuff"
+    local aura = ctx.aura(element.unit or "player", element.spellID or element.name, element.onlyMine)
+    local showWhen = element.showWhen or "always"
+    if aura then
+      display.stacks = aura.count or 0
+      display.duration = aura.duration or 0
+      display.expirationTime = aura.expirationTime or 0
+      display.start = (aura.expirationTime or 0) - (aura.duration or 0)
+      if aura.icon then display.icon = aura.icon end
+      display.shown = showWhen == "always" or showWhen == "present"
+    else
+      display.missing = true
+      if showWhen == "always" then
+        display.shown = true
+        display.desaturate = true -- e.g. a DoT that fell off the target
+      elseif showWhen == "missing" then
+        display.shown = true
+      end
+    end
+  end
+
+  if display.shown and element.conditions then
+    for _, cond in ipairs(element.conditions) do
+      ApplyCondition(cond, ConditionMatches(cond, element, display, ctx), display)
+    end
+  end
+
+  return display
+end
+
+--------------------------------------------------------------------------------
+-- Live context (in-game data sources)
+--------------------------------------------------------------------------------
+local liveCtx
+function Triggers:LiveContext()
+  if liveCtx then return liveCtx end
+  liveCtx = {
+    now = GetTime,
+    cooldown = function(spellID) return ns.Cooldowns:Track(spellID) end,
+    cooldownRemaining = function(spellID) return ns.Cooldowns:Remaining(spellID) end,
+    aura = function(unit, ref, onlyMine) return ns.Auras:GetAura(unit, ref, onlyMine) end,
+    power = function(ptype)
+      ptype = ptype or UnitPowerType("player")
+      return UnitPower("player", ptype), UnitPowerMax("player", ptype)
+    end,
+    inCombat = function() return UnitAffectingCombat("player") and true or false end,
+    hasTarget = function() return UnitExists("target") and true or false end,
+    targetHpPct = function()
+      if not UnitExists("target") then return nil end
+      local max = UnitHealthMax("target")
+      if max == 0 then return nil end
+      return UnitHealth("target") / max * 100
+    end,
+  }
+  return liveCtx
+end

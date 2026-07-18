@@ -1,0 +1,29 @@
+## Interface: 30300
+## Title: CoA Cooldown Manager
+## Notes: Retail-style cooldown manager: anchored viewers, simple triggers, dual power bars, party/raid buff reminders
+## Author: WoloUI
+## Version: 0.1
+## SavedVariables: CoACDM_DB
+
+Core\Init.lua
+Core\DB.lua
+Data\EquivGroups.lua
+Data\SpellHints.lua
+Core\Power.lua
+Core\Cooldowns.lua
+Core\Auras.lua
+Core\Triggers.lua
+Core\Reminders.lua
+Core\Scanner.lua
+UI\Viewer.lua
+UI\IconRow.lua
+UI\StatusBars.lua
+UI\PowerBar.lua
+UI\StackBar.lua
+UI\ReminderRow.lua
+UI\EditMode.lua
+UI\Config\Widgets.lua
+UI\Config\TriggerBuilder.lua
+UI\Config\Suggestions.lua
+UI\Config\Panel.lua
+Core\TestMode.lua

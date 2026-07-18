@@ -1,0 +1,202 @@
+-- Hybrid spellbook scanner: finds active spells, reads cooldowns from
+-- tooltips, classifies into Essential/Defensives/Utility, and emits
+-- suggestions the user confirms. Never touches bars without confirmation.
+local ns = _G.CoACDM or {}; _G.CoACDM = ns
+local Scanner = {}
+ns.Scanner = Scanner
+
+local MIN_ESSENTIAL_CD = 10      -- seconds; shorter cooldowns are not suggested
+local MIN_DEFENSIVE_CD = 20
+
+local scanTip -- hidden tooltip for cooldown/keyword parsing
+
+local DEFENSIVE_WORDS = {
+  "damage taken", "absorb", "shield wall", "immune", "immunity",
+  "reduces all damage", "reducing damage", "damage reduced",
+}
+local UTILITY_WORDS = {
+  "interrupt", "silenc", "stun", "incapacitate", "root", "snare",
+  "movement speed", "teleport", "dispel", "removes all", "taunt", "fear",
+}
+
+--------------------------------------------------------------------------------
+-- Tooltip parsing
+--------------------------------------------------------------------------------
+local function TooltipText(spellID)
+  if not scanTip then
+    scanTip = CreateFrame("GameTooltip", "CoACDMScanTooltip", nil, "GameTooltipTemplate")
+  end
+  scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+  scanTip:ClearLines()
+  local ok = pcall(scanTip.SetHyperlink, scanTip, "spell:" .. spellID)
+  if not ok then return "" end
+  local parts = {}
+  for i = 1, scanTip:NumLines() do
+    for _, side in ipairs({ "TextLeft", "TextRight" }) do
+      local fs = _G["CoACDMScanTooltip" .. side .. i]
+      local text = fs and fs:GetText()
+      if text then parts[#parts + 1] = text end
+    end
+  end
+  return table.concat(parts, "\n"):lower()
+end
+
+local function ParseCooldown(tooltipText)
+  local hr = tooltipText:match("([%d%.]+) hour cooldown") or tooltipText:match("([%d%.]+) hr cooldown")
+  if hr then return tonumber(hr) * 3600 end
+  local min = tooltipText:match("([%d%.]+) min cooldown")
+  if min then return tonumber(min) * 60 end
+  local sec = tooltipText:match("([%d%.]+) sec cooldown")
+  if sec then return tonumber(sec) end
+  return 0
+end
+
+local function HasAny(text, words)
+  for _, word in ipairs(words) do
+    if text:find(word, 1, true) or text:match(word) then return true end
+  end
+  return false
+end
+
+local function Classify(spellID, tooltipText, cooldown)
+  local hint = ns.SpellHints[spellID]
+  if hint then
+    return hint ~= "ignore" and hint or nil
+  end
+  if HasAny(tooltipText, DEFENSIVE_WORDS) and cooldown >= MIN_DEFENSIVE_CD then
+    return "defensives"
+  end
+  if HasAny(tooltipText, UTILITY_WORDS) then
+    return "utility"
+  end
+  if cooldown >= MIN_ESSENTIAL_CD then
+    return "essential"
+  end
+  return nil
+end
+
+local CATEGORY_VIEWER = {
+  essential = "Essential",
+  defensives = "Defensives",
+  utility = "Utility",
+}
+
+--------------------------------------------------------------------------------
+-- Spellbook iteration
+--------------------------------------------------------------------------------
+local function ElementExists(spellID)
+  for _, viewer in ipairs(ns.profile.viewers) do
+    for _, el in ipairs(viewer.elements) do
+      if el.spellID == spellID then return true end
+    end
+  end
+  return false
+end
+
+local function CollectSpellbook()
+  local spells = {}
+  for tab = 1, GetNumSpellTabs() do
+    local _, _, offset, numSpells = GetSpellTabInfo(tab)
+    for i = offset + 1, offset + numSpells do
+      if not IsPassiveSpell(i, BOOKTYPE_SPELL) then
+        local link = GetSpellLink(i, BOOKTYPE_SPELL)
+        local spellID = link and tonumber(link:match("spell:(%d+)"))
+        if spellID and not spells[spellID] then
+          spells[spellID] = true
+        end
+      end
+    end
+  end
+  return spells
+end
+
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
+-- force=true rescans everything not already on a bar (manual /cdm scan).
+function Scanner:Scan(force)
+  local scanner = ns.profile.scanner
+  local results = {}
+  for spellID in pairs(CollectSpellbook()) do
+    local skip = ElementExists(spellID)
+      or (not force and (scanner.seen[spellID] or scanner.rejected[spellID]))
+    if not skip then
+      local name, _, icon = GetSpellInfo(spellID)
+      if name then
+        local text = TooltipText(spellID)
+        local cooldown = ParseCooldown(text)
+        local category = Classify(spellID, text, cooldown)
+        if category then
+          results[#results + 1] = {
+            spellID = spellID, name = name, icon = icon,
+            category = category, cooldown = cooldown,
+          }
+        else
+          scanner.seen[spellID] = true -- unclassifiable; don't re-inspect
+        end
+      end
+    end
+  end
+  table.sort(results, function(a, b)
+    if a.category ~= b.category then return a.category < b.category end
+    return a.name < b.name
+  end)
+  if #results > 0 then
+    ns:Fire("SCAN_RESULTS", results)
+  elseif force then
+    ns:Print("scan finished: nothing new to suggest.")
+  end
+  return results
+end
+
+function Scanner:Accept(item)
+  local viewerName = CATEGORY_VIEWER[item.category] or "Essential"
+  local viewer = ns.DB:GetViewer(viewerName)
+  if not viewer then return end
+  table.insert(viewer.elements, {
+    spellID = item.spellID, name = item.name, icon = item.icon,
+    kind = "cooldown", showWhen = "always", conditions = {},
+  })
+  ns.profile.scanner.seen[item.spellID] = true
+  ns:Fire("VIEWERS_CHANGED")
+end
+
+function Scanner:Reject(item)
+  ns.profile.scanner.rejected[item.spellID] = true
+  ns.profile.scanner.seen[item.spellID] = true
+end
+
+function Scanner:Dismiss(results)
+  -- Window closed without deciding: remember everything as seen so the same
+  -- batch doesn't nag on every login; /cdm scan can always resurface it.
+  for _, item in ipairs(results) do
+    ns.profile.scanner.seen[item.spellID] = true
+  end
+end
+
+--------------------------------------------------------------------------------
+-- Automatic triggers (debounced)
+--------------------------------------------------------------------------------
+local pendingScan = 0
+
+local function QueueScan(delay)
+  pendingScan = delay
+end
+
+ns:On("READY", function()
+  ns:RegisterEvent("ASCENSION_KNOWN_ENTRIES_UPDATED", function() QueueScan(3) end)
+  ns:On("PROFILE_CHANGED", function() QueueScan(5) end)
+  QueueScan(8) -- first scan a few seconds after login
+
+  ns:OnTick(function(dt)
+    if pendingScan <= 0 then return end
+    pendingScan = pendingScan - dt
+    if pendingScan <= 0 then
+      Scanner:Scan(false)
+    end
+  end)
+end)
+
+-- Test seams
+Scanner._ParseCooldown = ParseCooldown
+Scanner._Classify = Classify

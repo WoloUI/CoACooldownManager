@@ -1,0 +1,25 @@
+-- Runs every test file. Usage (from the addon root): lua5.1 tests/run_all.lua
+local files = {
+  "tests/test_triggers.lua",
+  "tests/test_reminders.lua",
+  "tests/test_db.lua",
+  "tests/test_scanner.lua",
+}
+
+local total, failed = 0, 0
+for _, file in ipairs(files) do
+  local ok, results = pcall(dofile, file)
+  if not ok then
+    print("ERROR in " .. file .. ": " .. tostring(results))
+    failed = failed + 1
+  else
+    for _, result in ipairs(results or {}) do
+      total = total + 1
+      if not result.ok then failed = failed + 1 end
+    end
+  end
+  print("")
+end
+
+print(string.format("%d checks, %d failed", total, failed))
+os.exit(failed == 0 and 0 or 1)
