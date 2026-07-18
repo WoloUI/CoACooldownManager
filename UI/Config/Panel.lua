@@ -280,6 +280,8 @@ function Config:BuildControls()
   end
   c.sizeLabel = W.CreateLabel(parent, "Size", 12, W.colors.inkDim)
   c.iconSize = NumBox("iconSize", 32)
+  c.segHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
+  c.segH = NumBox("segHeight", 16)
   c.barWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
   c.barW = NumBox("barWidth", 250)
   c.barHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
@@ -1137,10 +1139,13 @@ function Config:Render()
       c.fontLabel:SetPoint("TOPLEFT", L3, y - 4); c.fontLabel:Show()
       c.fontSize:SetPoint("TOPLEFT", C3, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
     else
+      c.sizeLabel:SetText("Width")
       c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
       c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 16)); c.iconSize:Show()
-      c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
-      c.spacing:SetPoint("TOPLEFT", C2, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
+      c.segHLabel:SetPoint("TOPLEFT", L2, y - 4); c.segHLabel:Show()
+      c.segH:SetPoint("TOPLEFT", C2, y); c.segH:SetText(tostring(viewer.segHeight or viewer.iconSize or 16)); c.segH:Show()
+      c.spacingLabel:SetPoint("TOPLEFT", L3, y - 4); c.spacingLabel:Show()
+      c.spacing:SetPoint("TOPLEFT", C3, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
     end
     y = y - 34
   elseif style ~= "reminders" then
@@ -1157,6 +1162,7 @@ function Config:Render()
     y = y - 26
     -- Row: sizes
     if style == "icons" then
+      c.sizeLabel:SetText("Size")
       c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
       c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 32)); c.iconSize:Show()
       c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
@@ -1187,6 +1193,7 @@ function Config:Render()
     c.showStacks:Show()
     y = y - 30
   else
+    c.sizeLabel:SetText("Size")
     c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
     c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 24)); c.iconSize:Show()
     c.fontLabel:SetPoint("TOPLEFT", L2, y - 4); c.fontLabel:Show()

@@ -76,16 +76,17 @@ end
 
 local function UpdateSegments(frame, cfg, stack, maxStacks, current, color)
   if frame.barHolder then frame.barHolder:Hide() end
-  local size = cfg.iconSize or 16
+  local segW = cfg.iconSize or 16
+  local segH = cfg.segHeight or segW
   local spacing = cfg.spacing or 4
   local segments = AcquireSegments(frame, maxStacks)
-  frame:SetSize(maxStacks * size + (maxStacks - 1) * spacing, size)
+  frame:SetSize(maxStacks * segW + (maxStacks - 1) * spacing, segH)
 
   for i = 1, maxStacks do
     local seg = segments[i]
-    seg:SetSize(size, size)
+    seg:SetSize(segW, segH)
     seg:ClearAllPoints()
-    seg:SetPoint("LEFT", frame, "LEFT", (i - 1) * (size + spacing), 0)
+    seg:SetPoint("LEFT", frame, "LEFT", (i - 1) * (segW + spacing), 0)
     seg.border:ClearAllPoints()
     seg.border:SetPoint("TOPLEFT", seg, "TOPLEFT", -1, 1)
     seg.border:SetPoint("BOTTOMRIGHT", seg, "BOTTOMRIGHT", 1, -1)
