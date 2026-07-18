@@ -279,9 +279,9 @@ function Config:BuildControls()
   end
   c.sizeLabel = W.CreateLabel(parent, "Size", 12, W.colors.inkDim)
   c.iconSize = NumBox("iconSize", 32)
-  c.barWLabel = W.CreateLabel(parent, "W", 12, W.colors.inkDim)
+  c.barWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
   c.barW = NumBox("barWidth", 250)
-  c.barHLabel = W.CreateLabel(parent, "H", 12, W.colors.inkDim)
+  c.barHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
   c.barH = NumBox("barHeight", 20)
   c.spacingLabel = W.CreateLabel(parent, "Gap", 12, W.colors.inkDim)
   c.spacing = NumBox("spacing", 5)
@@ -508,6 +508,8 @@ function Config:BuildControls()
     Config:Render()
   end)
   c.addHint = W.CreateLabel(parent, "Type a name or spell ID, or drag a spell from your spellbook.", 10, W.colors.inkDim)
+  c.addLabel = W.CreateLabel(parent, "Add spell", 12, W.colors.inkDim)
+  c.remTypeLabel = W.CreateLabel(parent, "Type", 12, W.colors.inkDim)
 
   -- Reminder elements
   c.remType = W.CreateDropdown(parent, 130, function() Config:Render() end)
@@ -965,11 +967,17 @@ function Config:Render()
     if not viewer then return end
   end
 
+  -- Form grid: labels at L1/L2/L3, controls aligned at C1/C2/C3
+  local L1, C1 = 0, 92
+  local L2, C2 = 160, 252
+  local L3, C3 = 320, 412
+  local LW, CW = 260, 352 -- wide second column (dropdown pairs)
+
   local y = -10
   c.title:SetPoint("TOPLEFT", 0, y)
   c.title:SetText(viewer.name)
   c.title:Show()
-  c.enabled:SetPoint("TOPLEFT", 220, y - 2)
+  c.enabled:SetPoint("TOPLEFT", LW, y - 2)
   c.enabled:SetChecked(viewer.enabled)
   c.enabled:Show()
   if viewer.name ~= "Power" then
@@ -990,168 +998,182 @@ function Config:Render()
         parentOptions[#parentOptions + 1] = { text = other.name, value = other.name }
       end
     end
-    c.anchorParentLabel:SetPoint("TOPLEFT", 0, y - 4)
+    c.anchorParentLabel:SetText("Attach to")
+    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
     c.anchorParentLabel:Show()
     c.anchorParent:SetOptions(parentOptions)
     c.anchorParent:SetValue(anchor.parent or "FREE")
-    c.anchorParent:SetPoint("TOPLEFT", 70, y)
+    c.anchorParent:SetPoint("TOPLEFT", C1, y)
     c.anchorParent:Show()
     if anchor.parent ~= "FREE" then
-      c.anchorPosLabel:SetPoint("TOPLEFT", 240, y - 4)
+      c.anchorPosLabel:SetPoint("TOPLEFT", LW, y - 4)
       c.anchorPosLabel:Show()
       local pos = "above"
       if anchor.relPoint == "BOTTOM" then pos = "below"
       elseif anchor.relPoint == "LEFT" then pos = "left"
       elseif anchor.relPoint == "RIGHT" then pos = "right" end
       c.anchorPos:SetValue(pos)
-      c.anchorPos:SetPoint("TOPLEFT", 295, y)
+      c.anchorPos:SetPoint("TOPLEFT", CW, y)
       c.anchorPos:Show()
     end
   else
-    c.anchorParentLabel:SetPoint("TOPLEFT", 0, y - 4)
     c.anchorParentLabel:SetText("Root bar: drag it in Edit mode; every anchored bar follows.")
+    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
     c.anchorParentLabel:Show()
   end
   y = y - 26
-  c.anchorXLabel:SetPoint("TOPLEFT", 0, y - 4)
+  c.anchorXLabel:SetText("Offset X")
+  c.anchorXLabel:SetPoint("TOPLEFT", L1, y - 4)
   c.anchorXLabel:Show()
-  c.anchorX:SetPoint("TOPLEFT", 16, y)
+  c.anchorX:SetPoint("TOPLEFT", C1, y)
   c.anchorX:SetText(tostring(math.floor((anchor.x or 0) + 0.5)))
   c.anchorX:Show()
-  c.anchorYLabel:SetPoint("TOPLEFT", 80, y - 4)
+  c.anchorYLabel:SetPoint("TOPLEFT", L2, y - 4)
   c.anchorYLabel:Show()
-  c.anchorY:SetPoint("TOPLEFT", 96, y)
+  c.anchorY:SetPoint("TOPLEFT", C2, y)
   c.anchorY:SetText(tostring(math.floor((anchor.y or 0) + 0.5)))
   c.anchorY:Show()
-  if viewer.name ~= "Power" then
-    c.anchorParentLabel:SetText("Attach to")
-  end
   y = y - 34
 
   -- Appearance / per-style sections
   local style = viewer.style
   if style == "power" then
+    local type1, type2 = ns.Power:GetTypes()
     c.powerHeader:SetPoint("TOPLEFT", 0, y)
     c.powerHeader:Show()
     y = y - 22
-    c.bar1Label:SetPoint("TOPLEFT", 0, y - 4); c.bar1Label:Show()
-    c.powerBar1:SetPoint("TOPLEFT", 40, y); c.powerBar1:SetValue(viewer.power.bar1 or "auto"); c.powerBar1:Show()
-    c.bar2Label:SetPoint("TOPLEFT", 170, y - 4); c.bar2Label:Show()
-    c.powerBar2:SetPoint("TOPLEFT", 210, y); c.powerBar2:SetValue(viewer.power.bar2 or "auto"); c.powerBar2:Show()
-    c.powerWLabel:SetPoint("TOPLEFT", 340, y - 4); c.powerWLabel:Show()
-    c.powerW:SetPoint("TOPLEFT", 382, y); c.powerW:SetText(tostring(viewer.power.width or 340)); c.powerW:Show()
-    y = y - 26
-    c.powerHLabel:SetPoint("TOPLEFT", 0, y - 4); c.powerHLabel:Show()
-    c.powerH:SetPoint("TOPLEFT", 44, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
-    c.powerSubHLabel:SetPoint("TOPLEFT", 110, y - 4); c.powerSubHLabel:Show()
-    c.powerSubH:SetPoint("TOPLEFT", 186, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
-    y = y - 28
-    c.ticks:SetPoint("TOPLEFT", 0, y); c.ticks:SetChecked(viewer.power.showTicks); c.ticks:Show()
-    c.combo:SetPoint("TOPLEFT", 120, y); c.combo:SetChecked(viewer.power.showCombo); c.combo:Show()
-    c.powerName:SetPoint("TOPLEFT", 250, y); c.powerName:SetChecked(viewer.power.showLabel ~= false); c.powerName:Show()
-    y = y - 28
-    local type1, type2 = ns.Power:GetTypes()
-    c.color1Label:SetPoint("TOPLEFT", 0, y - 4); c.color1Label:Show()
-    c.color1:SetPoint("TOPLEFT", 44, y)
+    -- Row: Bar 1 [dd]        Color [sw][Auto]
+    c.bar1Label:SetPoint("TOPLEFT", L1, y - 4); c.bar1Label:Show()
+    c.powerBar1:SetPoint("TOPLEFT", C1, y); c.powerBar1:SetValue(viewer.power.bar1 or "auto"); c.powerBar1:Show()
+    c.color1Label:SetPoint("TOPLEFT", LW, y - 4); c.color1Label:Show()
+    c.color1:SetPoint("TOPLEFT", CW, y)
     c.color1:SetColor(viewer.power.color1 or ns.Power:GetBar(type1).color)
     c.color1:Show()
-    c.color1Reset:SetPoint("TOPLEFT", 70, y); c.color1Reset:Show()
+    c.color1Reset:SetPoint("TOPLEFT", CW + 26, y); c.color1Reset:Show()
+    y = y - 26
+    -- Row: Bar 2 [dd]        Color [sw][Auto]
+    c.bar2Label:SetPoint("TOPLEFT", L1, y - 4); c.bar2Label:Show()
+    c.powerBar2:SetPoint("TOPLEFT", C1, y); c.powerBar2:SetValue(viewer.power.bar2 or "auto"); c.powerBar2:Show()
     if type2 then
-      c.color2Label:SetPoint("TOPLEFT", 140, y - 4); c.color2Label:Show()
-      c.color2:SetPoint("TOPLEFT", 184, y)
+      c.color2Label:SetPoint("TOPLEFT", LW, y - 4); c.color2Label:Show()
+      c.color2:SetPoint("TOPLEFT", CW, y)
       c.color2:SetColor(viewer.power.color2 or ns.Power:GetBar(type2).color)
       c.color2:Show()
-      c.color2Reset:SetPoint("TOPLEFT", 210, y); c.color2Reset:Show()
+      c.color2Reset:SetPoint("TOPLEFT", CW + 26, y); c.color2Reset:Show()
     end
-    y = y - 34
+    y = y - 26
+    -- Row: Width / Height / Bar 2 height
+    c.powerWLabel:SetPoint("TOPLEFT", L1, y - 4); c.powerWLabel:Show()
+    c.powerW:SetPoint("TOPLEFT", C1, y); c.powerW:SetText(tostring(viewer.power.width or 340)); c.powerW:Show()
+    c.powerHLabel:SetPoint("TOPLEFT", L2, y - 4); c.powerHLabel:Show()
+    c.powerH:SetPoint("TOPLEFT", C2, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
+    c.powerSubHLabel:SetPoint("TOPLEFT", L3, y - 4); c.powerSubHLabel:Show()
+    c.powerSubH:SetPoint("TOPLEFT", C3, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
+    y = y - 28
+    -- Row: toggles, aligned to the control column
+    c.ticks:SetPoint("TOPLEFT", C1, y); c.ticks:SetChecked(viewer.power.showTicks); c.ticks:Show()
+    c.combo:SetPoint("TOPLEFT", C2, y); c.combo:SetChecked(viewer.power.showCombo); c.combo:Show()
+    c.powerName:SetPoint("TOPLEFT", C3 - 60, y); c.powerName:SetChecked(viewer.power.showLabel ~= false); c.powerName:Show()
+    y = y - 32
   elseif style == "stacks" then
     viewer.stack = viewer.stack or { maxStacks = 3, onlyMine = true }
     c.stackHeader:SetPoint("TOPLEFT", 0, y)
     c.stackHeader:Show()
     y = y - 22
-    c.stackIdLabel:SetPoint("TOPLEFT", 0, y - 4); c.stackIdLabel:Show()
-    c.stackId:SetPoint("TOPLEFT", 78, y)
+    -- Row: Aura ID [box]      Max stacks [box]
+    c.stackIdLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackIdLabel:Show()
+    c.stackId:SetPoint("TOPLEFT", C1, y)
     c.stackId:SetText(viewer.stack.spellID and tostring(viewer.stack.spellID) or "")
     c.stackId:Show()
-    c.stackMaxLabel:SetPoint("TOPLEFT", 175, y - 4); c.stackMaxLabel:Show()
-    c.stackMax:SetPoint("TOPLEFT", 242, y); c.stackMax:SetText(tostring(viewer.stack.maxStacks or 3)); c.stackMax:Show()
-    c.stackColorLabel:SetPoint("TOPLEFT", 300, y - 4); c.stackColorLabel:Show()
-    c.stackColor:SetPoint("TOPLEFT", 336, y); c.stackColor:SetValue(viewer.stack.colorName or "gold"); c.stackColor:Show()
+    c.stackMaxLabel:SetPoint("TOPLEFT", LW, y - 4); c.stackMaxLabel:Show()
+    c.stackMax:SetPoint("TOPLEFT", CW, y); c.stackMax:SetText(tostring(viewer.stack.maxStacks or 3)); c.stackMax:Show()
     y = y - 26
-    c.stackDisplayLabel:SetPoint("TOPLEFT", 0, y - 4); c.stackDisplayLabel:Show()
-    c.stackDisplay:SetPoint("TOPLEFT", 48, y)
+    -- Row: Display [dd]       On unit [dd]
+    c.stackDisplayLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackDisplayLabel:Show()
+    c.stackDisplay:SetPoint("TOPLEFT", C1, y)
     c.stackDisplay:SetValue(viewer.stack.display or "segments")
     c.stackDisplay:Show()
-    c.stackUnitLabel:SetPoint("TOPLEFT", 216, y - 4); c.stackUnitLabel:Show()
-    c.stackUnit:SetPoint("TOPLEFT", 262, y)
+    c.stackUnitLabel:SetPoint("TOPLEFT", LW, y - 4); c.stackUnitLabel:Show()
+    c.stackUnit:SetPoint("TOPLEFT", CW, y)
     c.stackUnit:SetValue(viewer.stack.unit or "player")
     c.stackUnit:Show()
     y = y - 26
-    c.stackCount:SetPoint("TOPLEFT", 0, y); c.stackCount:SetChecked(viewer.stack.showCount); c.stackCount:Show()
+    -- Row: Color [dd]         [x] Show count text
+    c.stackColorLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackColorLabel:Show()
+    c.stackColor:SetPoint("TOPLEFT", C1, y); c.stackColor:SetValue(viewer.stack.colorName or "gold"); c.stackColor:Show()
+    c.stackCount:SetPoint("TOPLEFT", LW, y); c.stackCount:SetChecked(viewer.stack.showCount); c.stackCount:Show()
     y = y - 26
+    -- Row: sizes per display mode
     if viewer.stack.display == "bar" then
-      c.barWLabel:SetPoint("TOPLEFT", 0, y - 4); c.barWLabel:Show()
-      c.barW:SetPoint("TOPLEFT", 16, y); c.barW:SetText(tostring(viewer.barWidth or 200)); c.barW:Show()
-      c.barHLabel:SetPoint("TOPLEFT", 68, y - 4); c.barHLabel:Show()
-      c.barH:SetPoint("TOPLEFT", 84, y); c.barH:SetText(tostring(viewer.barHeight or 16)); c.barH:Show()
-      c.fontLabel:SetPoint("TOPLEFT", 140, y - 4); c.fontLabel:Show()
-      c.fontSize:SetPoint("TOPLEFT", 172, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
+      c.barWLabel:SetPoint("TOPLEFT", L1, y - 4); c.barWLabel:Show()
+      c.barW:SetPoint("TOPLEFT", C1, y); c.barW:SetText(tostring(viewer.barWidth or 200)); c.barW:Show()
+      c.barHLabel:SetPoint("TOPLEFT", L2, y - 4); c.barHLabel:Show()
+      c.barH:SetPoint("TOPLEFT", C2, y); c.barH:SetText(tostring(viewer.barHeight or 16)); c.barH:Show()
+      c.fontLabel:SetPoint("TOPLEFT", L3, y - 4); c.fontLabel:Show()
+      c.fontSize:SetPoint("TOPLEFT", C3, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
     else
-      c.sizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.sizeLabel:Show()
-      c.iconSize:SetPoint("TOPLEFT", 32, y); c.iconSize:SetText(tostring(viewer.iconSize or 16)); c.iconSize:Show()
-      c.spacingLabel:SetPoint("TOPLEFT", 90, y - 4); c.spacingLabel:Show()
-      c.spacing:SetPoint("TOPLEFT", 120, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
+      c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
+      c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 16)); c.iconSize:Show()
+      c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
+      c.spacing:SetPoint("TOPLEFT", C2, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
     end
     y = y - 34
   elseif style ~= "reminders" then
     c.lookHeader:SetPoint("TOPLEFT", 0, y)
     c.lookHeader:Show()
     y = y - 22
-    c.styleLabel:SetPoint("TOPLEFT", 0, y - 4); c.styleLabel:Show()
-    c.style:SetPoint("TOPLEFT", 36, y); c.style:SetValue(style); c.style:Show()
-    c.growthLabel:SetPoint("TOPLEFT", 170, y - 4); c.growthLabel:Show()
+    -- Row: Style [dd]         Growth [dd]
+    c.styleLabel:SetPoint("TOPLEFT", L1, y - 4); c.styleLabel:Show()
+    c.style:SetPoint("TOPLEFT", C1, y); c.style:SetValue(style); c.style:Show()
+    c.growthLabel:SetPoint("TOPLEFT", LW, y - 4); c.growthLabel:Show()
     c.growth:SetOptions(style == "bars" and GROWTH_BARS or GROWTH_ICONS)
     c.growth:SetValue(viewer.growth or (style == "bars" and "UP" or "CENTER"))
-    c.growth:SetPoint("TOPLEFT", 216, y); c.growth:Show()
+    c.growth:SetPoint("TOPLEFT", CW, y); c.growth:Show()
     y = y - 26
+    -- Row: sizes
     if style == "icons" then
-      c.sizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.sizeLabel:Show()
-      c.iconSize:SetPoint("TOPLEFT", 32, y); c.iconSize:SetText(tostring(viewer.iconSize or 32)); c.iconSize:Show()
+      c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
+      c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 32)); c.iconSize:Show()
+      c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
+      c.spacing:SetPoint("TOPLEFT", C2, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
+      c.fontLabel:SetPoint("TOPLEFT", L3, y - 4); c.fontLabel:Show()
+      c.fontSize:SetPoint("TOPLEFT", C3, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
     else
-      c.barWLabel:SetPoint("TOPLEFT", 0, y - 4); c.barWLabel:Show()
-      c.barW:SetPoint("TOPLEFT", 16, y); c.barW:SetText(tostring(viewer.barWidth or 250)); c.barW:Show()
-      c.barHLabel:SetPoint("TOPLEFT", 68, y - 4); c.barHLabel:Show()
-      c.barH:SetPoint("TOPLEFT", 84, y); c.barH:SetText(tostring(viewer.barHeight or 20)); c.barH:Show()
+      c.barWLabel:SetPoint("TOPLEFT", L1, y - 4); c.barWLabel:Show()
+      c.barW:SetPoint("TOPLEFT", C1, y); c.barW:SetText(tostring(viewer.barWidth or 250)); c.barW:Show()
+      c.barHLabel:SetPoint("TOPLEFT", L2, y - 4); c.barHLabel:Show()
+      c.barH:SetPoint("TOPLEFT", C2, y); c.barH:SetText(tostring(viewer.barHeight or 20)); c.barH:Show()
+      c.spacingLabel:SetPoint("TOPLEFT", L3, y - 4); c.spacingLabel:Show()
+      c.spacing:SetPoint("TOPLEFT", C3, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
     end
-    c.spacingLabel:SetPoint("TOPLEFT", 140, y - 4); c.spacingLabel:Show()
-    c.spacing:SetPoint("TOPLEFT", 170, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
-    c.fontLabel:SetPoint("TOPLEFT", 226, y - 4); c.fontLabel:Show()
-    c.fontSize:SetPoint("TOPLEFT", 258, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
     y = y - 26
-    if style == "icons" then
-      c.showKeybind:SetPoint("TOPLEFT", 0, y)
+    -- Row: font (bars) + toggles aligned to control columns
+    if style == "bars" then
+      c.fontLabel:SetPoint("TOPLEFT", L1, y - 4); c.fontLabel:Show()
+      c.fontSize:SetPoint("TOPLEFT", C1, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
+      c.showStacks:SetPoint("TOPLEFT", C2, y)
+    else
+      c.showKeybind:SetPoint("TOPLEFT", C1, y)
       c.showKeybind:SetChecked(viewer.showKeybind ~= false)
       c.showKeybind:Show()
-      c.showStacks:SetPoint("TOPLEFT", 100, y)
-    else
-      c.showStacks:SetPoint("TOPLEFT", 0, y)
+      c.showStacks:SetPoint("TOPLEFT", C2, y)
     end
     c.showStacks:SetChecked(viewer.showStacks ~= false)
     c.showStacks:Show()
     y = y - 30
   else
-    c.sizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.sizeLabel:Show()
-    c.iconSize:SetPoint("TOPLEFT", 32, y); c.iconSize:SetText(tostring(viewer.iconSize or 24)); c.iconSize:Show()
-    c.fontLabel:SetPoint("TOPLEFT", 90, y - 4); c.fontLabel:Show()
-    c.fontSize:SetPoint("TOPLEFT", 122, y); c.fontSize:SetText(tostring(viewer.fontSize or 12)); c.fontSize:Show()
+    c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
+    c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 24)); c.iconSize:Show()
+    c.fontLabel:SetPoint("TOPLEFT", L2, y - 4); c.fontLabel:Show()
+    c.fontSize:SetPoint("TOPLEFT", C2, y); c.fontSize:SetText(tostring(viewer.fontSize or 12)); c.fontSize:Show()
     y = y - 34
   end
 
   -- Visibility
-  c.visLabel:SetPoint("TOPLEFT", 0, y - 4)
+  c.visLabel:SetPoint("TOPLEFT", L1, y - 4)
   c.visLabel:Show()
   c.visibility:SetValue(viewer.visibility or "always")
-  c.visibility:SetPoint("TOPLEFT", 56, y)
+  c.visibility:SetPoint("TOPLEFT", C1, y)
   c.visibility:Show()
   y = y - 36
 
@@ -1159,18 +1181,21 @@ function Config:Render()
   if style == "icons" or style == "bars" then
     y = RenderElementList(c, viewer, y, false)
     y = y - 6
-    c.addInput:SetPoint("TOPLEFT", 0, y); c.addInput:Show()
-    c.addKind:SetPoint("TOPLEFT", 176, y); c.addKind:Show()
-    c.addBtn:SetPoint("TOPLEFT", 302, y); c.addBtn:Show()
+    c.addLabel:SetPoint("TOPLEFT", L1, y - 4); c.addLabel:Show()
+    c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
+    c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
+    c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
     y = y - 24
     c.addHint:SetText("Type a name or spell ID, or drag a spell from your spellbook.")
-    c.addHint:SetPoint("TOPLEFT", 0, y); c.addHint:Show()
+    c.addHint:SetPoint("TOPLEFT", C1, y); c.addHint:Show()
     y = y - 24
   elseif style == "reminders" then
     y = RenderElementList(c, viewer, y, true)
     y = y - 6
-    c.remType:SetPoint("TOPLEFT", 0, y); c.remType:Show()
+    c.remTypeLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTypeLabel:Show()
+    c.remType:SetPoint("TOPLEFT", C1, y); c.remType:Show()
     local rtype = c.remType.value
+    local PARAM_X = C1 + 136
     if rtype == "group" then
       local groupOptions = {}
       for key, group in pairs(ns.GetEquivGroups()) do
@@ -1179,27 +1204,27 @@ function Config:Render()
       table.sort(groupOptions, function(a, b) return a.text < b.text end)
       if #groupOptions == 0 then
         c.addHint:SetText("No buff groups yet - create them in GENERAL > Buff groups.")
-        c.addHint:SetPoint("TOPLEFT", 136, y - 4)
+        c.addHint:SetPoint("TOPLEFT", PARAM_X, y - 4)
         c.addHint:Show()
       else
         c.remGroup:SetOptions(groupOptions)
         if not c.remGroup.value and groupOptions[1] then c.remGroup:SetValue(groupOptions[1].value) end
-        c.remGroup:SetPoint("TOPLEFT", 136, y); c.remGroup:Show()
-        c.remScope:SetPoint("TOPLEFT", 292, y); c.remScope:Show()
+        c.remGroup:SetPoint("TOPLEFT", PARAM_X, y); c.remGroup:Show()
+        c.remScope:SetPoint("TOPLEFT", PARAM_X + 156, y); c.remScope:Show()
       end
     elseif rtype == "aura" then
-      c.remAura:SetPoint("TOPLEFT", 136, y); c.remAura:Show()
+      c.remAura:SetPoint("TOPLEFT", PARAM_X, y); c.remAura:Show()
     elseif rtype == "range" then
-      c.remRangeSpell:SetPoint("TOPLEFT", 136, y); c.remRangeSpell:Show()
+      c.remRangeSpell:SetPoint("TOPLEFT", PARAM_X, y); c.remRangeSpell:Show()
       c.addHint:SetText("Range is measured with this spell (e.g. your melee strike). Alert shows in combat with an attackable target.")
-      c.addHint:SetPoint("TOPLEFT", 0, y - 52); c.addHint:Show()
+      c.addHint:SetPoint("TOPLEFT", C1, y - 52); c.addHint:Show()
     else
-      c.remSlot:SetPoint("TOPLEFT", 136, y); c.remSlot:Show()
+      c.remSlot:SetPoint("TOPLEFT", PARAM_X, y); c.remSlot:Show()
     end
     y = y - 26
-    c.remTextLabel:SetPoint("TOPLEFT", 0, y - 4); c.remTextLabel:Show()
-    c.remText:SetPoint("TOPLEFT", 76, y); c.remText:Show()
-    c.remAdd:SetPoint("TOPLEFT", 284, y); c.remAdd:Show()
+    c.remTextLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTextLabel:Show()
+    c.remText:SetPoint("TOPLEFT", C1, y); c.remText:Show()
+    c.remAdd:SetPoint("TOPLEFT", C1 + 208, y); c.remAdd:Show()
     y = y - (rtype == "range" and 46 or 30)
   end
 
