@@ -106,8 +106,8 @@ local function SetButtonDisplay(btn, display, cfg, now)
 
   -- Keybind of the spell, read from the action bars
   local key
-  if cfg.showKeybind ~= false and display.spellID and ns.Keybinds then
-    key = ns.Keybinds:GetKey(display.spellID)
+  if cfg.showKeybind ~= false and ns.Keybinds then
+    key = ns.Keybinds:GetKey(display.spellID, display.name)
   end
   if key then
     btn.keyText:SetFont(font, ns.FontSize(math.max((cfg.fontSize or 12) - 3, 7)), "OUTLINE")
