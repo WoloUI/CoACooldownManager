@@ -144,6 +144,9 @@ function W.CreateDropdown(parent, width, onSelect)
     self.text:SetText(value ~= nil and tostring(value) or "")
   end
 
+  -- Long lists (e.g. LibSharedMedia fonts/textures) page with the mouse wheel
+  local MAX_ROWS = 18
+
   dd:SetScript("OnClick", function(self)
     local pop = GetPopup()
     if pop:IsShown() and pop.owner == self then
@@ -151,35 +154,52 @@ function W.CreateDropdown(parent, width, onSelect)
       return
     end
     pop.owner = self
+    pop.offset = 0
+    local options = self.options
     local rowHeight = 19
-    pop:SetSize(math.max(self:GetWidth(), 110), #self.options * rowHeight + 6)
+    local visible = math.min(#options, MAX_ROWS)
+    pop:SetSize(math.max(self:GetWidth(), 110), visible * rowHeight + 6)
     pop:ClearAllPoints()
     pop:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
-    for i, opt in ipairs(self.options) do
-      local row = pop.buttons[i]
-      if not row then
-        row = CreateFrame("Button", nil, pop)
-        row:SetHeight(rowHeight)
-        row.text = W.CreateLabel(row, "", 12)
-        row.text:SetPoint("LEFT", 8, 0)
-        row:SetScript("OnEnter", function(r) r.text:SetTextColor(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3]) end)
-        row:SetScript("OnLeave", function(r) r.text:SetTextColor(COLORS.ink[1], COLORS.ink[2], COLORS.ink[3]) end)
-        pop.buttons[i] = row
+
+    local function renderRows()
+      for i = 1, visible do
+        local opt = options[i + pop.offset]
+        local row = pop.buttons[i]
+        if not row then
+          row = CreateFrame("Button", nil, pop)
+          row:SetHeight(rowHeight)
+          row.text = W.CreateLabel(row, "", 12)
+          row.text:SetPoint("LEFT", 8, 0)
+          row.text:SetPoint("RIGHT", -8, 0)
+          row:SetScript("OnEnter", function(r) r.text:SetTextColor(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3]) end)
+          row:SetScript("OnLeave", function(r) r.text:SetTextColor(COLORS.ink[1], COLORS.ink[2], COLORS.ink[3]) end)
+          pop.buttons[i] = row
+        end
+        row:SetPoint("TOPLEFT", pop, "TOPLEFT", 2, -3 - (i - 1) * rowHeight)
+        row:SetPoint("RIGHT", pop, "RIGHT", -2, 0)
+        row.text:SetText(opt.text)
+        row.text:SetTextColor(COLORS.ink[1], COLORS.ink[2], COLORS.ink[3])
+        row:SetScript("OnClick", function()
+          pop:Hide()
+          dd:SetValue(opt.value)
+          if onSelect then onSelect(dd, opt.value) end
+        end)
+        row:Show()
       end
-      row:SetPoint("TOPLEFT", pop, "TOPLEFT", 2, -3 - (i - 1) * rowHeight)
-      row:SetPoint("RIGHT", pop, "RIGHT", -2, 0)
-      row.text:SetText(opt.text)
-      row.text:SetTextColor(COLORS.ink[1], COLORS.ink[2], COLORS.ink[3])
-      row:SetScript("OnClick", function()
-        pop:Hide()
-        dd:SetValue(opt.value)
-        if onSelect then onSelect(dd, opt.value) end
-      end)
-      row:Show()
+      for i = visible + 1, #pop.buttons do
+        pop.buttons[i]:Hide()
+      end
     end
-    for i = #self.options + 1, #pop.buttons do
-      pop.buttons[i]:Hide()
-    end
+
+    pop:EnableMouseWheel(true)
+    pop:SetScript("OnMouseWheel", function(_, delta)
+      local maxOffset = math.max(#options - MAX_ROWS, 0)
+      pop.offset = math.min(math.max(pop.offset - delta * 3, 0), maxOffset)
+      renderRows()
+    end)
+
+    renderRows()
     pop:Show()
   end)
 

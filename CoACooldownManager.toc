@@ -4,6 +4,7 @@
 ## Author: WoloUI
 ## Version: 0.1
 ## SavedVariables: CoACDM_DB
+## OptionalDeps: SharedMedia, ElvUI, WeakAuras, Details
 
 Core\Init.lua
 Core\DB.lua

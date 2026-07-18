@@ -114,12 +114,52 @@ local function Appearance()
   return db and db.global and db.global.appearance or {}
 end
 
+-- LibSharedMedia (loaded by ElvUI/WeakAuras/Details) is consumed when
+-- available, never embedded. Values are stored as LSM names; raw paths from
+-- older settings (they contain "\\") keep working.
+local function LSM()
+  local LibStub = _G.LibStub
+  return LibStub and LibStub.GetLibrary and LibStub:GetLibrary("LibSharedMedia-3.0", true) or nil
+end
+
+function ns.GetFontOptions()
+  local lib = LSM()
+  if lib then
+    local options = {}
+    for _, name in ipairs(lib:List("font")) do
+      options[#options + 1] = { text = name, value = name }
+    end
+    if #options > 0 then return options end
+  end
+  return ns.FontOptions
+end
+
+function ns.GetTextureOptions()
+  local lib = LSM()
+  if lib then
+    local options = {}
+    for _, name in ipairs(lib:List("statusbar")) do
+      options[#options + 1] = { text = name, value = name }
+    end
+    if #options > 0 then return options end
+  end
+  return ns.TextureOptions
+end
+
+local function ResolveMedia(mediatype, value, fallback)
+  if not value then return fallback end
+  if value:find("\\") then return value end -- raw file path
+  local lib = LSM()
+  local fetched = lib and lib:Fetch(mediatype, value, true)
+  return fetched or fallback
+end
+
 function ns.GetFont()
-  return Appearance().font or STANDARD_TEXT_FONT
+  return ResolveMedia("font", Appearance().font, STANDARD_TEXT_FONT)
 end
 
 function ns.GetTexture()
-  return Appearance().texture or "Interface\\TargetingFrame\\UI-StatusBar"
+  return ResolveMedia("statusbar", Appearance().texture, "Interface\\TargetingFrame\\UI-StatusBar")
 end
 
 function ns.FontSize(base)

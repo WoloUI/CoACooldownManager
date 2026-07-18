@@ -653,6 +653,9 @@ function Config:Render()
     y2 = y2 - 34
     c2.genHeader:SetPoint("TOPLEFT", 0, y2); c2.genHeader:Show()
     y2 = y2 - 24
+    -- Options come from LibSharedMedia when another addon provides it
+    c2.genFont:SetOptions(ns.GetFontOptions())
+    c2.genTex:SetOptions(ns.GetTextureOptions())
     c2.genFontLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genFontLabel:Show()
     c2.genFont:SetPoint("TOPLEFT", 80, y2)
     c2.genFont:SetValue(appearance.font or "Fonts\\FRIZQT__.TTF")
