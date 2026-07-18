@@ -5,6 +5,7 @@ stub.install(_G)
 local ns = {}
 stub.loadAddonFile("Core/Init.lua", ns)
 stub.loadAddonFile("Core/DB.lua", ns)
+stub.loadAddonFile("Data/EquivGroups.lua", ns)
 
 local T = {}
 local function check(name, cond)
@@ -88,5 +89,34 @@ check("original profile unaffected by copy edits", #ns.DB:GetViewer("Essential")
 CoACDM_DB = "garbage"
 ns.DB:Init()
 check("corrupt DB regenerated", type(CoACDM_DB) == "table" and ns.profile ~= nil)
+
+-- Serializer round trip
+local sample = {
+  name = "Essential", size = 40.5, enabled = true, hidden = false,
+  nested = { list = { "a", "b", 3 }, anchor = { x = -12, y = 6 } },
+}
+local restored = ns.DB._Deserialize(ns.DB._Serialize(sample))
+check("serialize: strings", restored.name == "Essential")
+check("serialize: floats", restored.size == 40.5)
+check("serialize: booleans", restored.enabled == true and restored.hidden == false)
+check("serialize: nested arrays", restored.nested.list[2] == "b" and restored.nested.list[3] == 3)
+check("serialize: negative numbers", restored.nested.anchor.x == -12)
+
+-- Base64 round trip
+local blob = ns.DB._Serialize(sample)
+check("base64 round trip", ns.DB._B64Decode(ns.DB._B64Encode(blob)) == blob)
+check("base64 rejects garbage", ns.DB._B64Decode("!!!!") == "" or ns.DB._B64Decode("!!!!") == nil)
+
+-- Export/import round trip replaces the current profile
+table.insert(ns.DB:GetViewer("Essential").elements, { spellID = 777, name = "Shared", kind = "cooldown" })
+local exported = ns.DB:ExportProfile()
+check("export string has prefix", exported:sub(1, 6) == "!CDM1!")
+ns.DB:GetViewer("Essential").elements = {}
+local specName, err = ns.DB:ImportProfile(exported)
+check("import succeeds", specName ~= nil)
+check("import restored elements", #ns.DB:GetViewer("Essential").elements == 1
+  and ns.DB:GetViewer("Essential").elements[1].name == "Shared")
+check("import rejects garbage", (select(2, ns.DB:ImportProfile("hola"))) ~= nil)
+check("import rejects damaged payload", (select(2, ns.DB:ImportProfile("!CDM1!AAAA"))) ~= nil)
 
 return T

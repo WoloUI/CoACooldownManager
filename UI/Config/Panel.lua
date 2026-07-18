@@ -620,6 +620,16 @@ function Config:BuildControls()
     Config:Render()
   end)
 
+  -- Profile sharing
+  c.shareHeader = W.CreateSection(parent, "PROFILE SHARING")
+  c.exportBtn = W.CreateButton(parent, "Export profile", 110, 22, function()
+    Config:ShowIO("export")
+  end)
+  c.importBtn = W.CreateButton(parent, "Import profile", 110, 22, function()
+    Config:ShowIO("import")
+  end)
+  c.shareHint = W.CreateLabel(parent, "Export copies your current spec's bars, triggers, positions and buff groups\ninto a string you can share; import replaces the current spec's profile.", 10, W.colors.inkDim)
+
   c.trigger = ns.TriggerBuilder:Create(parent)
 
   -- Utility buttons at the bottom of the sidebar. Stored on `win`, not in
@@ -871,7 +881,14 @@ function Config:Render()
     c2.genGlowHint:SetPoint("TOPLEFT", 0, y2); c2.genGlowHint:Show()
     y2 = y2 - 24
     c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
-    win.content:SetHeight(400)
+    y2 = y2 - 40
+    c2.shareHeader:SetPoint("TOPLEFT", 0, y2); c2.shareHeader:Show()
+    y2 = y2 - 22
+    c2.exportBtn:SetPoint("TOPLEFT", 0, y2); c2.exportBtn:Show()
+    c2.importBtn:SetPoint("TOPLEFT", 120, y2); c2.importBtn:Show()
+    y2 = y2 - 28
+    c2.shareHint:SetPoint("TOPLEFT", 0, y2); c2.shareHint:Show()
+    win.content:SetHeight(520)
     return
   end
 
@@ -1268,6 +1285,69 @@ function Config:Render()
   end
 
   win.content:SetHeight(math.max(-y + 40, 400))
+end
+
+--------------------------------------------------------------------------------
+-- Import/export window
+--------------------------------------------------------------------------------
+local ioWin
+
+local function EnsureIOWindow()
+  if ioWin then return ioWin end
+  ioWin = W.CreateWindow("CoACDMProfileIO", 460, 300, "CoACDM - Profile string")
+
+  ioWin.hint = W.CreateLabel(ioWin, "", 11, W.colors.inkDim)
+  ioWin.hint:SetPoint("TOPLEFT", 12, -36)
+
+  ioWin.scroll = CreateFrame("ScrollFrame", "CoACDMProfileIOScroll", ioWin, "UIPanelScrollFrameTemplate")
+  ioWin.scroll:SetPoint("TOPLEFT", 12, -54)
+  ioWin.scroll:SetPoint("BOTTOMRIGHT", -30, 40)
+
+  ioWin.edit = CreateFrame("EditBox", nil, ioWin.scroll)
+  ioWin.edit:SetMultiLine(true)
+  ioWin.edit:SetAutoFocus(false)
+  ioWin.edit:SetFont(STANDARD_TEXT_FONT, 11)
+  ioWin.edit:SetTextColor(W.colors.ink[1], W.colors.ink[2], W.colors.ink[3])
+  ioWin.edit:SetWidth(400)
+  ioWin.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  ioWin.scroll:SetScrollChild(ioWin.edit)
+
+  ioWin.action = W.CreateButton(ioWin, "", 180, 24, function()
+    if ioWin.mode == "import" then
+      local specName, err = ns.DB:ImportProfile(ioWin.edit:GetText())
+      if specName then
+        ns:Print("profile imported (" .. specName .. ") - it replaced this spec's setup.")
+        ioWin:Hide()
+        Config:Render()
+      else
+        ns:Print("import failed: " .. err)
+      end
+    else
+      ioWin.edit:SetFocus()
+      ioWin.edit:HighlightText()
+    end
+  end)
+  ioWin.action:SetPoint("BOTTOM", 0, 10)
+  return ioWin
+end
+
+function Config:ShowIO(mode)
+  local w = EnsureIOWindow()
+  w.mode = mode
+  if mode == "export" then
+    w.hint:SetText("Copy this string (Ctrl+C) and share it. Others import it from Appearance > Import profile.")
+    w.action:SetLabel("Select all")
+    w.edit:SetText(ns.DB:ExportProfile())
+    w:Show()
+    w.edit:SetFocus()
+    w.edit:HighlightText()
+  else
+    w.hint:SetText("Paste a profile string (Ctrl+V). Importing REPLACES this spec's bars and triggers.")
+    w.action:SetLabel("Import")
+    w.edit:SetText("")
+    w:Show()
+    w.edit:SetFocus()
+  end
 end
 
 --------------------------------------------------------------------------------

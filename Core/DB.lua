@@ -266,6 +266,173 @@ function DB:SetAnchor(viewer, anchor)
   layout[viewer.name] = anchor
 end
 
+--------------------------------------------------------------------------------
+-- Profile import/export (share strings with other players)
+-- Own token serializer + base64: imported data is PARSED, never executed.
+--------------------------------------------------------------------------------
+local SEP = "\1"
+
+local function SerializeValue(v, out)
+  local t = type(v)
+  if t == "table" then
+    out[#out + 1] = "T"
+    for key, val in pairs(v) do
+      SerializeValue(key, out)
+      SerializeValue(val, out)
+    end
+    out[#out + 1] = "t"
+  elseif t == "number" then
+    out[#out + 1] = "N" .. tostring(v)
+  elseif t == "boolean" then
+    out[#out + 1] = v and "B1" or "B0"
+  elseif t == "string" then
+    out[#out + 1] = "S" .. v:gsub(SEP, "")
+  end
+end
+
+local function Serialize(tbl)
+  local out = {}
+  SerializeValue(tbl, out)
+  return table.concat(out, SEP)
+end
+
+local function ParseTokens(tokens, i)
+  local tok = tokens[i]
+  if not tok then return nil, i + 1 end
+  local tag, rest = tok:sub(1, 1), tok:sub(2)
+  if tag == "T" then
+    local tbl = {}
+    i = i + 1
+    while tokens[i] and tokens[i] ~= "t" do
+      local key, value
+      key, i = ParseTokens(tokens, i)
+      value, i = ParseTokens(tokens, i)
+      if key ~= nil then tbl[key] = value end
+    end
+    return tbl, i + 1
+  elseif tag == "N" then
+    return tonumber(rest), i + 1
+  elseif tag == "B" then
+    return rest == "1", i + 1
+  elseif tag == "S" then
+    return rest, i + 1
+  end
+  return nil, i + 1
+end
+
+local function Deserialize(text)
+  local tokens = {}
+  for token in (text .. SEP):gmatch("(.-)" .. SEP) do
+    tokens[#tokens + 1] = token
+  end
+  local value = ParseTokens(tokens, 1)
+  return value
+end
+
+local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+local function B64Encode(data)
+  local out = {}
+  for i = 1, #data, 3 do
+    local a, b, c = data:byte(i, i + 2)
+    local n = a * 65536 + (b or 0) * 256 + (c or 0)
+    local c1 = math.floor(n / 262144) % 64
+    local c2 = math.floor(n / 4096) % 64
+    local c3 = math.floor(n / 64) % 64
+    local c4 = n % 64
+    out[#out + 1] = B64:sub(c1 + 1, c1 + 1) .. B64:sub(c2 + 1, c2 + 1)
+      .. (b and B64:sub(c3 + 1, c3 + 1) or "=")
+      .. (c and B64:sub(c4 + 1, c4 + 1) or "=")
+  end
+  return table.concat(out)
+end
+
+local B64_REV
+local function B64Decode(data)
+  if not B64_REV then
+    B64_REV = {}
+    for i = 1, 64 do B64_REV[B64:byte(i)] = i - 1 end
+  end
+  data = data:gsub("[^%w%+/=]", "")
+  local out = {}
+  for i = 1, #data, 4 do
+    local c1, c2, c3, c4 = data:byte(i, i + 3)
+    local n1, n2 = B64_REV[c1], B64_REV[c2]
+    if not n1 or not n2 then return nil end
+    local n3 = c3 and c3 ~= 61 and B64_REV[c3] or nil -- 61 = '='
+    local n4 = c4 and c4 ~= 61 and B64_REV[c4] or nil
+    local n = n1 * 262144 + n2 * 4096 + (n3 or 0) * 64 + (n4 or 0)
+    out[#out + 1] = string.char(math.floor(n / 65536) % 256)
+    if n3 then out[#out + 1] = string.char(math.floor(n / 256) % 256) end
+    if n4 then out[#out + 1] = string.char(n % 256) end
+  end
+  return table.concat(out)
+end
+
+local PREFIX = "!CDM1!"
+
+function DB:ExportProfile()
+  local payload = {
+    v = 1,
+    spec = self:GetSpecName(),
+    profile = self.profile,
+    layout = {},
+    groups = {},
+  }
+  local layout = self:GetLayout()
+  local allGroups = ns.GetEquivGroups()
+  for _, viewer in ipairs(self.profile.viewers) do
+    if layout[viewer.name] then
+      payload.layout[viewer.name] = layout[viewer.name]
+    end
+    if viewer.style == "reminders" then
+      for _, reminder in ipairs(viewer.elements) do
+        if reminder.rtype == "group" and reminder.group and allGroups[reminder.group] then
+          payload.groups[reminder.group] = allGroups[reminder.group]
+        end
+      end
+    end
+  end
+  return PREFIX .. B64Encode(Serialize(payload))
+end
+
+function DB:ImportProfile(text)
+  text = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  local body = text:match("^!CDM1!(.+)$")
+  if not body then return nil, "that is not a CoACDM profile string" end
+  local decoded = B64Decode(body)
+  if not decoded then return nil, "the string is damaged (bad encoding)" end
+  local ok, data = pcall(Deserialize, decoded)
+  if not ok or type(data) ~= "table" or type(data.profile) ~= "table"
+    or type(data.profile.viewers) ~= "table" or #data.profile.viewers == 0 then
+    return nil, "the string does not contain a valid profile"
+  end
+
+  data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {} }
+  self.char.specs[self:GetSpecKey()] = data.profile
+  self.profile = data.profile
+  ns.profile = data.profile
+
+  local layout = self:GetLayout()
+  for name, anchor in pairs(data.layout or {}) do
+    layout[name] = anchor
+  end
+  for key, group in pairs(data.groups or {}) do
+    if not self.db.global.equivGroups[key] then
+      self.db.global.equivGroups[key] = group
+    end
+  end
+
+  ns:Fire("PROFILE_CHANGED")
+  return data.spec or "profile"
+end
+
+-- Test seams
+DB._Serialize = Serialize
+DB._Deserialize = Deserialize
+DB._B64Encode = B64Encode
+DB._B64Decode = B64Decode
+
 -- True when setting `parentName` as parent of `childName` would create a cycle.
 function DB:WouldCycle(childName, parentName)
   local seen = { [childName] = true }
