@@ -8,6 +8,39 @@ EditMode.active = false
 
 local overlays = {} -- [viewerName] = overlay frame
 
+-- Magnetic snapping: when a dragged bar's center lands near the center axis of
+-- another bar (or the screen), it clicks into alignment. Axes snap separately.
+local SNAP_RANGE = 12
+
+function EditMode:SnapDelta(cfg, frame, cx, cy)
+  local bestDX, bestDY
+
+  local function consider(tx, ty)
+    if tx then
+      local d = tx - cx
+      if math.abs(d) <= SNAP_RANGE and (not bestDX or math.abs(d) < math.abs(bestDX)) then bestDX = d end
+    end
+    if ty then
+      local d = ty - cy
+      if math.abs(d) <= SNAP_RANGE and (not bestDY or math.abs(d) < math.abs(bestDY)) then bestDY = d end
+    end
+  end
+
+  consider(UIParent:GetCenter()) -- screen center
+
+  for _, other in ipairs(ns.profile.viewers) do
+    -- Skip self and anything anchored below the dragged bar (it moved with us)
+    if other.name ~= cfg.name and not ns.DB:WouldCycle(cfg.name, other.name) then
+      local otherFrame = ns.Viewer:GetFrame(other.name)
+      if otherFrame and otherFrame:IsShown() then
+        consider(otherFrame:GetCenter())
+      end
+    end
+  end
+
+  return bestDX or 0, bestDY or 0
+end
+
 local function AnchorLabel(cfg)
   local anchor = ns.DB:GetAnchor(cfg)
   if anchor.parent == "FREE" or not anchor.parent then
@@ -45,8 +78,9 @@ local function CreateOverlay(viewerFrame, cfg)
     frame:SetUserPlaced(false) -- keep the client's layout-cache out of our anchors
     frame:SetMovable(false)
     local endX, endY = frame:GetCenter()
-    local dx = endX - (self.dragStartX or endX)
-    local dy = endY - (self.dragStartY or endY)
+    local snapX, snapY = EditMode:SnapDelta(self.cfg, frame, endX, endY)
+    local dx = endX - (self.dragStartX or endX) + snapX
+    local dy = endY - (self.dragStartY or endY) + snapY
 
     local viewerCfg = self.cfg
     local anchor = ns.CopyTable(ns.DB:GetAnchor(viewerCfg))

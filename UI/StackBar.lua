@@ -27,8 +27,8 @@ function StackBar:Build(frame, cfg)
   cfg.stack = cfg.stack or { spellID = nil, maxStacks = 3, onlyMine = true }
   if not frame.countText then
     frame.countText = frame:CreateFontString(nil, "OVERLAY")
-    frame.countText:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
   end
+  frame.countText:SetFont(ns.GetFont(), ns.FontSize(cfg.fontSize or 11), "OUTLINE")
 end
 
 function StackBar:Update(frame, cfg)

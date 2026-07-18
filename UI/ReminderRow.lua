@@ -38,7 +38,7 @@ local function SetAlertDisplay(alert, data, cfg)
   local iconSize = cfg.iconSize or 24
   alert.icon:SetSize(iconSize - 6, iconSize - 6)
   alert.icon:SetTexture(data.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-  alert.text:SetFont(STANDARD_TEXT_FONT, cfg.fontSize or 12, "OUTLINE")
+  alert.text:SetFont(ns.GetFont(), ns.FontSize(cfg.fontSize or 12), "OUTLINE")
   alert.text:SetText(data.text or "")
   alert:SetSize(iconSize + alert.text:GetStringWidth() + 16, iconSize)
 end

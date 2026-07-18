@@ -78,7 +78,9 @@ local function SetButtonDisplay(btn, display, cfg, now)
   local size = cfg.iconSize or 32
   btn:SetSize(size, size)
   btn.glow:SetSize(size * 1.7, size * 1.7)
-  btn.timeText:SetFont(STANDARD_TEXT_FONT, cfg.fontSize or 12, "OUTLINE")
+  local font = ns.GetFont()
+  btn.timeText:SetFont(font, ns.FontSize(cfg.fontSize or 12), "OUTLINE")
+  btn.stacksText:SetFont(font, ns.FontSize(math.max((cfg.fontSize or 12) - 2, 8)), "OUTLINE")
 
   if display.icon then
     btn.icon:SetTexture(display.icon)

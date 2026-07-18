@@ -187,6 +187,44 @@ function W.CreateDropdown(parent, width, onSelect)
 end
 
 --------------------------------------------------------------------------------
+-- Color swatch (opens the standard color picker)
+--------------------------------------------------------------------------------
+function W.CreateColorSwatch(parent, onChange)
+  local btn = CreateFrame("Button", nil, parent)
+  btn:SetSize(20, 20)
+  ApplyBackdrop(btn, { 1, 1, 1, 1 })
+  btn.color = { 1, 1, 1 }
+
+  function btn:SetColor(color)
+    self.color = color or { 1, 1, 1 }
+    self:SetBackdropColor(self.color[1], self.color[2], self.color[3], 1)
+  end
+
+  btn:SetScript("OnClick", function(self)
+    local prev = { self.color[1], self.color[2], self.color[3] }
+    ColorPickerFrame.hasOpacity = false
+    ColorPickerFrame.previousValues = { r = prev[1], g = prev[2], b = prev[3] }
+    ColorPickerFrame.func = function()
+      local r, g, b = ColorPickerFrame:GetColorRGB()
+      self:SetColor({ r, g, b })
+      if onChange then onChange(self, { r, g, b }) end
+    end
+    ColorPickerFrame.cancelFunc = function(restore)
+      local color = restore and { restore.r, restore.g, restore.b } or prev
+      self:SetColor(color)
+      if onChange then onChange(self, color) end
+    end
+    ColorPickerFrame:SetColorRGB(prev[1], prev[2], prev[3])
+    ColorPickerFrame:Hide()
+    ColorPickerFrame:Show()
+    ColorPickerFrame:Raise()
+  end)
+
+  btn:SetColor(btn.color)
+  return btn
+end
+
+--------------------------------------------------------------------------------
 -- Section header + window shell
 --------------------------------------------------------------------------------
 function W.CreateSection(parent, title)

@@ -16,7 +16,7 @@ local function DefaultViewers()
       power = {
         bar1 = "auto", bar2 = "auto", -- "auto" | "none" | powerType number
         width = 340, height = 26, subHeight = 18, fontSize = 12,
-        showTicks = true, showCombo = true, showRunes = "auto",
+        showTicks = true, showCombo = true,
       },
       visibility = "always", elements = {},
     },
@@ -119,6 +119,7 @@ function DB:Init()
   db.global = db.global or {}
   db.global.layouts = db.global.layouts or { default = {} }
   db.global.equivGroups = db.global.equivGroups or {}
+  db.global.appearance = db.global.appearance or {} -- font/texture/fontScale
   db.chars = db.chars or {}
 
   local char = db.chars[CharKey()] or {}

@@ -68,8 +68,11 @@ local function SetBarDisplay(holder, display, element, cfg, now)
   local h = cfg.barHeight or 20
   holder:SetSize(w, h)
   holder.iconFrame:SetSize(h, h)
-  holder.nameText:SetFont(STANDARD_TEXT_FONT, cfg.fontSize or 11, "OUTLINE")
-  holder.timeText:SetFont(STANDARD_TEXT_FONT, cfg.fontSize or 11, "OUTLINE")
+  local font = ns.GetFont()
+  local fontSize = ns.FontSize(cfg.fontSize or 11)
+  holder.nameText:SetFont(font, fontSize, "OUTLINE")
+  holder.timeText:SetFont(font, fontSize, "OUTLINE")
+  holder.bar:SetStatusBarTexture(ns.GetTexture())
 
   holder.icon:SetTexture(display.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
   holder.icon:SetDesaturated(display.missing or display.desaturate)

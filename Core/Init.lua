@@ -88,6 +88,44 @@ function ns.FormatTime(seconds)
   return ""
 end
 
+--------------------------------------------------------------------------------
+-- Global appearance (font / bar texture / font scale, shared by every bar)
+--------------------------------------------------------------------------------
+ns.FontOptions = {
+  { text = "Friz Quadrata (default)", value = "Fonts\\FRIZQT__.TTF" },
+  { text = "Arial Narrow", value = "Fonts\\ARIALN.TTF" },
+  { text = "Morpheus", value = "Fonts\\MORPHEUS.ttf" },
+  { text = "Skurri", value = "Fonts\\SKURRI.ttf" },
+}
+ns.TextureOptions = {
+  { text = "Blizzard (default)", value = "Interface\\TargetingFrame\\UI-StatusBar" },
+  { text = "Smooth", value = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar" },
+  { text = "Minimal", value = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
+  { text = "Flat", value = "Interface\\Buttons\\WHITE8X8" },
+}
+ns.FontScaleOptions = {
+  { text = "80%", value = 0.8 }, { text = "90%", value = 0.9 },
+  { text = "100%", value = 1.0 }, { text = "110%", value = 1.1 },
+  { text = "125%", value = 1.25 }, { text = "150%", value = 1.5 },
+}
+
+local function Appearance()
+  local db = ns.DB and ns.DB.db
+  return db and db.global and db.global.appearance or {}
+end
+
+function ns.GetFont()
+  return Appearance().font or STANDARD_TEXT_FONT
+end
+
+function ns.GetTexture()
+  return Appearance().texture or "Interface\\TargetingFrame\\UI-StatusBar"
+end
+
+function ns.FontSize(base)
+  return math.max(math.floor((base or 12) * (Appearance().fontScale or 1) + 0.5), 6)
+end
+
 function ns.CopyTable(src)
   local dst = {}
   for k, v in pairs(src) do

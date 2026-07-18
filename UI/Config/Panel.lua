@@ -49,11 +49,6 @@ local POWER_TYPE_OPTIONS = {
   { text = "Runic Power", value = 6 },
   { text = "None", value = "none" },
 }
-local RUNE_OPTIONS = {
-  { text = "Auto", value = "auto" },
-  { text = "Show", value = true },
-  { text = "Hide", value = false },
-}
 local REMINDER_TYPE_OPTIONS = {
   { text = "Group buff", value = "group" },
   { text = "My aura (ID)", value = "aura" },
@@ -104,8 +99,17 @@ local function BuildWindow()
   win.sidebar:SetPoint("BOTTOMLEFT")
   win.sidebar:SetWidth(SIDEBAR_W)
   W.ApplyBackdrop(win.sidebar, { 0.063, 0.078, 0.11, 1 })
+  win.sidebar.genHeader = W.CreateSection(win.sidebar, "GENERAL")
+  win.sidebar.genHeader:SetPoint("TOPLEFT", PAD, -10)
+  win.generalBtn = W.CreateButton(win.sidebar, "Appearance", SIDEBAR_W - 2 * PAD, 21, function()
+    state.selected = "__general"
+    state.selectedElement = nil
+    Config:Render()
+  end)
+  win.generalBtn:SetPoint("TOPLEFT", PAD, -26)
+
   win.sidebar.header = W.CreateSection(win.sidebar, "BARS")
-  win.sidebar.header:SetPoint("TOPLEFT", PAD, -10)
+  win.sidebar.header:SetPoint("TOPLEFT", PAD, -56)
   win.sidebar.buttons = {}
 
   win.newBar = W.CreateButton(win.sidebar, "+ New bar...", SIDEBAR_W - 2 * PAD, 22, function()
@@ -305,12 +309,55 @@ function Config:BuildControls()
     SelectedViewer().power.showCombo = checked
     Touch()
   end)
-  c.runesLabel = W.CreateLabel(parent, "Runes", 12, W.colors.inkDim)
-  c.runes = W.CreateDropdown(parent, 90, function(_, value)
-    SelectedViewer().power.showRunes = value
+  c.powerName = W.CreateCheckbox(parent, "Show resource name", function(_, checked)
+    SelectedViewer().power.showLabel = checked
     Touch()
   end)
-  c.runes:SetOptions(RUNE_OPTIONS)
+  c.color1Label = W.CreateLabel(parent, "Color 1", 12, W.colors.inkDim)
+  c.color1 = W.CreateColorSwatch(parent, function(_, color)
+    SelectedViewer().power.color1 = color
+    Touch()
+  end)
+  c.color1Reset = W.CreateButton(parent, "Auto", 44, 20, function()
+    SelectedViewer().power.color1 = nil
+    Touch()
+    Config:Render()
+  end)
+  c.color2Label = W.CreateLabel(parent, "Color 2", 12, W.colors.inkDim)
+  c.color2 = W.CreateColorSwatch(parent, function(_, color)
+    SelectedViewer().power.color2 = color
+    Touch()
+  end)
+  c.color2Reset = W.CreateButton(parent, "Auto", 44, 20, function()
+    SelectedViewer().power.color2 = nil
+    Touch()
+    Config:Render()
+  end)
+
+  -- General (appearance) tab
+  local function AppearanceCfg()
+    return ns.DB.db.global.appearance
+  end
+  c.genHeader = W.CreateSection(parent, "APPEARANCE (all bars)")
+  c.genFontLabel = W.CreateLabel(parent, "Font", 12, W.colors.inkDim)
+  c.genFont = W.CreateDropdown(parent, 190, function(_, value)
+    AppearanceCfg().font = value
+    Touch()
+  end)
+  c.genFont:SetOptions(ns.FontOptions)
+  c.genTexLabel = W.CreateLabel(parent, "Bar texture", 12, W.colors.inkDim)
+  c.genTex = W.CreateDropdown(parent, 190, function(_, value)
+    AppearanceCfg().texture = value
+    Touch()
+  end)
+  c.genTex:SetOptions(ns.TextureOptions)
+  c.genScaleLabel = W.CreateLabel(parent, "Font size", 12, W.colors.inkDim)
+  c.genScale = W.CreateDropdown(parent, 100, function(_, value)
+    AppearanceCfg().fontScale = value
+    Touch()
+  end)
+  c.genScale:SetOptions(ns.FontScaleOptions)
+  c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
 
   -- Stack bar options
   c.stackHeader = W.CreateSection(parent, "TRACKED RESOURCE (aura stacks)")
@@ -445,7 +492,16 @@ local function HideAllControls()
 end
 
 local function RenderSidebar()
-  local y = -30
+  -- General entry highlight
+  if state.selected == "__general" then
+    win.generalBtn:SetBackdropColor(0.137, 0.173, 0.247, 1)
+    win.generalBtn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
+  else
+    win.generalBtn:SetBackdropColor(W.colors.panel2[1], W.colors.panel2[2], W.colors.panel2[3], 1)
+    win.generalBtn.text:SetTextColor(W.colors.ink[1], W.colors.ink[2], W.colors.ink[3])
+  end
+
+  local y = -76
   local buttons = win.sidebar.buttons
   local index = 0
   for _, cfg in ipairs(ns.profile.viewers) do
@@ -532,8 +588,12 @@ local function RenderElementList(c, viewer, y, isReminders)
       row.btn:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
       row.btn.text:ClearAllPoints()
       row.btn.text:SetPoint("LEFT", 6, 0)
+      -- Rows are pooled and reused across bars: always resolve the CURRENT
+      -- selected viewer here, never capture `viewer` from an old render.
       row.remove = W.CreateButton(row, "X", 20, 20, function(self)
-        table.remove(viewer.elements, self.elementIndex)
+        local current = SelectedViewer()
+        if not current then return end
+        table.remove(current.elements, self.elementIndex)
         state.selectedElement = nil
         Touch()
         Config:Render()
@@ -581,6 +641,37 @@ function Config:Render()
   RenderSidebar()
 
   win.profileLabel:SetText("Profile: " .. ns.DB:GetSpecName())
+
+  -- General (appearance) tab
+  if state.selected == "__general" then
+    local c2 = controls
+    local appearance = ns.DB.db.global.appearance
+    local y2 = -10
+    c2.title:SetPoint("TOPLEFT", 0, y2)
+    c2.title:SetText("General")
+    c2.title:Show()
+    y2 = y2 - 34
+    c2.genHeader:SetPoint("TOPLEFT", 0, y2); c2.genHeader:Show()
+    y2 = y2 - 24
+    c2.genFontLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genFontLabel:Show()
+    c2.genFont:SetPoint("TOPLEFT", 80, y2)
+    c2.genFont:SetValue(appearance.font or "Fonts\\FRIZQT__.TTF")
+    c2.genFont:Show()
+    y2 = y2 - 28
+    c2.genTexLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genTexLabel:Show()
+    c2.genTex:SetPoint("TOPLEFT", 80, y2)
+    c2.genTex:SetValue(appearance.texture or "Interface\\TargetingFrame\\UI-StatusBar")
+    c2.genTex:Show()
+    y2 = y2 - 28
+    c2.genScaleLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genScaleLabel:Show()
+    c2.genScale:SetPoint("TOPLEFT", 80, y2)
+    c2.genScale:SetValue(appearance.fontScale or 1.0)
+    c2.genScale:Show()
+    y2 = y2 - 34
+    c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
+    win.content:SetHeight(400)
+    return
+  end
 
   local viewer = SelectedViewer()
   if not viewer then
@@ -667,8 +758,21 @@ function Config:Render()
     y = y - 28
     c.ticks:SetPoint("TOPLEFT", 0, y); c.ticks:SetChecked(viewer.power.showTicks); c.ticks:Show()
     c.combo:SetPoint("TOPLEFT", 120, y); c.combo:SetChecked(viewer.power.showCombo); c.combo:Show()
-    c.runesLabel:SetPoint("TOPLEFT", 250, y - 2); c.runesLabel:Show()
-    c.runes:SetPoint("TOPLEFT", 292, y); c.runes:SetValue(viewer.power.showRunes == nil and "auto" or viewer.power.showRunes); c.runes:Show()
+    c.powerName:SetPoint("TOPLEFT", 250, y); c.powerName:SetChecked(viewer.power.showLabel ~= false); c.powerName:Show()
+    y = y - 28
+    local type1, type2 = ns.Power:GetTypes()
+    c.color1Label:SetPoint("TOPLEFT", 0, y - 4); c.color1Label:Show()
+    c.color1:SetPoint("TOPLEFT", 44, y)
+    c.color1:SetColor(viewer.power.color1 or ns.Power:GetBar(type1).color)
+    c.color1:Show()
+    c.color1Reset:SetPoint("TOPLEFT", 70, y); c.color1Reset:Show()
+    if type2 then
+      c.color2Label:SetPoint("TOPLEFT", 140, y - 4); c.color2Label:Show()
+      c.color2:SetPoint("TOPLEFT", 184, y)
+      c.color2:SetColor(viewer.power.color2 or ns.Power:GetBar(type2).color)
+      c.color2:Show()
+      c.color2Reset:SetPoint("TOPLEFT", 210, y); c.color2Reset:Show()
+    end
     y = y - 34
   elseif style == "stacks" then
     viewer.stack = viewer.stack or { maxStacks = 3, onlyMine = true }

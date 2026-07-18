@@ -56,30 +56,6 @@ function Power:GetBar(ptype)
   }
 end
 
-function Power:ShowRunes()
-  local cfg = ns.DB:GetViewer("Power")
-  local setting = cfg and cfg.power and cfg.power.showRunes or "auto"
-  if setting == true or setting == false then return setting end
-  local _, class = UnitClass("player")
-  if class == "DEATHKNIGHT" then return true end
-  local ok, runeType = pcall(GetRuneType, 1)
-  return ok and runeType ~= nil
-end
-
-function Power:GetRunes()
-  local runes = {}
-  for slot = 1, 6 do
-    local ok, start, duration, ready = pcall(GetRuneCooldown, slot)
-    if not ok then return nil end
-    local okType, runeType = pcall(GetRuneType, slot)
-    runes[slot] = {
-      start = start or 0, duration = duration or 0,
-      ready = ready ~= false, runeType = okType and runeType or 1,
-    }
-  end
-  return runes
-end
-
 function Power:GetComboPoints()
   return GetComboPoints("player", "target") or 0
 end
@@ -101,6 +77,4 @@ ns:On("READY", function()
   end
   ns:RegisterEvent("UNIT_COMBO_POINTS", function() ns:Fire("POWER_UPDATE") end)
   ns:RegisterEvent("PLAYER_TARGET_CHANGED", function() ns:Fire("POWER_UPDATE") end)
-  ns:RegisterEvent("RUNE_POWER_UPDATE", function() ns:Fire("RUNES_UPDATE") end)
-  ns:RegisterEvent("RUNE_TYPE_UPDATE", function() ns:Fire("RUNES_UPDATE") end)
 end)
