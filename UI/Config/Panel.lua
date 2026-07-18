@@ -117,8 +117,15 @@ local function BuildWindow()
   end)
   win.groupsBtn:SetPoint("TOPLEFT", PAD, -49)
 
+  win.profilesBtn = W.CreateButton(win.sidebar, "Profiles", SIDEBAR_W - 2 * PAD, 21, function()
+    state.selected = "__profiles"
+    state.selectedElement = nil
+    Config:Render()
+  end)
+  win.profilesBtn:SetPoint("TOPLEFT", PAD, -72)
+
   win.sidebar.header = W.CreateSection(win.sidebar, "BARS")
-  win.sidebar.header:SetPoint("TOPLEFT", PAD, -79)
+  win.sidebar.header:SetPoint("TOPLEFT", PAD, -102)
   win.sidebar.buttons = {}
 
   win.newBar = W.CreateButton(win.sidebar, "+ New bar...", SIDEBAR_W - 2 * PAD, 22, function()
@@ -620,6 +627,26 @@ function Config:BuildControls()
     Config:Render()
   end)
 
+  -- Profiles view
+  c.profHint = W.CreateLabel(parent,
+    "Saved profiles are shared by all your characters and used by REFERENCE:\nchanges made while one is active are saved into it. Assign one per spec\nbelow and it activates automatically when you switch specs.", 10, W.colors.inkDim)
+  c.profNewName = W.CreateEditBox(parent, 170, 20)
+  c.profSaveBtn = W.CreateButton(parent, "Save current as", 110, 20, function()
+    local name = c.profNewName:GetText()
+    local ok, err = ns.DB:SaveProfileAs(name)
+    if ok then
+      ns:Print("profile '" .. name .. "' saved.")
+      c.profNewName:SetText("")
+    else
+      ns:Print(err)
+    end
+    Config:Render()
+  end)
+  c.profListHeader = W.CreateSection(parent, "SAVED PROFILES")
+  c.profRows = {}
+  c.assignHeader = W.CreateSection(parent, "SPEC ASSIGNMENTS")
+  c.specRows = {}
+
   -- Profile sharing
   c.shareHeader = W.CreateSection(parent, "PROFILE SHARING")
   c.exportBtn = W.CreateButton(parent, "Export profile", 110, 22, function()
@@ -673,7 +700,7 @@ end
 
 local function RenderSidebar()
   -- General entry highlights
-  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups" }) do
+  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups", [win.profilesBtn] = "__profiles" }) do
     if state.selected == key then
       btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       btn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
@@ -683,7 +710,7 @@ local function RenderSidebar()
     end
   end
 
-  local y = -99
+  local y = -122
   local buttons = win.sidebar.buttons
   local index = 0
   for _, cfg in ipairs(ns.profile.viewers) do
@@ -889,6 +916,92 @@ function Config:Render()
     y2 = y2 - 28
     c2.shareHint:SetPoint("TOPLEFT", 0, y2); c2.shareHint:Show()
     win.content:SetHeight(520)
+    return
+  end
+
+  -- Profiles view
+  if state.selected == "__profiles" then
+    local c2 = controls
+    local y2 = -10
+    c2.title:SetPoint("TOPLEFT", 0, y2)
+    c2.title:SetText("Profiles")
+    c2.title:Show()
+    y2 = y2 - 26
+    c2.profHint:SetPoint("TOPLEFT", 0, y2); c2.profHint:Show()
+    y2 = y2 - 48
+    c2.profNewName:SetPoint("TOPLEFT", 0, y2); c2.profNewName:Show()
+    c2.profSaveBtn:SetPoint("TOPLEFT", 176, y2); c2.profSaveBtn:Show()
+    y2 = y2 - 32
+
+    -- Saved profiles
+    local names = ns.DB:GetNamedProfileNames()
+    c2.profListHeader:SetPoint("TOPLEFT", 0, y2); c2.profListHeader:Show()
+    y2 = y2 - 20
+    local currentAssignment = ns.DB.char.assignments[ns.DB:GetSpecKey()]
+    for i, name in ipairs(names) do
+      local row = c2.profRows[i]
+      if not row then
+        row = CreateFrame("Frame", nil, win.content)
+        row:SetHeight(22)
+        row.label = W.CreateLabel(row, "", 12)
+        row.label:SetPoint("LEFT", 4, 0)
+        row.remove = W.CreateButton(row, "X", 20, 20, function(self)
+          ns.DB:DeleteNamedProfile(self.profileName)
+          Config:Render()
+        end)
+        row.remove:SetPoint("RIGHT", -4, 0)
+        c2.profRows[i] = row
+      end
+      row.remove.profileName = name
+      local marker = currentAssignment == name and "  |cff58d3a5(active on this spec)|r" or ""
+      row.label:SetText(name .. marker)
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", 0, y2)
+      row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      row:Show()
+      y2 = y2 - 24
+    end
+    for i = #names + 1, #c2.profRows do c2.profRows[i]:Hide() end
+    if #names == 0 then y2 = y2 - 4 end
+
+    -- Spec assignments
+    y2 = y2 - 8
+    c2.assignHeader:SetPoint("TOPLEFT", 0, y2); c2.assignHeader:Show()
+    y2 = y2 - 20
+    local specs = ns.DB:GetSpecs()
+    local currentKey = ns.DB:GetSpecKey()
+    local options = { { text = "Per-spec (default)", value = "__none" } }
+    for _, name in ipairs(names) do
+      options[#options + 1] = { text = name, value = name }
+    end
+    for i, spec in ipairs(specs) do
+      local row = c2.specRows[i]
+      if not row then
+        row = CreateFrame("Frame", nil, win.content)
+        row:SetHeight(24)
+        row.label = W.CreateLabel(row, "", 12)
+        row.label:SetPoint("LEFT", 4, 0)
+        row.dd = W.CreateDropdown(row, 170, function(self, value)
+          ns.DB:AssignProfile(self.specKey, value ~= "__none" and value or nil)
+          Config:Render()
+        end)
+        row.dd:SetPoint("LEFT", 210, 0)
+        c2.specRows[i] = row
+      end
+      row.dd.specKey = spec.key
+      local marker = spec.key == currentKey and "  |cffd8a24a(current)|r" or ""
+      row.label:SetText(spec.name .. marker)
+      row.dd:SetOptions(options)
+      row.dd:SetValue(ns.DB.char.assignments[spec.key] or "__none")
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", 0, y2)
+      row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      row:Show()
+      y2 = y2 - 26
+    end
+    for i = #specs + 1, #c2.specRows do c2.specRows[i]:Hide() end
+
+    win.content:SetHeight(math.max(-y2 + 40, 400))
     return
   end
 

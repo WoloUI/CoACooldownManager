@@ -125,6 +125,16 @@ function Triggers:Evaluate(element, ctx)
       display.duration = state.duration
       display.expirationTime = state.start + state.duration
     end
+    -- Charge spells: show the count and the recharge sweep even while usable
+    if state.maxCharges and state.maxCharges > 0 then
+      display.stacks = state.charges or 0
+      display.forceStacks = true
+      if not state.onCooldown and (state.chargeDuration or 0) > 0 then
+        display.start = state.chargeStart
+        display.duration = state.chargeDuration
+        display.expirationTime = state.chargeStart + state.chargeDuration
+      end
+    end
     if not state.usable and not state.onCooldown then
       display.desaturate = true
     end

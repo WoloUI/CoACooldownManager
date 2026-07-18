@@ -95,6 +95,18 @@ local cdEl = { kind = "cooldown", spellID = 1, showWhen = "always",
 d = ns.Triggers:Evaluate(cdEl, Ctx({ cooldown = function() return readyState end }))
 check("desaturate under 50% power", d.desaturate)
 
+-- Charge spells: count always shown, recharge sweep while usable
+local chargeState = { start = 0, duration = 0, onCooldown = false, usable = true, known = true,
+  charges = 1, maxCharges = 2, chargeStart = NOW - 5, chargeDuration = 20 }
+local chargeEl = { kind = "cooldown", spellID = 9, showWhen = "always" }
+d = ns.Triggers:Evaluate(chargeEl, Ctx({ cooldown = function() return chargeState end }))
+check("charges shown as stacks", d.stacks == 1 and d.forceStacks)
+check("recharge sweep while usable", d.shown and not d.desaturate and d.expirationTime == NOW + 15)
+local emptyCharges = { start = NOW - 5, duration = 20, onCooldown = true, usable = true, known = true,
+  charges = 0, maxCharges = 2, chargeStart = NOW - 5, chargeDuration = 20 }
+d = ns.Triggers:Evaluate(chargeEl, Ctx({ cooldown = function() return emptyCharges end }))
+check("zero charges desaturated", d.desaturate and d.stacks == 0)
+
 -- Cross-spell conditions: glow spell X based on aura B
 local otherAura = { name = "Spender", icon = "i", count = 4, duration = 20, expirationTime = NOW + 15, mine = true }
 local function AuraB(unit, ref)

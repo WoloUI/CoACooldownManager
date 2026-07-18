@@ -147,6 +147,7 @@ function DB:Init()
   db.global.layouts = db.global.layouts or { default = {} }
   db.global.equivGroups = db.global.equivGroups or {}
   db.global.appearance = db.global.appearance or {} -- font/texture/fontScale
+  db.global.profiles = db.global.profiles or {}     -- named profiles (shared account-wide)
   db.chars = db.chars or {}
 
   local char = db.chars[CharKey()] or {}
@@ -154,6 +155,7 @@ function DB:Init()
   char.specs = char.specs or {}
   char.activeLayout = char.activeLayout or "default"
   char.lastSpec = char.lastSpec or nil
+  char.assignments = char.assignments or {} -- [specKey] = named profile
 
   self.db = db
   self.char = char
@@ -169,6 +171,19 @@ end
 
 function DB:ActivateProfile()
   local specKey = self:GetSpecKey()
+
+  -- A named profile assigned to this spec wins (used by REFERENCE: edits made
+  -- while it is active are saved into the named profile, shared everywhere)
+  local assigned = self.char.assignments[specKey]
+  local named = assigned and self.db.global.profiles[assigned]
+  if named then
+    named.scanner = named.scanner or { seen = {}, rejected = {} }
+    self.char.lastSpec = specKey
+    self.profile = named
+    ns.profile = named
+    return
+  end
+
   local profile = self.char.specs[specKey]
   if not profile then
     -- New spec: start from the previously active profile when there is one,
@@ -181,6 +196,67 @@ function DB:ActivateProfile()
   self.char.lastSpec = specKey
   self.profile = profile
   ns.profile = profile
+end
+
+--------------------------------------------------------------------------------
+-- Named profiles + spec assignments
+--------------------------------------------------------------------------------
+function DB:GetNamedProfileNames()
+  local names = {}
+  for name in pairs(self.db.global.profiles) do names[#names + 1] = name end
+  table.sort(names)
+  return names
+end
+
+-- Snapshots the ACTIVE setup under a name (overwrites an existing name).
+function DB:SaveProfileAs(name)
+  if not name or name == "" then return nil, "give the profile a name" end
+  self.db.global.profiles[name] = ns.CopyTable(self.profile)
+  return true
+end
+
+-- Binds a named profile to a spec (nil = back to the per-spec profile).
+function DB:AssignProfile(specKey, profileName)
+  self.char.assignments[specKey] = profileName
+  if specKey == self:GetSpecKey() then
+    local before = self.profile
+    self:ActivateProfile()
+    if self.profile ~= before then ns:Fire("PROFILE_CHANGED") end
+  end
+end
+
+function DB:DeleteNamedProfile(name)
+  self.db.global.profiles[name] = nil
+  local changed = false
+  for specKey, assigned in pairs(self.char.assignments) do
+    if assigned == name then
+      self.char.assignments[specKey] = nil
+      if specKey == self:GetSpecKey() then changed = true end
+    end
+  end
+  if changed then
+    self:ActivateProfile()
+    ns:Fire("PROFILE_CHANGED")
+  end
+end
+
+-- All specs of this character: { { key = "spec1", name = "..." }, ... }
+function DB:GetSpecs()
+  local specs = {}
+  if SpecializationUtil and SpecializationUtil.GetNumSpecializations then
+    local ok, count = pcall(SpecializationUtil.GetNumSpecializations)
+    if ok and count and count > 0 then
+      for i = 1, count do
+        local ok2, name = pcall(SpecializationUtil.GetSpecializationInfo, i)
+        specs[#specs + 1] = { key = "spec" .. i, name = ok2 and name and tostring(name) or ("Spec " .. i) }
+      end
+      return specs
+    end
+  end
+  return {
+    { key = "talents1", name = "Primary talents" },
+    { key = "talents2", name = "Secondary talents" },
+  }
 end
 
 function DB:OnSpecChanged()
@@ -409,6 +485,9 @@ function DB:ImportProfile(text)
   end
 
   data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {} }
+  -- Import lands as this spec's own profile; a named-profile assignment
+  -- would shadow it, so drop it for predictability
+  self.char.assignments[self:GetSpecKey()] = nil
   self.char.specs[self:GetSpecKey()] = data.profile
   self.profile = data.profile
   ns.profile = data.profile

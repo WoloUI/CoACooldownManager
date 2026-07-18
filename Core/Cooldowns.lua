@@ -9,6 +9,24 @@ ns.Cooldowns = Cooldowns
 local GCD_MAX = 1.5
 local tracked = {} -- [spellRef] = state (ref: spellID number or name string)
 
+-- Charges API (backported on the Ascension client; absent on plain 3.3.5)
+local function ChargesFor(ref)
+  if not GetSpellCharges then return nil end
+  local id = ref
+  if type(ref) == "string" then
+    if C_Spell and C_Spell.GetSpellID then
+      local ok, spellID = pcall(C_Spell.GetSpellID, C_Spell, ref)
+      id = ok and spellID or nil
+    else
+      id = nil
+    end
+  end
+  if not id then return nil end
+  local ok, charges, maxCharges, chargeStart, chargeDuration = pcall(GetSpellCharges, id)
+  if not ok then return nil end
+  return charges, maxCharges, chargeStart, chargeDuration
+end
+
 local function Refresh(ref)
   local state = tracked[ref]
   if not state then return end
@@ -18,6 +36,27 @@ local function Refresh(ref)
   state.start = onCooldown and start or 0
   state.duration = onCooldown and duration or 0
   state.onCooldown = onCooldown
+
+  -- Charge spells (e.g. Veinwalk 2 charges): usable while any charge is
+  -- left; the sweep shows the recharge, desaturation only at zero charges
+  local charges, maxCharges, chargeStart, chargeDuration = ChargesFor(ref)
+  if charges and maxCharges and maxCharges > 0 then
+    state.charges, state.maxCharges = charges, maxCharges
+    if charges >= maxCharges then
+      state.chargeStart, state.chargeDuration = 0, 0
+      state.onCooldown = false
+      state.start, state.duration = 0, 0
+    else
+      state.chargeStart = chargeStart or 0
+      state.chargeDuration = chargeDuration or 0
+      state.onCooldown = charges == 0
+      state.start, state.duration = state.chargeStart, state.chargeDuration
+    end
+  else
+    state.charges, state.maxCharges = nil, nil
+    state.chargeStart, state.chargeDuration = nil, nil
+  end
+
   local usableRef = type(ref) == "string" and ref or (GetSpellInfo(ref) or ref)
   local usable, noPower = IsUsableSpell(usableRef)
   state.usable = usable and true or false
@@ -69,7 +108,8 @@ ns:On("READY", function()
   ns:RegisterEvent("SPELL_UPDATE_COOLDOWN", RefreshAll)
   ns:RegisterEvent("SPELL_UPDATE_USABLE", RefreshAll)
   ns:RegisterEvent("ASCENSION_KNOWN_ENTRIES_UPDATED", RefreshAll)
-  -- Catch natural expirations between events
+  -- Catch natural expirations between events (recharges refresh fully so
+  -- the charge count updates even without an event)
   local elapsedAcc = 0
   ns:OnTick(function(dt)
     elapsedAcc = elapsedAcc + dt
@@ -77,10 +117,11 @@ ns:On("READY", function()
     elapsedAcc = 0
     local now = GetTime()
     local changed = false
-    for _, state in pairs(tracked) do
-      if state.onCooldown and state.start + state.duration <= now then
-        state.onCooldown = false
-        state.start, state.duration = 0, 0
+    for ref, state in pairs(tracked) do
+      local expired = state.start and state.duration and state.duration > 0
+        and state.start + state.duration <= now
+      if expired then
+        Refresh(ref)
         changed = true
       end
     end

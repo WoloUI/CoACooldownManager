@@ -102,7 +102,9 @@ local function SetButtonDisplay(btn, display, cfg, now)
   end
 
   local showStacks = cfg.showStacks ~= false
-  btn.stacksText:SetText(showStacks and display.stacks and display.stacks > 1 and display.stacks or "")
+  -- Charge spells always show their count (even 0/1); auras only from 2+
+  local showValue = display.stacks and (display.stacks > 1 or display.forceStacks)
+  btn.stacksText:SetText(showStacks and showValue and display.stacks or "")
 
   -- Keybind of the spell, read from the action bars
   local key
