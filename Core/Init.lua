@@ -69,6 +69,61 @@ eventFrame:SetScript("OnUpdate", function(_, elapsed)
 end)
 
 --------------------------------------------------------------------------------
+-- Smooth bar engine: per-frame value animation on top of the 0.1s logic tick.
+--  drain - exact time-based fill for duration bars (buffs/DoTs)
+--  lerp  - eased approach to a target for power values (ElvUI-style smooth)
+--------------------------------------------------------------------------------
+local smoothFrame = CreateFrame("Frame")
+local lerpBars, drainBars = {}, {}
+local LERP_SPEED = 12
+
+smoothFrame:SetScript("OnUpdate", function(_, dt)
+  for bar, target in pairs(lerpBars) do
+    if not bar:IsVisible() then
+      bar:SetValue(target)
+      lerpBars[bar] = nil
+    else
+      local cur = bar:GetValue()
+      local diff = target - cur
+      local _, max = bar:GetMinMaxValues()
+      if math.abs(diff) < (max or 100) * 0.002 then
+        bar:SetValue(target)
+        lerpBars[bar] = nil
+      else
+        bar:SetValue(cur + diff * math.min(dt * LERP_SPEED, 1))
+      end
+    end
+  end
+  local now = GetTime()
+  for bar, expiration in pairs(drainBars) do
+    if not bar:IsVisible() then
+      drainBars[bar] = nil
+    else
+      bar:SetValue(math.max(expiration - now, 0))
+    end
+  end
+end)
+
+-- Eases the bar toward `value` over the next frames.
+function ns.SetBarValueSmooth(bar, value)
+  drainBars[bar] = nil
+  lerpBars[bar] = value
+end
+
+-- Drains the bar continuously until `expirationTime` (exact every frame).
+function ns.SetBarDrain(bar, expirationTime)
+  lerpBars[bar] = nil
+  drainBars[bar] = expirationTime
+end
+
+-- Static value, no animation.
+function ns.SetBarStatic(bar, value)
+  lerpBars[bar] = nil
+  drainBars[bar] = nil
+  bar:SetValue(value)
+end
+
+--------------------------------------------------------------------------------
 -- Utilities
 --------------------------------------------------------------------------------
 function ns:Print(msg)

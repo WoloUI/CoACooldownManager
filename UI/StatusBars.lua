@@ -82,7 +82,7 @@ local function SetBarDisplay(holder, display, element, cfg, now)
   if display.missing then
     holder.bar:SetStatusBarColor(COLOR_MISSING[1], COLOR_MISSING[2], COLOR_MISSING[3])
     holder.bar:SetMinMaxValues(0, 1)
-    holder.bar:SetValue(0)
+    ns.SetBarStatic(holder.bar, 0)
     holder.nameText:SetTextColor(0.65, 0.65, 0.65)
     holder.timeText:SetText("--")
   else
@@ -91,11 +91,11 @@ local function SetBarDisplay(holder, display, element, cfg, now)
     if display.duration > 0 then
       local remaining = math.max(0, display.expirationTime - now)
       holder.bar:SetMinMaxValues(0, display.duration)
-      holder.bar:SetValue(remaining)
+      ns.SetBarDrain(holder.bar, display.expirationTime) -- per-frame smooth fill
       holder.timeText:SetText(ns.FormatTime(remaining))
     else -- permanent aura
       holder.bar:SetMinMaxValues(0, 1)
-      holder.bar:SetValue(1)
+      ns.SetBarStatic(holder.bar, 1)
       holder.timeText:SetText("")
     end
   end

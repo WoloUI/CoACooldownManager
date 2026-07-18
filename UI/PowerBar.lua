@@ -103,7 +103,7 @@ end
 local function UpdateResourceBar(holder, data, showTicks, colorOverride, showLabel)
   local color = colorOverride or data.color
   holder.bar:SetMinMaxValues(0, data.max)
-  holder.bar:SetValue(data.cur)
+  ns.SetBarValueSmooth(holder.bar, data.cur) -- eased, ElvUI-style
   holder.bar:SetStatusBarColor(color[1], color[2], color[3])
   local text = data.cur .. " / " .. data.max
   if showLabel then
