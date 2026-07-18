@@ -67,7 +67,7 @@ end
 
 local function CurrentStacks(stack, maxStacks)
   if ns.TestMode and ns.TestMode.active then
-    return math.min(2, maxStacks)
+    return math.min(2, math.max(maxStacks, 1))
   end
   if not stack.spellID then return 0 end
   local aura = ns.Auras:GetAura(stack.unit or "player", stack.spellID, stack.onlyMine ~= false)
@@ -130,11 +130,22 @@ local function UpdateBar(frame, cfg, stack, maxStacks, current, color)
   end
 end
 
+local MAX_SEGMENTS = 20
+
 function StackBar:Update(frame, cfg)
   local stack = cfg.stack or {}
-  local maxStacks = math.max(stack.maxStacks or 3, 1)
   local color = stack.color or DEFAULT_COLOR
-  local current = math.min(CurrentStacks(stack, maxStacks), maxStacks)
+
+  local maxStacks
+  local rawCurrent = CurrentStacks(stack, stack.maxStacks or 3)
+  if (stack.maxStacks or 0) <= 0 then
+    -- Auto max: learn the highest value ever seen (e.g. Insanity 1-100)
+    stack.observedMax = math.max(stack.observedMax or 1, rawCurrent)
+    maxStacks = stack.observedMax
+  else
+    maxStacks = math.max(stack.maxStacks, 1)
+  end
+  local current = math.min(rawCurrent, maxStacks)
 
   if stack.display == "bar" then
     frame.countText:Hide()
@@ -142,6 +153,9 @@ function StackBar:Update(frame, cfg)
     return
   end
 
+  -- Segments stay sane for large resources (use Bar display for those)
+  maxStacks = math.min(maxStacks, MAX_SEGMENTS)
+  current = math.min(current, maxStacks)
   UpdateSegments(frame, cfg, stack, maxStacks, current, color)
   if stack.showCount then
     frame.countText:Show()

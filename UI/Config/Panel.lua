@@ -431,10 +431,18 @@ function Config:BuildControls()
     Touch()
   end)
   c.stackMaxLabel = W.CreateLabel(parent, "Max stacks", 12, W.colors.inkDim)
-  c.stackMax = W.CreateEditBox(parent, 40, 20, function(_, text)
-    SelectedViewer().stack.maxStacks = math.max(tonumber(text) or 3, 1)
+  c.stackMax = W.CreateEditBox(parent, 40, 20, function(self, text)
+    local stack = SelectedViewer().stack
+    if text:lower() == "auto" or tonumber(text) == 0 then
+      stack.maxStacks = 0 -- auto: learn the aura's real maximum
+      stack.observedMax = nil
+      self:SetText("auto")
+    else
+      stack.maxStacks = math.max(tonumber(text) or 3, 1)
+    end
     Touch()
   end)
+  c.stackMaxHint = W.CreateLabel(parent, "Type 'auto' to size the bar from the aura's real value (e.g. Insanity 1-100).", 10, W.colors.inkDim)
   c.stackColorLabel = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
   c.stackColor = W.CreateDropdown(parent, 90, function(_, value)
     SelectedViewer().stack.color = STACK_COLOR_RGB[value]
@@ -1086,8 +1094,12 @@ function Config:Render()
     c.stackId:SetText(viewer.stack.spellID and tostring(viewer.stack.spellID) or "")
     c.stackId:Show()
     c.stackMaxLabel:SetPoint("TOPLEFT", LW, y - 4); c.stackMaxLabel:Show()
-    c.stackMax:SetPoint("TOPLEFT", CW, y); c.stackMax:SetText(tostring(viewer.stack.maxStacks or 3)); c.stackMax:Show()
-    y = y - 26
+    c.stackMax:SetPoint("TOPLEFT", CW, y)
+    c.stackMax:SetText((viewer.stack.maxStacks or 3) <= 0 and "auto" or tostring(viewer.stack.maxStacks or 3))
+    c.stackMax:Show()
+    y = y - 22
+    c.stackMaxHint:SetPoint("TOPLEFT", L1, y); c.stackMaxHint:Show()
+    y = y - 22
     -- Row: Display [dd]       On unit [dd]
     c.stackDisplayLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackDisplayLabel:Show()
     c.stackDisplay:SetPoint("TOPLEFT", C1, y)
