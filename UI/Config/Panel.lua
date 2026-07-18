@@ -277,6 +277,15 @@ function Config:BuildControls()
   c.fontLabel = W.CreateLabel(parent, "Font", 12, W.colors.inkDim)
   c.fontSize = NumBox("fontSize", 11)
 
+  c.showKeybind = W.CreateCheckbox(parent, "Keybinds", function(_, checked)
+    SelectedViewer().showKeybind = checked
+    Touch()
+  end)
+  c.showStacks = W.CreateCheckbox(parent, "Stacks", function(_, checked)
+    SelectedViewer().showStacks = checked
+    Touch()
+  end)
+
   c.visLabel = W.CreateLabel(parent, "Show bar", 12, W.colors.inkDim)
   c.visibility = W.CreateDropdown(parent, 110, function(_, value)
     SelectedViewer().visibility = value
@@ -868,7 +877,18 @@ function Config:Render()
     c.spacing:SetPoint("TOPLEFT", 170, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
     c.fontLabel:SetPoint("TOPLEFT", 226, y - 4); c.fontLabel:Show()
     c.fontSize:SetPoint("TOPLEFT", 258, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
-    y = y - 34
+    y = y - 26
+    if style == "icons" then
+      c.showKeybind:SetPoint("TOPLEFT", 0, y)
+      c.showKeybind:SetChecked(viewer.showKeybind ~= false)
+      c.showKeybind:Show()
+      c.showStacks:SetPoint("TOPLEFT", 100, y)
+    else
+      c.showStacks:SetPoint("TOPLEFT", 0, y)
+    end
+    c.showStacks:SetChecked(viewer.showStacks ~= false)
+    c.showStacks:Show()
+    y = y - 30
   else
     c.sizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.sizeLabel:Show()
     c.iconSize:SetPoint("TOPLEFT", 32, y); c.iconSize:SetText(tostring(viewer.iconSize or 24)); c.iconSize:Show()

@@ -100,7 +100,7 @@ local function SetBarDisplay(holder, display, element, cfg, now)
     end
   end
 
-  if display.stacks and display.stacks > 1 then
+  if cfg.showStacks ~= false and display.stacks and display.stacks > 1 then
     holder.nameText:SetText((display.name or "") .. " (" .. display.stacks .. ")")
   end
 end

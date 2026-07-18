@@ -38,6 +38,11 @@ local function CreateButton(parent)
   btn.stacksText:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
   btn.stacksText:SetTextColor(1, 1, 1)
 
+  btn.keyText = textOverlay:CreateFontString(nil, "OVERLAY")
+  btn.keyText:SetPoint("TOPLEFT", 1, -1)
+  btn.keyText:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+  btn.keyText:SetTextColor(0.85, 0.85, 0.85)
+
   btn._cdStart, btn._cdDuration = 0, 0
   return btn
 end
@@ -96,9 +101,24 @@ local function SetButtonDisplay(btn, display, cfg, now)
     btn.timeText:SetText("")
   end
 
-  btn.stacksText:SetText(display.stacks and display.stacks > 1 and display.stacks or "")
+  local showStacks = cfg.showStacks ~= false
+  btn.stacksText:SetText(showStacks and display.stacks and display.stacks > 1 and display.stacks or "")
 
-  ns.Glow:Set(btn, display.glow, size)
+  -- Keybind of the spell, read from the action bars
+  local key
+  if cfg.showKeybind ~= false and display.spellID and ns.Keybinds then
+    key = ns.Keybinds:GetKey(display.spellID)
+  end
+  if key then
+    btn.keyText:SetFont(font, ns.FontSize(math.max((cfg.fontSize or 12) - 3, 7)), "OUTLINE")
+    btn.keyText:SetText(key)
+  else
+    btn.keyText:SetText("")
+  end
+
+  if ns.Glow then -- nil until the client restarts after adding the file
+    ns.Glow:Set(btn, display.glow, size)
+  end
 end
 
 local function LayoutRow(frame, cfg, count)

@@ -12,6 +12,7 @@ Data\EquivGroups.lua
 Data\SpellHints.lua
 Core\Power.lua
 Core\Cooldowns.lua
+Core\Keybinds.lua
 Core\Auras.lua
 Core\Triggers.lua
 Core\Reminders.lua

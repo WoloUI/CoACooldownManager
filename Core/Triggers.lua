@@ -103,7 +103,7 @@ function Triggers:Evaluate(element, ctx)
   local display = {
     shown = false, desaturate = false, glow = false, missing = false,
     stacks = 0, start = 0, duration = 0, expirationTime = 0,
-    icon = element.icon, name = element.name,
+    icon = element.icon, name = element.name, spellID = element.spellID,
   }
 
   if element.kind == "cooldown" then
