@@ -421,15 +421,19 @@ function Config:BuildControls()
 
   -- Stack bar options
   c.stackHeader = W.CreateSection(parent, "TRACKED RESOURCE (aura stacks)")
-  c.stackIdLabel = W.CreateLabel(parent, "Aura spell ID", 12, W.colors.inkDim)
+  c.stackIdLabel = W.CreateLabel(parent, "Aura (name/ID)", 12, W.colors.inkDim)
   c.stackId = W.CreateEditBox(parent, 80, 20, function(_, text)
     local viewer = SelectedViewer()
     local id, name = ns.ResolveSpell(text)
-    if id then
-      viewer.stack.spellID = id
+    if id or name then
+      -- Name is kept when resolvable: it survives spell-ID changes
+      viewer.stack.spellID = name or id
       ns:Print("stack bar now tracks " .. (name or id) .. ".")
-    else
-      ns:Print("unknown spell: " .. tostring(text))
+    elseif text ~= "" then
+      -- Unknown to the client right now: store the raw name and match
+      -- against the aura's name at runtime
+      viewer.stack.spellID = text
+      ns:Print("stack bar will match auras named '" .. text .. "'.")
     end
     Touch()
   end)
@@ -508,8 +512,11 @@ function Config:BuildControls()
     if not input or input == "" then return end
     local id, name, icon = ns.ResolveSpell(input)
     if not id and not name then
-      ns:Print("spell not found: " .. input .. " (try the numeric spell ID)")
-      return
+      if c.addKind.value == "cooldown" then
+        ns:Print("spell not found: " .. input .. " (cooldowns need a spell you know; try the ID)")
+        return
+      end
+      name = input -- aura unknown to the client now: match by name at runtime
     end
     local kind = c.addKind.value
     local isDots = viewer.name == "Target DoTs"
@@ -553,12 +560,10 @@ function Config:BuildControls()
       if not c.remGroup.value then return end
       reminder = { rtype = "group", group = c.remGroup.value, scope = c.remScope.value }
     elseif rtype == "aura" then
-      local id, name = ns.ResolveSpell(c.remAura:GetText())
-      if not id then
-        ns:Print("unknown spell: " .. tostring(c.remAura:GetText()))
-        return
-      end
-      reminder = { rtype = "aura", spellID = id, name = name, scope = "self" }
+      local input = c.remAura:GetText()
+      if not input or input == "" then return end
+      local id, name = ns.ResolveSpell(input)
+      reminder = { rtype = "aura", spellID = id or name or input, name = name or input, scope = "self" }
       c.remAura:SetText("")
     elseif rtype == "range" then
       -- Reference spell defines the range being checked (e.g. a melee strike)
@@ -605,12 +610,12 @@ function Config:BuildControls()
   c.grpAddSpell = W.CreateButton(parent, "Add", 50, 20, function()
     local group = state.selectedGroup and UserGroups()[state.selectedGroup]
     if not group then return end
-    local id, name = ns.ResolveSpell(c.grpSpellInput:GetText())
-    if not id then
-      ns:Print("unknown spell: " .. tostring(c.grpSpellInput:GetText()) .. " (try the numeric spell ID)")
-      return
-    end
-    table.insert(group.spells, { id = id }) -- rank auto-detected at runtime
+    local input = c.grpSpellInput:GetText()
+    if not input or input == "" then return end
+    local id, name = ns.ResolveSpell(input)
+    -- Store by ID when resolvable, otherwise by NAME (matches the aura's
+    -- name at runtime and survives spell-ID changes)
+    table.insert(group.spells, { id = id or name or input })
     c.grpSpellInput:SetText("")
     Config:Render()
   end)
@@ -955,11 +960,13 @@ function Config:Render()
         end
         row.remove.spellIndex = i
         local name, rankStr, icon = GetSpellInfo(entry.id)
+        if not name and type(entry.id) == "string" then name = entry.id end
         row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         local rankText = entry.rank and ("rank " .. entry.rank)
           or (rankStr and rankStr ~= "" and rankStr:lower())
           or "rank auto"
-        row.label:SetText((name or "?") .. "  |cff9aa3b5#" .. entry.id .. "  " .. rankText .. "|r")
+        local idText = type(entry.id) == "number" and ("#" .. entry.id) or "by name"
+        row.label:SetText((name or "?") .. "  |cff9aa3b5" .. idText .. "  " .. rankText .. "|r")
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 16, y2)
         row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)

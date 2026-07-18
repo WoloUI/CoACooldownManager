@@ -99,15 +99,13 @@ local function CreateConditionRow(parent)
   row.ctype:SetOptions(CONDITION_TYPES)
 
   row.spell = W.CreateEditBox(row, 76, 20, function(self, text)
+    if not text or text == "" then return end
     local id, name = ns.ResolveSpell(text)
-    if id or name then
-      row.cond.spellID = id or name
-      row.cond.spellName = name
-      self:SetText(name or tostring(id))
-    else
-      ns:Print("unknown spell: " .. tostring(text) .. " (try the numeric spell ID)")
-      self:SetText(row.cond.spellName or "")
-    end
+    -- Prefer the name (survives spell-ID changes); raw text matches auras
+    -- by name at runtime even if the client can't resolve it yet
+    row.cond.spellID = name or id or text
+    row.cond.spellName = name or (not id and text or nil)
+    self:SetText(name or (id and tostring(id)) or text)
     Rebuild()
   end)
 

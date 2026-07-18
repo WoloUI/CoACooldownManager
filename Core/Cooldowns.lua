@@ -1,37 +1,41 @@
--- Spell cooldown tracking. GetSpellCooldown(id) works by spell ID on the
--- Ascension client (same pattern WeakAuras uses here).
+-- Spell cooldown tracking. Accepts a spell ID or a spell NAME as the
+-- reference: names survive Ascension ID changes and always resolve to the
+-- player's currently learned version. GetSpellCooldown works with both on
+-- this client (same pattern WeakAuras uses here).
 local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local Cooldowns = {}
 ns.Cooldowns = Cooldowns
 
 local GCD_MAX = 1.5
-local tracked = {} -- [spellID] = state
+local tracked = {} -- [spellRef] = state (ref: spellID number or name string)
 
-local function Refresh(spellID)
-  local state = tracked[spellID]
+local function Refresh(ref)
+  local state = tracked[ref]
   if not state then return end
-  local start, duration, enabled = GetSpellCooldown(spellID)
+  local start, duration, enabled = GetSpellCooldown(ref)
   start, duration = start or 0, duration or 0
   local onCooldown = enabled ~= 0 and start > 0 and duration > GCD_MAX
   state.start = onCooldown and start or 0
   state.duration = onCooldown and duration or 0
   state.onCooldown = onCooldown
-  local usable, noPower = IsUsableSpell(GetSpellInfo(spellID) or spellID)
+  local usableRef = type(ref) == "string" and ref or (GetSpellInfo(ref) or ref)
+  local usable, noPower = IsUsableSpell(usableRef)
   state.usable = usable and true or false
   state.noPower = noPower and true or false
-  state.known = ns.IsSpellKnownByPlayer(spellID)
+  state.known = ns.IsSpellKnownByPlayer(ref)
 end
 
-function Cooldowns:Track(spellID)
-  if not tracked[spellID] then
-    tracked[spellID] = {}
-    Refresh(spellID)
+function Cooldowns:Track(ref)
+  if ref == nil then return nil end
+  if not tracked[ref] then
+    tracked[ref] = {}
+    Refresh(ref)
   end
-  return tracked[spellID]
+  return tracked[ref]
 end
 
-function Cooldowns:Untrack(spellID)
-  tracked[spellID] = nil
+function Cooldowns:Untrack(ref)
+  tracked[ref] = nil
 end
 
 function Cooldowns:UntrackAll()
@@ -39,12 +43,12 @@ function Cooldowns:UntrackAll()
 end
 
 -- state = { start, duration, onCooldown, usable, noPower, known }
-function Cooldowns:GetState(spellID)
-  return tracked[spellID]
+function Cooldowns:GetState(ref)
+  return tracked[ref]
 end
 
-function Cooldowns:Remaining(spellID)
-  local state = tracked[spellID]
+function Cooldowns:Remaining(ref)
+  local state = tracked[ref]
   if not state or not state.onCooldown then return 0 end
   return math.max(0, state.start + state.duration - GetTime())
 end

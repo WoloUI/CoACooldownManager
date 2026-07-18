@@ -107,7 +107,9 @@ function Triggers:Evaluate(element, ctx)
   }
 
   if element.kind == "cooldown" then
-    local state = ctx.cooldown(element.spellID)
+    -- Prefer the NAME: it survives Ascension spell-ID changes and always
+    -- points at the player's learned version; the stored ID is the fallback.
+    local state = ctx.cooldown(element.name or element.spellID)
     if not state or not state.known then return display end
     local showWhen = element.showWhen or "always"
     if showWhen == "always" then

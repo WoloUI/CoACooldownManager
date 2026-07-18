@@ -295,6 +295,10 @@ function ns.ResolveSpell(input)
 end
 
 function ns.IsSpellKnownByPlayer(spellID)
+  if type(spellID) == "string" then
+    -- By-name lookup resolves only for learned spells
+    return GetSpellInfo(spellID) ~= nil
+  end
   if C_CharacterAdvancement and C_CharacterAdvancement.IsKnownSpellID then
     local ok, known = pcall(C_CharacterAdvancement.IsKnownSpellID, spellID)
     if ok and known then return true end
