@@ -95,4 +95,46 @@ local cdEl = { kind = "cooldown", spellID = 1, showWhen = "always",
 d = ns.Triggers:Evaluate(cdEl, Ctx({ cooldown = function() return readyState end }))
 check("desaturate under 50% power", d.desaturate)
 
+-- Cross-spell conditions: glow spell X based on aura B
+local otherAura = { name = "Spender", icon = "i", count = 4, duration = 20, expirationTime = NOW + 15, mine = true }
+local function AuraB(unit, ref)
+  if ref == 555 then return otherAura end
+  return nil
+end
+
+-- other aura active
+local xEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "otheraura", spellID = 555, unit = "player", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = function() return readyState end, aura = AuraB }))
+check("glow when other aura active", d.glow)
+xEl.conditions[1].spellID = 777 -- not present
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = function() return readyState end, aura = AuraB }))
+check("no glow when other aura absent", not d.glow)
+xEl.conditions[1].value = false -- missing mode
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = function() return readyState end, aura = AuraB }))
+check("glow when other aura missing (inverted)", d.glow)
+
+-- other aura stacks >= 4
+xEl.conditions = { { ctype = "otherstacks", spellID = 555, op = ">=", value = 4, action = "glow" } }
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = function() return readyState end, aura = AuraB }))
+check("glow at 4 stacks of other aura", d.glow)
+xEl.conditions[1].value = 5
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = function() return readyState end, aura = AuraB }))
+check("no glow below 5 stacks of other aura", not d.glow)
+
+-- other aura time left
+xEl.conditions = { { ctype = "otherremaining", spellID = 555, op = "<", value = 20, action = "glow" } }
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = function() return readyState end, aura = AuraB }))
+check("glow when other aura under 20s", d.glow)
+
+-- other spell ready / on cooldown
+local states = { [1] = readyState, [42] = cdState }
+local function CdLookup(id) return states[id] end
+xEl.conditions = { { ctype = "othercd", spellID = 42, value = false, action = "glow" } }
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = CdLookup }))
+check("glow while other spell on cooldown", d.glow)
+xEl.conditions[1].value = true
+d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = CdLookup }))
+check("no glow while other spell not ready", not d.glow)
+
 return T

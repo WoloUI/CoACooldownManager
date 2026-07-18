@@ -1,9 +1,12 @@
 -- Dropdown-chained trigger editor for a single element. No user code, ever.
+-- Layout uses an explicit y-cursor so the section never overlaps what follows.
 local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local TriggerBuilder = {}
 ns.TriggerBuilder = TriggerBuilder
 
 local W
+local PAD = 8       -- inner padding of the boxed section
+local ROW_H = 26
 
 local KIND_OPTIONS = {
   { text = "Spell cooldown", value = "cooldown" },
@@ -34,6 +37,10 @@ local CONDITION_TYPES = {
   { text = "Target HP (%)", value = "targethp" },
   { text = "In combat", value = "combat" },
   { text = "Has target", value = "hastarget" },
+  { text = "Other aura active", value = "otheraura" },
+  { text = "Other aura stacks", value = "otherstacks" },
+  { text = "Other aura time left", value = "otherremaining" },
+  { text = "Other spell ready", value = "othercd" },
 }
 local OP_OPTIONS = {
   { text = "<", value = "<" }, { text = ">", value = ">" },
@@ -47,7 +54,17 @@ local ACTION_OPTIONS = {
   { text = "Show only if", value = "show" },
 }
 
-local NUMERIC_CONDITIONS = { remaining = true, stacks = true, power = true, powerpct = true, targethp = true }
+-- Which extra widgets each condition type needs
+local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true,
+  targethp = true, otherstacks = true, otherremaining = true }
+local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true }
+local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true }
+local BOOL_OPTIONS = {
+  otheraura = { { text = "Active", value = true }, { text = "Missing", value = false } },
+  othercd = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
+  combat = { { text = "In combat", value = true }, { text = "Out of combat", value = false } },
+  hastarget = { { text = "Has target", value = true }, { text = "No target", value = false } },
+}
 
 --------------------------------------------------------------------------------
 -- Builder frame (one instance embedded in the panel)
@@ -57,66 +74,137 @@ local builder
 local function Rebuild()
   if builder and builder.element then
     TriggerBuilder:Load(builder.element, builder.onChange)
+    if builder.onChange then builder.onChange() end
   end
 end
 
-local function CreateConditionRow(parent, index)
+local function CreateConditionRow(parent)
   local row = CreateFrame("Frame", nil, parent)
-  row:SetHeight(24)
+  row:SetHeight(ROW_H)
 
-  row.ctype = W.CreateDropdown(row, 120, function(_, value)
+  row.ctype = W.CreateDropdown(row, 118, function(_, value)
     row.cond.ctype = value
-    if not NUMERIC_CONDITIONS[value] then
-      row.cond.op, row.cond.value = nil, true
-    else
+    if NUMERIC[value] then
       row.cond.op = row.cond.op or "<"
       row.cond.value = tonumber(row.cond.value) or 3
+    else
+      row.cond.op = nil
+      row.cond.value = true
+    end
+    if not NEEDS_SPELL[value] then
+      row.cond.spellID, row.cond.spellName = nil, nil
     end
     Rebuild()
   end)
-  row.ctype:SetPoint("LEFT", 0, 0)
   row.ctype:SetOptions(CONDITION_TYPES)
 
-  row.op = W.CreateDropdown(row, 44, function(_, value)
+  row.spell = W.CreateEditBox(row, 76, 20, function(self, text)
+    local id, name = ns.ResolveSpell(text)
+    if id or name then
+      row.cond.spellID = id or name
+      row.cond.spellName = name
+      self:SetText(name or tostring(id))
+    else
+      ns:Print("unknown spell: " .. tostring(text) .. " (try the numeric spell ID)")
+      self:SetText(row.cond.spellName or "")
+    end
+    Rebuild()
+  end)
+
+  row.unit = W.CreateDropdown(row, 66, function(_, value)
+    row.cond.unit = value
+  end)
+  row.unit:SetOptions(UNIT_OPTIONS)
+
+  row.op = W.CreateDropdown(row, 40, function(_, value)
     row.cond.op = value
   end)
-  row.op:SetPoint("LEFT", row.ctype, "RIGHT", 4, 0)
   row.op:SetOptions(OP_OPTIONS)
 
-  row.value = W.CreateEditBox(row, 46, 20, function(_, text)
+  row.value = W.CreateEditBox(row, 40, 20, function(_, text)
     row.cond.value = tonumber(text) or 0
   end)
-  row.value:SetPoint("LEFT", row.op, "RIGHT", 4, 0)
 
-  row.action = W.CreateDropdown(row, 100, function(_, value)
+  row.bool = W.CreateDropdown(row, 100, function(_, value)
+    row.cond.value = value
+  end)
+
+  row.action = W.CreateDropdown(row, 92, function(_, value)
     row.cond.action = value
   end)
-  row.action:SetPoint("LEFT", row.value, "RIGHT", 8, 0)
   row.action:SetOptions(ACTION_OPTIONS)
 
   row.remove = W.CreateButton(row, "X", 20, 20, function()
     table.remove(builder.element.conditions, row.index)
     Rebuild()
   end)
-  row.remove:SetPoint("LEFT", row.action, "RIGHT", 6, 0)
 
   return row
+end
+
+-- Lays a row's widgets left-to-right, showing only what the ctype needs.
+local function LayoutConditionRow(row, cond)
+  local ctype = cond.ctype or "remaining"
+  local x = 0
+  local function place(widget, width)
+    widget:ClearAllPoints()
+    widget:SetPoint("LEFT", row, "LEFT", x, 0)
+    widget:Show()
+    x = x + width + 4
+  end
+
+  row.ctype:SetValue(ctype)
+  place(row.ctype, 118)
+
+  if NEEDS_SPELL[ctype] then
+    row.spell:SetText(cond.spellName or (cond.spellID and tostring(cond.spellID)) or "")
+    place(row.spell, 76)
+  else
+    row.spell:Hide()
+  end
+
+  if NEEDS_UNIT[ctype] then
+    row.unit:SetValue(cond.unit or "player")
+    place(row.unit, 66)
+  else
+    row.unit:Hide()
+  end
+
+  if NUMERIC[ctype] then
+    row.op:SetValue(cond.op or "<")
+    place(row.op, 40)
+    row.value:SetText(tostring(cond.value or 0))
+    place(row.value, 40)
+    row.bool:Hide()
+  elseif BOOL_OPTIONS[ctype] then
+    row.op:Hide()
+    row.value:Hide()
+    row.bool:SetOptions(BOOL_OPTIONS[ctype])
+    row.bool:SetValue(cond.value ~= false)
+    place(row.bool, 100)
+  else
+    row.op:Hide()
+    row.value:Hide()
+    row.bool:Hide()
+  end
+
+  row.action:SetValue(cond.action or "glow")
+  place(row.action, 92)
+  place(row.remove, 20)
 end
 
 function TriggerBuilder:Create(parent)
   W = ns.Widgets
   builder = CreateFrame("Frame", nil, parent)
   builder:SetHeight(1)
+  W.ApplyBackdrop(builder, { 0.055, 0.07, 0.10, 1 })
 
   builder.header = W.CreateSection(builder, "TRIGGER")
-  builder.header:SetPoint("TOPLEFT")
-
   builder.kindLabel = W.CreateLabel(builder, "Track", 12, W.colors.inkDim)
   builder.kind = W.CreateDropdown(builder, 120, function(_, value)
     builder.element.kind = value
     builder.element.showWhen = "always"
     Rebuild()
-    if builder.onChange then builder.onChange() end
   end)
   builder.kind:SetOptions(KIND_OPTIONS)
 
@@ -127,7 +215,7 @@ function TriggerBuilder:Create(parent)
   builder.unit:SetOptions(UNIT_OPTIONS)
 
   builder.showLabel = W.CreateLabel(builder, "show", 12, W.colors.inkDim)
-  builder.show = W.CreateDropdown(builder, 170, function(_, value)
+  builder.show = W.CreateDropdown(builder, 180, function(_, value)
     builder.element.showWhen = value
   end)
 
@@ -159,83 +247,82 @@ function TriggerBuilder:Load(element, onChange)
   builder:Show()
 
   local kind = element.kind or "cooldown"
-  builder.kind:SetValue(kind)
-
-  -- Row 1: track [kind] on [unit] show [mode]
-  builder.kindLabel:ClearAllPoints()
-  builder.kindLabel:SetPoint("TOPLEFT", builder.header, "BOTTOMLEFT", 0, -8)
-  builder.kind:ClearAllPoints()
-  builder.kind:SetPoint("LEFT", builder.kindLabel, "RIGHT", 6, 0)
-
   local isAura = kind ~= "cooldown"
+  local y = -PAD
+
+  -- TRIGGER header
+  builder.header:ClearAllPoints()
+  builder.header:SetPoint("TOPLEFT", PAD, y)
+  y = y - 17
+
+  -- Row: Track [kind] on [unit]
+  builder.kindLabel:ClearAllPoints()
+  builder.kindLabel:SetPoint("TOPLEFT", PAD, y - 5)
+  builder.kind:ClearAllPoints()
+  builder.kind:SetPoint("TOPLEFT", PAD + 40, y)
+  builder.kind:SetValue(kind)
   if isAura then
     builder.unitLabel:Show()
     builder.unit:Show()
-    builder.mine:Show()
     builder.unitLabel:ClearAllPoints()
-    builder.unitLabel:SetPoint("LEFT", builder.kind, "RIGHT", 8, 0)
+    builder.unitLabel:SetPoint("TOPLEFT", PAD + 170, y - 5)
     builder.unit:ClearAllPoints()
-    builder.unit:SetPoint("LEFT", builder.unitLabel, "RIGHT", 6, 0)
+    builder.unit:SetPoint("TOPLEFT", PAD + 190, y)
     builder.unit:SetValue(element.unit or "player")
-    builder.show:SetOptions(SHOW_AURA)
-    builder.mine:ClearAllPoints()
-    builder.mine:SetPoint("TOPLEFT", builder.kindLabel, "BOTTOMLEFT", 0, -12)
-    builder.mine:SetChecked(element.onlyMine)
-    builder.showLabel:ClearAllPoints()
-    builder.showLabel:SetPoint("LEFT", builder.mine.label, "RIGHT", 16, 0)
   else
     builder.unitLabel:Hide()
     builder.unit:Hide()
-    builder.mine:Hide()
-    builder.show:SetOptions(SHOW_COOLDOWN)
-    builder.showLabel:ClearAllPoints()
-    builder.showLabel:SetPoint("TOPLEFT", builder.kindLabel, "BOTTOMLEFT", 0, -12)
   end
-  builder.show:ClearAllPoints()
-  builder.show:SetPoint("LEFT", builder.showLabel, "RIGHT", 6, 0)
-  builder.show:SetValue(element.showWhen or "always")
+  y = y - ROW_H
 
-  -- Conditions
+  -- Row: show [mode] (+ Only my aura)
+  builder.showLabel:ClearAllPoints()
+  builder.showLabel:SetPoint("TOPLEFT", PAD, y - 5)
+  builder.show:ClearAllPoints()
+  builder.show:SetPoint("TOPLEFT", PAD + 40, y)
+  builder.show:SetOptions(isAura and SHOW_AURA or SHOW_COOLDOWN)
+  builder.show:SetValue(element.showWhen or "always")
+  if isAura then
+    builder.mine:Show()
+    builder.mine:ClearAllPoints()
+    builder.mine:SetPoint("TOPLEFT", PAD + 235, y + 2)
+    builder.mine:SetChecked(element.onlyMine)
+  else
+    builder.mine:Hide()
+  end
+  y = y - ROW_H - 4
+
+  -- CONDITIONS header
   builder.condHeader:ClearAllPoints()
-  builder.condHeader:SetPoint("TOPLEFT", builder.showLabel, "BOTTOMLEFT", 0, -14)
+  builder.condHeader:SetPoint("TOPLEFT", PAD, y)
+  y = y - 17
 
   local conditions = element.conditions or {}
   element.conditions = conditions
-  local anchorTo = builder.condHeader
   for i, cond in ipairs(conditions) do
     local row = builder.condRows[i]
     if not row then
-      row = CreateConditionRow(builder, i)
+      row = CreateConditionRow(builder)
       builder.condRows[i] = row
     end
     row.cond = cond
     row.index = i
     row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, i == 1 and -6 or -2)
-    row:SetPoint("RIGHT", builder, "RIGHT", 0, 0)
-    row.ctype:SetValue(cond.ctype or "remaining")
-    local numeric = NUMERIC_CONDITIONS[cond.ctype or "remaining"]
-    if numeric then
-      row.op:Show()
-      row.value:Show()
-      row.op:SetValue(cond.op or "<")
-      row.value:SetText(tostring(cond.value or 0))
-    else
-      row.op:Hide()
-      row.value:Hide()
-    end
-    row.action:SetValue(cond.action or "glow")
+    row:SetPoint("TOPLEFT", PAD, y)
+    row:SetPoint("RIGHT", builder, "RIGHT", -PAD, 0)
+    LayoutConditionRow(row, cond)
     row:Show()
-    anchorTo = row
+    y = y - ROW_H
   end
   for i = #conditions + 1, #builder.condRows do
     builder.condRows[i]:Hide()
   end
 
   builder.addCond:ClearAllPoints()
-  builder.addCond:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -8)
+  builder.addCond:SetPoint("TOPLEFT", PAD, y - 2)
+  y = y - 24
 
-  builder:SetHeight(80 + #conditions * 26 + 30)
+  builder:SetHeight(-y + PAD)
 end
 
 function TriggerBuilder:GetFrame()

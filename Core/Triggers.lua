@@ -38,6 +38,19 @@ local function ConditionValue(cond, element, display, ctx)
     return cur / max * 100
   elseif ctype == "targethp" then
     return ctx.targetHpPct()
+  elseif ctype == "otherstacks" then
+    -- Stacks of a DIFFERENT aura (cross-spell condition)
+    if not cond.spellID then return nil end
+    local aura = ctx.aura(cond.unit or "player", cond.spellID, cond.onlyMine)
+    return aura and aura.count or 0
+  elseif ctype == "otherremaining" then
+    -- Time left on a DIFFERENT aura
+    if not cond.spellID then return nil end
+    local aura = ctx.aura(cond.unit or "player", cond.spellID, cond.onlyMine)
+    if aura and aura.expirationTime and aura.expirationTime > 0 then
+      return math.max(0, aura.expirationTime - ctx.now())
+    end
+    return 0
   end
   return nil
 end
@@ -48,6 +61,17 @@ local function ConditionMatches(cond, element, display, ctx)
     return ctx.inCombat() == (cond.value ~= false)
   elseif ctype == "hastarget" then
     return ctx.hasTarget() == (cond.value ~= false)
+  elseif ctype == "otheraura" then
+    -- A DIFFERENT aura is active (value=true) or missing (value=false)
+    if not cond.spellID then return false end
+    local aura = ctx.aura(cond.unit or "player", cond.spellID, cond.onlyMine)
+    return (aura ~= nil) == (cond.value ~= false)
+  elseif ctype == "othercd" then
+    -- A DIFFERENT spell is ready (value=true) or on cooldown (value=false)
+    if not cond.spellID then return false end
+    local state = ctx.cooldown(cond.spellID)
+    local ready = (state and state.known and not state.onCooldown) and true or false
+    return ready == (cond.value ~= false)
   end
   local value = ConditionValue(cond, element, display, ctx)
   return Compare(cond.op or "<", value, tonumber(cond.value))
