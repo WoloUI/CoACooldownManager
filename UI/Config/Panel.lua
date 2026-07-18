@@ -1295,6 +1295,8 @@ local ioWin
 local function EnsureIOWindow()
   if ioWin then return ioWin end
   ioWin = W.CreateWindow("CoACDMProfileIO", 460, 300, "CoACDM - Profile string")
+  -- Must layer above the config window (same DIALOG strata otherwise)
+  ioWin:SetFrameStrata("FULLSCREEN_DIALOG")
 
   ioWin.hint = W.CreateLabel(ioWin, "", 11, W.colors.inkDim)
   ioWin.hint:SetPoint("TOPLEFT", 12, -36)
@@ -1334,6 +1336,7 @@ end
 function Config:ShowIO(mode)
   local w = EnsureIOWindow()
   w.mode = mode
+  w:Raise()
   if mode == "export" then
     w.hint:SetText("Copy this string (Ctrl+C) and share it. Others import it from Appearance > Import profile.")
     w.action:SetLabel("Select all")
