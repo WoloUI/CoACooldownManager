@@ -15,7 +15,7 @@ local function CreateAlert(parent)
 
   alert.icon = alert:CreateTexture(nil, "ARTWORK")
   alert.icon:SetPoint("LEFT", 3, 0)
-  alert.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  ns.CropIcon(alert.icon)
 
   alert.text = alert:CreateFontString(nil, "OVERLAY")
   alert.text:SetPoint("LEFT", alert.icon, "RIGHT", 6, 0)
@@ -39,6 +39,13 @@ local function SetAlertDisplay(alert, data, cfg)
   alert.icon:SetSize(iconSize - 6, iconSize - 6)
   alert.icon:SetTexture(data.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
   alert.text:SetFont(ns.GetFont(), ns.FontSize(cfg.fontSize or 12), "OUTLINE")
+  local color = data.color or { 1, 0.85, 0.55 }
+  alert.text:SetTextColor(color[1], color[2], color[3])
+  if data.color then -- special alerts (e.g. out of range) get a matching border
+    alert:SetBackdropBorderColor(color[1] * 0.7, color[2] * 0.7, color[3] * 0.7, 1)
+  else
+    alert:SetBackdropBorderColor(0.48, 0.36, 0.12, 1)
+  end
   alert.text:SetText(data.text or "")
   alert:SetSize(iconSize + alert.text:GetStringWidth() + 16, iconSize)
 end
@@ -53,7 +60,7 @@ function ReminderRow:Update(frame, cfg)
   if ns.TestMode and ns.TestMode.active then
     list = ns.TestMode:GetReminders()
   else
-    list = ns.Reminders:GetActive()
+    list = ns.Reminders:GetActiveFor(cfg.name)
   end
 
   local spacing = cfg.spacing or 6

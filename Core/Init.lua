@@ -166,6 +166,26 @@ function ns.FontSize(base)
   return math.max(math.floor((base or 12) * (Appearance().fontScale or 1) + 0.5), 6)
 end
 
+ns.GlowOptions = {
+  { text = "Pixel (bright dashes)", value = "pixel" },
+  { text = "Pulse (classic border)", value = "pulse" },
+  { text = "Shine (starburst)", value = "shine" },
+  { text = "Solid border", value = "solid" },
+}
+
+function ns.GetGlowStyle()
+  return Appearance().glow or "pixel"
+end
+
+function ns.GetGlowColor()
+  return Appearance().glowColor or { 1, 0.82, 0.35 }
+end
+
+-- 20% zoom on spell icons: crops the baked-in dark border
+function ns.CropIcon(tex)
+  tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+end
+
 function ns.CopyTable(src)
   local dst = {}
   for k, v in pairs(src) do

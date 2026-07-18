@@ -101,6 +101,23 @@ local function EvalAuraReminder(reminder)
   }
 end
 
+-- Special alert: out of range of the target, measured with a reference spell
+-- (e.g. your melee strike). Fires only with an attackable living target.
+local function EvalRangeReminder(reminder)
+  if reminder.combatOnly ~= false and not UnitAffectingCombat("player") then return nil end
+  if not UnitExists("target") or UnitIsDeadOrGhost("target")
+    or not UnitCanAttack("player", "target") then return nil end
+  local name = reminder.spellName or (reminder.spellID and GetSpellInfo(reminder.spellID))
+  if not name then return nil end
+  if IsSpellInRange(name, "target") ~= 0 then return nil end -- 1 = in range, nil = can't tell
+  local _, _, icon = GetSpellInfo(reminder.spellID or name)
+  return {
+    icon = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
+    text = reminder.text or "Out of range!",
+    color = { 1, 0.35, 0.35 },
+  }
+end
+
 local function EvalWeaponReminder(reminder)
   local hasMH, _, _, hasOH = GetWeaponEnchantInfo()
   local slot = reminder.slot or "mainhand"
@@ -128,27 +145,40 @@ local function NeedsGroupWatch(elements)
   return false
 end
 
+local EVALUATORS = {
+  group = EvalGroupReminder,
+  aura = EvalAuraReminder,
+  weapon = EvalWeaponReminder,
+  range = EvalRangeReminder,
+}
+
+-- Every reminder-style viewer (Reminders, Alerts, user-made) gets its own list
+local activeByViewer = {}
+
+function Reminders:GetActiveFor(viewerName)
+  return activeByViewer[viewerName] or active
+end
+
 function Reminders:Recompute()
-  local viewer = ns.DB:GetViewer("Reminders")
-  active = {}
-  if viewer and viewer.enabled then
-    for _, reminder in ipairs(viewer.elements) do
-      local alert
-      if reminder.rtype == "group" then
-        alert = EvalGroupReminder(reminder)
-      elseif reminder.rtype == "aura" then
-        alert = EvalAuraReminder(reminder)
-      elseif reminder.rtype == "weapon" then
-        alert = EvalWeaponReminder(reminder)
+  local signature = ""
+  for _, viewer in ipairs(ns.profile.viewers) do
+    if viewer.style == "reminders" then
+      local list = {}
+      if viewer.enabled then
+        for _, reminder in ipairs(viewer.elements) do
+          local eval = EVALUATORS[reminder.rtype]
+          local alert = eval and eval(reminder)
+          if alert then list[#list + 1] = alert end
+        end
       end
-      if alert then active[#active + 1] = alert end
+      activeByViewer[viewer.name] = list
+      for _, alert in ipairs(list) do
+        signature = signature .. viewer.name .. ":" .. alert.text .. ";"
+      end
     end
   end
+  active = activeByViewer["Reminders"] or {}
 
-  local signature = ""
-  for _, alert in ipairs(active) do
-    signature = signature .. alert.text .. ";"
-  end
   if signature ~= lastSignature then
     lastSignature = signature
     ns:Fire("REMINDERS_UPDATE")
@@ -156,9 +186,16 @@ function Reminders:Recompute()
 end
 
 local function UpdateGroupWatch()
-  local viewer = ns.DB:GetViewer("Reminders")
   local inGroup = GetNumRaidMembers() > 0 or GetNumPartyMembers() > 0
-  local want = viewer and viewer.enabled and inGroup and NeedsGroupWatch(viewer.elements)
+  local want = false
+  if inGroup then
+    for _, viewer in ipairs(ns.profile.viewers) do
+      if viewer.style == "reminders" and viewer.enabled and NeedsGroupWatch(viewer.elements) then
+        want = true
+        break
+      end
+    end
+  end
   ns.Auras:WatchGroup(want and true or false)
 end
 
@@ -168,12 +205,12 @@ ns:On("READY", function()
   ns:On("PROFILE_CHANGED", UpdateGroupWatch)
   ns:On("VIEWERS_CHANGED", UpdateGroupWatch)
 
-  -- Weapon enchants and group coverage have no reliable single event;
-  -- recompute on a slow tick (1 s) and let the signature gate the redraws.
+  -- Range/weapon/group checks have no reliable single event; recompute on a
+  -- 0.3 s tick (range alerts need to feel instant) - signature gates redraws.
   local elapsedAcc = 0
   ns:OnTick(function(dt)
     elapsedAcc = elapsedAcc + dt
-    if elapsedAcc < 1 then return end
+    if elapsedAcc < 0.3 then return end
     elapsedAcc = 0
     Reminders:Recompute()
   end)

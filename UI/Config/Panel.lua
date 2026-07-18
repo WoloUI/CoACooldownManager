@@ -15,6 +15,7 @@ local STYLE_OPTIONS = {
   { text = "Icon row", value = "icons" },
   { text = "Duration bars", value = "bars" },
   { text = "Stack points", value = "stacks" },
+  { text = "Alert row", value = "reminders" },
 }
 local POSITION_OPTIONS = {
   { text = "Above parent", value = "above" },
@@ -53,6 +54,7 @@ local REMINDER_TYPE_OPTIONS = {
   { text = "Group buff", value = "group" },
   { text = "My aura (ID)", value = "aura" },
   { text = "Weapon enchant", value = "weapon" },
+  { text = "Out of range", value = "range" },
 }
 local SCOPE_OPTIONS = {
   { text = "Myself", value = "self" },
@@ -357,6 +359,22 @@ function Config:BuildControls()
     Touch()
   end)
   c.genScale:SetOptions(ns.FontScaleOptions)
+  c.genGlowLabel = W.CreateLabel(parent, "Glow style", 12, W.colors.inkDim)
+  c.genGlow = W.CreateDropdown(parent, 190, function(_, value)
+    AppearanceCfg().glow = value
+    Touch()
+  end)
+  c.genGlow:SetOptions(ns.GlowOptions)
+  c.genGlowColorLabel = W.CreateLabel(parent, "Glow color", 12, W.colors.inkDim)
+  c.genGlowColor = W.CreateColorSwatch(parent, function(_, color)
+    AppearanceCfg().glowColor = color
+    Touch()
+  end)
+  c.genGlowReset = W.CreateButton(parent, "Auto", 44, 20, function()
+    AppearanceCfg().glowColor = nil
+    Touch()
+    Config:Render()
+  end)
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
 
   -- Stack bar options
@@ -430,9 +448,14 @@ function Config:BuildControls()
   c.remSlot = W.CreateDropdown(parent, 100, nil)
   c.remSlot:SetOptions(SLOT_OPTIONS)
   c.remSlot:SetValue("mainhand")
+  c.remRangeSpell = W.CreateEditBox(parent, 120, 20)
+  c.remTextLabel = W.CreateLabel(parent, "Custom text", 12, W.colors.inkDim)
+  c.remText = W.CreateEditBox(parent, 200, 20)
   c.remAdd = W.CreateButton(parent, "Add", 50, 20, function()
     local viewer = SelectedViewer()
     local rtype = c.remType.value
+    local customText = c.remText:GetText()
+    if customText == "" then customText = nil end
     local reminder
     if rtype == "group" then
       if not c.remGroup.value then return end
@@ -445,9 +468,20 @@ function Config:BuildControls()
       end
       reminder = { rtype = "aura", spellID = id, name = name, scope = "self" }
       c.remAura:SetText("")
+    elseif rtype == "range" then
+      -- Reference spell defines the range being checked (e.g. a melee strike)
+      local id, name = ns.ResolveSpell(c.remRangeSpell:GetText())
+      if not (id or name) then
+        ns:Print("unknown spell: " .. tostring(c.remRangeSpell:GetText()) .. " (type the spell that defines the range)")
+        return
+      end
+      reminder = { rtype = "range", spellID = id, spellName = name, combatOnly = true }
+      c.remRangeSpell:SetText("")
     else
       reminder = { rtype = "weapon", slot = c.remSlot.value }
     end
+    reminder.text = customText
+    c.remText:SetText("")
     table.insert(viewer.elements, reminder)
     Touch()
     Config:Render()
@@ -559,6 +593,8 @@ local function ElementLabel(el)
       return (group and group.name or el.group) .. "  |cff9aa3b5(" .. scope .. ")|r"
     elseif el.rtype == "aura" then
       return (el.name or el.spellID or "?") .. "  |cff9aa3b5(my aura)|r"
+    elseif el.rtype == "range" then
+      return (el.text or "Out of range!") .. "  |cff9aa3b5(range: " .. (el.spellName or el.spellID or "?") .. ")|r"
     end
     return "Weapon enchant  |cff9aa3b5(" .. (el.slot or "mainhand") .. ")|r"
   end
@@ -580,7 +616,7 @@ local function RenderElementList(c, viewer, y, isReminders)
       row.icon = row:CreateTexture(nil, "ARTWORK")
       row.icon:SetSize(16, 16)
       row.icon:SetPoint("LEFT")
-      row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+      ns.CropIcon(row.icon)
       row.btn = W.CreateButton(row, "", 300, 20, function(self)
         state.selectedElement = state.selectedElement ~= self.elementIndex and self.elementIndex or nil
         Config:Render()
@@ -670,6 +706,16 @@ function Config:Render()
     c2.genScale:SetPoint("TOPLEFT", 80, y2)
     c2.genScale:SetValue(appearance.fontScale or 1.0)
     c2.genScale:Show()
+    y2 = y2 - 28
+    c2.genGlowLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genGlowLabel:Show()
+    c2.genGlow:SetPoint("TOPLEFT", 80, y2)
+    c2.genGlow:SetValue(appearance.glow or "pixel")
+    c2.genGlow:Show()
+    c2.genGlowColorLabel:SetPoint("TOPLEFT", 290, y2 - 4); c2.genGlowColorLabel:Show()
+    c2.genGlowColor:SetPoint("TOPLEFT", 352, y2)
+    c2.genGlowColor:SetColor(ns.GetGlowColor())
+    c2.genGlowColor:Show()
+    c2.genGlowReset:SetPoint("TOPLEFT", 378, y2); c2.genGlowReset:Show()
     y2 = y2 - 34
     c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
     win.content:SetHeight(400)
@@ -847,6 +893,7 @@ function Config:Render()
     c.addKind:SetPoint("TOPLEFT", 176, y); c.addKind:Show()
     c.addBtn:SetPoint("TOPLEFT", 302, y); c.addBtn:Show()
     y = y - 24
+    c.addHint:SetText("Type a name or spell ID, or drag a spell from your spellbook.")
     c.addHint:SetPoint("TOPLEFT", 0, y); c.addHint:Show()
     y = y - 24
   elseif style == "reminders" then
@@ -864,15 +911,20 @@ function Config:Render()
       if not c.remGroup.value and groupOptions[1] then c.remGroup:SetValue(groupOptions[1].value) end
       c.remGroup:SetPoint("TOPLEFT", 136, y); c.remGroup:Show()
       c.remScope:SetPoint("TOPLEFT", 292, y); c.remScope:Show()
-      c.remAdd:SetPoint("TOPLEFT", 398, y); c.remAdd:Show()
     elseif rtype == "aura" then
       c.remAura:SetPoint("TOPLEFT", 136, y); c.remAura:Show()
-      c.remAdd:SetPoint("TOPLEFT", 232, y); c.remAdd:Show()
+    elseif rtype == "range" then
+      c.remRangeSpell:SetPoint("TOPLEFT", 136, y); c.remRangeSpell:Show()
+      c.addHint:SetText("Range is measured with this spell (e.g. your melee strike). Alert shows in combat with an attackable target.")
+      c.addHint:SetPoint("TOPLEFT", 0, y - 52); c.addHint:Show()
     else
       c.remSlot:SetPoint("TOPLEFT", 136, y); c.remSlot:Show()
-      c.remAdd:SetPoint("TOPLEFT", 242, y); c.remAdd:Show()
     end
-    y = y - 30
+    y = y - 26
+    c.remTextLabel:SetPoint("TOPLEFT", 0, y - 4); c.remTextLabel:Show()
+    c.remText:SetPoint("TOPLEFT", 76, y); c.remText:Show()
+    c.remAdd:SetPoint("TOPLEFT", 284, y); c.remAdd:Show()
+    y = y - (rtype == "range" and 46 or 30)
   end
 
   win.content:SetHeight(math.max(-y + 40, 400))

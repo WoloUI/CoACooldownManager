@@ -3,11 +3,21 @@ local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local DB = {}
 ns.DB = DB
 
-local DB_VERSION = 1
+local DB_VERSION = 2
 
 --------------------------------------------------------------------------------
 -- Defaults
 --------------------------------------------------------------------------------
+-- Special alerts (out of range, custom warnings): reminder-style, own anchor
+local function AlertsViewer()
+  return {
+    name = "Alerts", style = "reminders", enabled = true,
+    anchor = { parent = "FREE", point = "CENTER", relPoint = "CENTER", x = 0, y = 140 },
+    iconSize = 28, spacing = 6, fontSize = 15, growth = "CENTER",
+    visibility = "always", elements = {},
+  }
+end
+
 local function DefaultViewers()
   return {
     {
@@ -56,6 +66,7 @@ local function DefaultViewers()
       iconSize = 24, spacing = 6, fontSize = 12, growth = "CENTER",
       visibility = "always", elements = {},
     },
+    AlertsViewer(),
   }
 end
 
@@ -116,6 +127,22 @@ function DB:Init()
 
   local db = CoACDM_DB
   db.version = db.version or DB_VERSION
+
+  -- v2: add the Alerts viewer to profiles created before it existed
+  if db.version < 2 and db.chars then
+    for _, char in pairs(db.chars) do
+      for _, profile in pairs(char.specs or {}) do
+        local found = false
+        for _, v in ipairs(profile.viewers or {}) do
+          if v.name == "Alerts" then found = true break end
+        end
+        if profile.viewers and not found then
+          table.insert(profile.viewers, AlertsViewer())
+        end
+      end
+    end
+  end
+  db.version = DB_VERSION
   db.global = db.global or {}
   db.global.layouts = db.global.layouts or { default = {} }
   db.global.equivGroups = db.global.equivGroups or {}

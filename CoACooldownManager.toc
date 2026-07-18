@@ -17,6 +17,7 @@ Core\Triggers.lua
 Core\Reminders.lua
 Core\Scanner.lua
 UI\Viewer.lua
+UI\Glow.lua
 UI\IconRow.lua
 UI\StatusBars.lua
 UI\PowerBar.lua

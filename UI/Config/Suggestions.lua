@@ -57,7 +57,7 @@ local function CreateRow(parent, index)
   row.icon = row:CreateTexture(nil, "ARTWORK")
   row.icon:SetSize(20, 20)
   row.icon:SetPoint("LEFT", 0, 0)
-  row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  ns.CropIcon(row.icon)
 
   row.name = W.CreateLabel(row, "", 12)
   row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)

@@ -11,7 +11,7 @@ local function CreateButton(parent)
 
   btn.icon = btn:CreateTexture(nil, "ARTWORK")
   btn.icon:SetAllPoints()
-  btn.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  ns.CropIcon(btn.icon)
 
   btn.border = btn:CreateTexture(nil, "OVERLAY")
   btn.border:SetPoint("TOPLEFT", -1, 1)
@@ -38,20 +38,6 @@ local function CreateButton(parent)
   btn.stacksText:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
   btn.stacksText:SetTextColor(1, 1, 1)
 
-  btn.glow = textOverlay:CreateTexture(nil, "OVERLAY")
-  btn.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-  btn.glow:SetBlendMode("ADD")
-  btn.glow:SetVertexColor(1, 0.84, 0.42, 0.9)
-  btn.glow:SetPoint("CENTER")
-  btn.glow:Hide()
-
-  local pulse = btn.glow:CreateAnimationGroup()
-  pulse:SetLooping("BOUNCE")
-  local alpha = pulse:CreateAnimation("Alpha")
-  alpha:SetChange(-0.5)
-  alpha:SetDuration(0.7)
-  btn.glowAnim = pulse
-
   btn._cdStart, btn._cdDuration = 0, 0
   return btn
 end
@@ -77,7 +63,6 @@ end
 local function SetButtonDisplay(btn, display, cfg, now)
   local size = cfg.iconSize or 32
   btn:SetSize(size, size)
-  btn.glow:SetSize(size * 1.7, size * 1.7)
   local font = ns.GetFont()
   btn.timeText:SetFont(font, ns.FontSize(cfg.fontSize or 12), "OUTLINE")
   btn.stacksText:SetFont(font, ns.FontSize(math.max((cfg.fontSize or 12) - 2, 8)), "OUTLINE")
@@ -113,15 +98,7 @@ local function SetButtonDisplay(btn, display, cfg, now)
 
   btn.stacksText:SetText(display.stacks and display.stacks > 1 and display.stacks or "")
 
-  if display.glow then
-    if not btn.glow:IsShown() then
-      btn.glow:Show()
-      btn.glowAnim:Play()
-    end
-  elseif btn.glow:IsShown() then
-    btn.glowAnim:Stop()
-    btn.glow:Hide()
-  end
+  ns.Glow:Set(btn, display.glow, size)
 end
 
 local function LayoutRow(frame, cfg, count)

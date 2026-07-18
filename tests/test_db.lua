@@ -21,9 +21,29 @@ GetActiveTalentGroup = function() return activeGroup end
 CoACDM_DB = nil
 ns.DB:Init()
 
-check("default profile has 7 viewers", #ns.profile.viewers == 7)
+check("default profile has 8 viewers", #ns.profile.viewers == 8)
 check("power viewer exists", ns.DB:GetViewer("Power") ~= nil)
 check("essential anchored to power", ns.DB:GetViewer("Essential").anchor.parent == "Power")
+check("alerts viewer exists", ns.DB:GetViewer("Alerts") ~= nil)
+
+-- v1 -> v2 migration adds the Alerts viewer to old profiles
+do
+  local old = CoACDM_DB
+  CoACDM_DB = {
+    version = 1,
+    global = { layouts = { default = {} }, equivGroups = {} },
+    chars = { ["Tester-Area52"] = { activeLayout = "default", specs = {
+      talents1 = { viewers = { { name = "Power", style = "power", enabled = true,
+        anchor = { parent = "FREE" }, power = {}, elements = {} } },
+        scanner = { seen = {}, rejected = {} } },
+    } } },
+  }
+  ns.DB:Init()
+  check("v2 migration adds Alerts to old profiles", ns.DB:GetViewer("Alerts") ~= nil)
+  check("migration bumps version", CoACDM_DB.version == 2)
+  CoACDM_DB = old
+  ns.DB:Init()
+end
 
 -- Add / delete viewers with re-parenting
 local viewer = ns.DB:AddViewer("Soul Shards", "stacks")

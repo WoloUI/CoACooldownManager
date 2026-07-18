@@ -15,7 +15,7 @@ local function CreateBar(parent)
   holder.iconFrame:SetPoint("LEFT")
   holder.icon = holder.iconFrame:CreateTexture(nil, "ARTWORK")
   holder.icon:SetAllPoints()
-  holder.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  ns.CropIcon(holder.icon)
 
   holder.bar = CreateFrame("StatusBar", nil, holder)
   holder.bar:SetPoint("TOPLEFT", holder.iconFrame, "TOPRIGHT", 1, 0)
