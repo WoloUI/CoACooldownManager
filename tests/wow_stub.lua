@@ -56,8 +56,13 @@ function M.install(env)
   env.__spells = env.__spells or {}
   env.GetSpellInfo = function(idOrName)
     local spell = env.__spells[idOrName]
-    if spell then return spell.name, nil, spell.icon end
-    if type(idOrName) == "string" then return idOrName, nil, "icon" end
+    if spell then return spell.name, spell.rank, spell.icon end
+    if type(idOrName) == "string" then
+      -- Like the real client: by-name lookup resolves only LEARNED spells
+      local known = env.__knownNames and env.__knownNames[idOrName]
+      if known then return idOrName, known.rank, known.icon end
+      return nil
+    end
     return nil
   end
   env.GetSpellCooldown = function() return 0, 0, 1 end
