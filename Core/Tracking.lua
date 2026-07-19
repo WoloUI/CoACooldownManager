@@ -359,6 +359,11 @@ function Tracking:Apply()
   if Enabled() then
     ns.Auras:WatchGroup(true)
     self:Rescan()
+    -- HoTs applied before enabling (or before a /reload) fire no UNIT_AURA
+    -- event: scan every mapped unit once so they draw immediately
+    for unit in pairs(unitFrames) do
+      ns.Auras:ForceScan(unit)
+    end
     self:RefreshAll()
   else
     ns.Auras:WatchGroup(false)
@@ -387,8 +392,7 @@ ns:On("READY", function()
   ns:OnTick(function(dt)
     if not Enabled() then return end
     if rescanNeeded then
-      Tracking:Rescan()
-      Tracking:RefreshAll()
+      Tracking:Apply() -- rescan + initial aura scan for newly mapped units
     end
     -- Time text + blink between aura updates
     textAcc = textAcc + dt
