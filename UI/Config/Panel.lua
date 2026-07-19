@@ -884,15 +884,20 @@ function Config:BuildControls()
     TouchTracking()
   end)
 
-  -- Class HUD view (hide CoA per-class HUD frames)
+  -- Class HUD view (hide CoA per-class HUD frames via the on-screen picker)
   c.hudHint = W.CreateLabel(parent,
-    "CoA adds its own class HUDs (resource orbs, segment bars, ...). Check a\nframe to hide it; uncheck to show it again. The list scans for CoA-named\nframes - open this tab while the HUD is on screen so it can be found.",
+    "CoA adds its own class HUDs (resource orbs, segment bars, ...). Click\nPick frame, then click the HUD element on screen to hide it. Right click\nwhile picking cancels. Hidden frames are saved with this profile.",
     10, W.colors.inkDim)
-  c.hudHeader = W.CreateSection(parent, "COA HUD FRAMES")
-  c.hudRows = {}
-  c.hudRescan = W.CreateButton(parent, "Rescan", 70, 20, function()
-    Config:Render()
+  c.hudPickBtn = W.CreateButton(parent, "Pick frame on screen", 150, 22, function()
+    win:Hide()
+    ns.HudHider:StartPicking(function()
+      win:Show()
+      Config:Render()
+    end)
   end)
+  c.hudHeader = W.CreateSection(parent, "HIDDEN FRAMES")
+  c.hudEmpty = W.CreateLabel(parent, "Nothing hidden yet.", 11, W.colors.inkDim)
+  c.hudRows = {}
 
   c.trigger = ns.TriggerBuilder:Create(parent)
 
@@ -1449,36 +1454,39 @@ function Config:Render()
     c2.title:SetPoint("TOPLEFT", 0, y2)
     c2.title:SetText("Class HUD")
     c2.title:Show()
-    c2.hudRescan:SetPoint("TOPRIGHT", win.content, "TOPRIGHT", 0, y2); c2.hudRescan:Show()
     y2 = y2 - 30
     c2.hudHint:SetPoint("TOPLEFT", 0, y2); c2.hudHint:Show()
     y2 = y2 - 48
+    c2.hudPickBtn:SetPoint("TOPLEFT", 0, y2); c2.hudPickBtn:Show()
+    y2 = y2 - 34
     c2.hudHeader:SetPoint("TOPLEFT", 0, y2); c2.hudHeader:Show()
     y2 = y2 - 20
 
-    local hidden = ns.HudHider:Hidden()
-    local names = ns.HudHider:Discover()
+    local names = {}
+    for name in pairs(ns.HudHider:Hidden()) do names[#names + 1] = name end
+    table.sort(names)
+    if #names == 0 then
+      c2.hudEmpty:SetPoint("TOPLEFT", 0, y2); c2.hudEmpty:Show()
+      y2 = y2 - 24
+    end
     for i, name in ipairs(names) do
       local row = c2.hudRows[i]
       if not row then
         row = CreateFrame("Frame", nil, win.content)
         row:SetHeight(22)
-        -- Pooled rows: the frame name is resolved from the checkbox at click time
-        row.check = W.CreateCheckbox(row, "", function(check, checked)
-          ns.HudHider:SetHidden(check.hudName, checked)
+        row.label = W.CreateLabel(row, "", 12)
+        row.label:SetPoint("LEFT", 4, 0)
+        -- Pooled rows: the frame name is resolved from the button at click time
+        row.remove = W.CreateButton(row, "X", 20, 20, function(self)
+          ns.HudHider:SetHidden(self.hudName, false)
           Config:Render()
         end)
-        row.check:SetPoint("LEFT", 4, 0)
-        row.label = W.CreateLabel(row, "", 12)
-        row.label:SetPoint("LEFT", 34, 0)
+        row.remove:SetPoint("RIGHT", -4, 0)
         c2.hudRows[i] = row
       end
-      row.check.hudName = name
-      row.check:SetChecked(hidden[name])
+      row.remove.hudName = name
       local exists = _G[name] ~= nil
-      row.label:SetText(name
-        .. (hidden[name] and "  |cffd86a5a(hidden)|r" or "")
-        .. (exists and "" or "  |cff9aa3b5(not loaded on this class)|r"))
+      row.label:SetText(name .. (exists and "" or "  |cff9aa3b5(not loaded on this class)|r"))
       row:ClearAllPoints()
       row:SetPoint("TOPLEFT", 0, y2)
       row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)

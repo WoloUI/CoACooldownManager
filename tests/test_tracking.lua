@@ -105,28 +105,40 @@ local soothing = ns.Auras:GetAura("party1", "renew", false)
 check("lowercase name still matches the aura", soothing ~= nil and soothing.name == "Renew")
 check("padded name still matches the aura", ns.Auras:GetAura("party1", " Renew ", false) ~= nil)
 
--- Class HUD hider: discovery + per-profile hidden set
-local function FakeHudFrame()
-  return { IsObjectType = function(_, t) return t == "Frame" end }
+-- Class HUD hider: picker candidates, smallest-under-cursor pick, hidden set
+local function FakeHudFrame(name, w, h, over, visible)
+  return {
+    IsObjectType = function(_, t) return t == "Frame" end,
+    GetName = function() return name end,
+    IsVisible = function() return visible ~= false end,
+    IsMouseOver = function() return over and true or false end,
+    GetWidth = function() return w or 10 end,
+    GetHeight = function() return h or 10 end,
+  }
 end
+
 local pool = {
-  CoAResourceOrb = FakeHudFrame(),
-  CoAWarlockHud = FakeHudFrame(),   -- unknown HUD found by the scan
-  CoACDMConfig = FakeHudFrame(),    -- our own frames are excluded
-  CoASpellData = { some = "table" },-- non-frame CoA globals are excluded
+  CoAResourceOrb = FakeHudFrame("CoAResourceOrb", 40, 40, true),
+  CoACDMConfig = FakeHudFrame("CoACDMConfig", 40, 40, true),      -- ours: excluded
+  HiddenThing = FakeHudFrame("HiddenThing", 40, 40, true, false), -- invisible: excluded
+  CoASpellData = { some = "table" },                              -- not a frame
 }
-local names = {}
-for _, name in ipairs(ns.HudHider:Discover(pool)) do names[name] = true end
-check("seeded HUDs always listed", names.CoAResourceOrb and names.CoAResourceSegmentBar)
-check("scan finds unknown CoA HUD frames", names.CoAWarlockHud == true)
-check("own CoACDM frames excluded", names.CoACDMConfig == nil)
-check("non-frame CoA globals excluded", names.CoASpellData == nil)
+local candidates = ns.HudHider:CollectPickCandidates(pool)
+check("visible named frames are pickable", #candidates == 1
+  and candidates[1]:GetName() == "CoAResourceOrb")
+check("UIParent never pickable",
+  ns.HudHider._IsPickableFrame("UIParent", FakeHudFrame("UIParent", 10, 10, true)) == false)
+
+-- Smallest frame under the cursor wins (most specific)
+local big = FakeHudFrame("BigContainer", 200, 100, true)
+local small = FakeHudFrame("CoAResourceOrb", 40, 40, true)
+local away = FakeHudFrame("SomewhereElse", 10, 10, false)
+local picked = ns.HudHider:PickAt({ big, small, away })
+check("smallest frame under the cursor wins", picked == small)
+check("nothing under the cursor picks nil", ns.HudHider:PickAt({ away }) == nil)
 
 ns.HudHider:SetHidden("CoAResourceOrb", true)
 check("hidden HUD persisted in the profile", ns.profile.hiddenHuds.CoAResourceOrb == true)
-local listed = {}
-for _, name in ipairs(ns.HudHider:Discover({})) do listed[name] = true end
-check("hidden HUD stays listed without the frame", listed.CoAResourceOrb == true)
 ns.HudHider:SetHidden("CoAResourceOrb", false)
 check("unhiding clears the profile entry", ns.profile.hiddenHuds.CoAResourceOrb == nil)
 

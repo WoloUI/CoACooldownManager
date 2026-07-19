@@ -322,9 +322,6 @@ ns.HudHider = HudHider
 
 local hudHooked = {} -- [frame] = global name, once the OnShow hook is installed
 
--- Known CoA HUD frames; always listed even before the client creates them
-local HUD_SEEDS = { "CoAResourceSegmentBar", "CoAResourceOrb" }
-
 function HudHider:Hidden()
   local profile = ns.profile
   if not profile then return {} end
@@ -332,28 +329,111 @@ function HudHider:Hidden()
   return profile.hiddenHuds
 end
 
-local function IsHudFrame(name, obj)
+-- A frame the on-screen picker may target: named (the name is what we
+-- persist), visible, and not one of our own or the screen roots.
+local function IsPickableFrame(name, obj)
   if type(name) ~= "string" or type(obj) ~= "table" then return false end
-  if not name:find("^CoA") or name:find("^CoACDM") then return false end
-  local ok, isFrame = pcall(function()
-    return obj.IsObjectType and obj:IsObjectType("Frame") and true or false
+  if name:find("^CoACDM") or name == "UIParent" or name == "WorldFrame" then return false end
+  local ok, good = pcall(function()
+    return (obj.IsObjectType and obj:IsObjectType("Frame")
+      and obj.GetName and obj:GetName() == name
+      and obj:IsVisible()) and true or false
   end)
-  return (ok and isFrame) and true or false
+  return (ok and good) and true or false
+end
+HudHider._IsPickableFrame = IsPickableFrame -- test seam
+
+-- Snapshot of pickable frames, taken once when picking starts (a full _G
+-- walk is too heavy for OnUpdate). `pool` defaults to _G (injectable in tests).
+function HudHider:CollectPickCandidates(pool)
+  pool = pool or _G
+  local list = {}
+  for name, obj in pairs(pool) do
+    if IsPickableFrame(name, obj) then list[#list + 1] = obj end
+  end
+  return list
 end
 
--- Scans for CoA HUD frames. `pool` defaults to _G (injectable for tests).
-function HudHider:Discover(pool)
-  pool = pool or _G
-  local found = {}
-  for _, name in ipairs(HUD_SEEDS) do found[name] = true end
-  for name in pairs(self:Hidden()) do found[name] = true end
-  for name, obj in pairs(pool) do
-    if IsHudFrame(name, obj) then found[name] = true end
+-- The smallest candidate under the cursor wins (most specific frame);
+-- half-screen-sized containers are ignored.
+function HudHider:PickAt(candidates)
+  local cap
+  local ok, w, h = pcall(function() return UIParent:GetWidth(), UIParent:GetHeight() end)
+  if ok and w and h and w > 0 then cap = w * h * 0.5 end
+  local best, bestArea
+  for _, frame in ipairs(candidates or {}) do
+    local okOver, over = pcall(frame.IsMouseOver, frame)
+    if okOver and over then
+      local area = (frame:GetWidth() or 0) * (frame:GetHeight() or 0)
+      if area > 0 and (not cap or area < cap) and (not bestArea or area < bestArea) then
+        best, bestArea = frame, area
+      end
+    end
   end
-  local list = {}
-  for name in pairs(found) do list[#list + 1] = name end
-  table.sort(list)
-  return list
+  return best
+end
+
+-- Full-screen picking overlay: hover highlights the frame under the cursor,
+-- left click hides it, right click discards the pick. onDone(nameOrNil)
+-- always runs so the caller can restore its window.
+local picker
+function HudHider:StartPicking(onDone)
+  if not picker then
+    picker = CreateFrame("Button", "CoACDMHudPicker", UIParent)
+    picker:SetFrameStrata("TOOLTIP")
+    picker:SetAllPoints(UIParent)
+    picker:EnableMouse(true)
+    picker:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    picker.label = picker:CreateFontString(nil, "OVERLAY")
+    picker.label:SetFont(STANDARD_TEXT_FONT, 15, "OUTLINE")
+    picker.label:SetPoint("TOP", 0, -140)
+    picker.label:SetTextColor(1, 0.82, 0.35)
+    picker.label:SetText("Click the HUD element to hide it  |  right click to cancel")
+
+    picker.box = CreateFrame("Frame", nil, picker)
+    picker.box:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
+    picker.box:SetBackdropBorderColor(1, 0.82, 0.35, 1)
+    picker.box.name = picker.box:CreateFontString(nil, "OVERLAY")
+    picker.box.name:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+    picker.box.name:SetPoint("BOTTOM", picker.box, "TOP", 0, 4)
+    picker.box.name:SetTextColor(1, 0.82, 0.35)
+    picker.box:Hide()
+
+    local acc = 0
+    picker:SetScript("OnUpdate", function(self, elapsed)
+      acc = acc + elapsed
+      if acc < 0.08 then return end
+      acc = 0
+      local frame = HudHider:PickAt(self.candidates)
+      self.current = frame
+      if frame then
+        self.box:ClearAllPoints()
+        self.box:SetPoint("TOPLEFT", frame, "TOPLEFT", -2, 2)
+        self.box:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 2, -2)
+        self.box.name:SetText(frame:GetName() or "")
+        self.box:Show()
+      else
+        self.box:Hide()
+      end
+    end)
+    picker:SetScript("OnClick", function(self, button)
+      self:Hide()
+      local frame = self.current
+      self.current = nil
+      self.candidates = nil
+      local picked
+      if button == "LeftButton" and frame and frame.GetName and frame:GetName() then
+        picked = frame:GetName()
+        HudHider:SetHidden(picked, true)
+        ns:Print("'" .. picked .. "' hidden - restore it from the Class HUD tab.")
+      end
+      if self.onDone then self.onDone(picked) end
+    end)
+    picker:Hide()
+  end
+  picker.onDone = onDone
+  picker.candidates = self:CollectPickCandidates()
+  picker:Show()
 end
 
 local function EnsureHudHook(frame, name)
