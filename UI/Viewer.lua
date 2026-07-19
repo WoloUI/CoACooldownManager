@@ -105,11 +105,31 @@ end
 --------------------------------------------------------------------------------
 -- Build + update loop
 --------------------------------------------------------------------------------
+-- Every widget a style module parks on the shared viewer frame. When a bar
+-- switches style (icons <-> bars <-> ...), the OLD style's widgets must be
+-- hidden here: each module's Build/Update only manages its own pool.
+local function HideStyleWidgets(frame)
+  for _, btn in ipairs(frame.buttons or {}) do btn:Hide() end   -- icons
+  for _, bar in ipairs(frame.bars or {}) do bar:Hide() end      -- bars
+  for _, seg in ipairs(frame.segments or {}) do                 -- stacks
+    seg:Hide()
+    if seg.border then seg.border:Hide() end
+  end
+  if frame.barHolder then frame.barHolder:Hide() end            -- stacks (bar mode)
+  if frame.countText then frame.countText:Hide() end            -- stacks
+  for _, alert in ipairs(frame.alerts or {}) do alert:Hide() end -- reminders
+end
+Viewer._HideStyleWidgets = HideStyleWidgets -- test seam
+
 function Viewer:BuildAll()
   local wanted = {}
   for _, cfg in ipairs(ns.profile.viewers) do
     wanted[cfg.name] = true
     local frame = AcquireFrame(cfg)
+    if frame.builtStyle and frame.builtStyle ~= cfg.style then
+      HideStyleWidgets(frame)
+    end
+    frame.builtStyle = cfg.style
     local style = Styles()[cfg.style]
     if style then
       style:Build(frame, cfg)

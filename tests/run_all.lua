@@ -5,6 +5,7 @@ local files = {
   "tests/test_db.lua",
   "tests/test_scanner.lua",
   "tests/test_tracking.lua",
+  "tests/test_viewer.lua",
 }
 
 local total, failed = 0, 0
