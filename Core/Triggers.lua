@@ -66,6 +66,11 @@ local function ConditionMatches(cond, element, display, ctx)
     if not cond.spellID then return false end
     local aura = ctx.aura(cond.unit or "player", cond.spellID, cond.onlyMine)
     return (aura ~= nil) == (cond.value ~= false)
+  elseif ctype == "ready" then
+    -- THIS element's spell is ready (value=true) or on cooldown (value=false)
+    local state = ctx.cooldown(element.name or element.spellID)
+    local ready = (state and state.known and not state.onCooldown) and true or false
+    return ready == (cond.value ~= false)
   elseif ctype == "othercd" then
     -- A DIFFERENT spell is ready (value=true) or on cooldown (value=false)
     if not cond.spellID then return false end

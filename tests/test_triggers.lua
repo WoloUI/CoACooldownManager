@@ -149,6 +149,17 @@ xEl.conditions[1].value = true
 d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = CdLookup }))
 check("no glow while other spell not ready", not d.glow)
 
+-- "This spell ready" condition: glow while the element's own CD is up
+local rEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "ready", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(rEl, Ctx({ cooldown = function() return readyState end }))
+check("glow when this spell is ready", d.glow)
+d = ns.Triggers:Evaluate(rEl, Ctx({ cooldown = function() return cdState end }))
+check("no glow while this spell on cooldown", not d.glow)
+rEl.conditions[1].value = false -- inverted: glow while on cooldown
+d = ns.Triggers:Evaluate(rEl, Ctx({ cooldown = function() return cdState end }))
+check("inverted: glow while on cooldown", d.glow)
+
 -- Summon timers: casting starts a manual countdown (no aura to read)
 ns.profile = { viewers = { { elements = {
   { kind = "summon", name = "Storm Banner", duration = 30, showWhen = "present" },

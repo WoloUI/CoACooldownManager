@@ -30,6 +30,7 @@ local SHOW_AURA = {
   { text = "Aura missing (only while absent)", value = "missing" },
 }
 local CONDITION_TYPES = {
+  { text = "This spell ready", value = "ready" },
   { text = "Time left (sec)", value = "remaining" },
   { text = "Stacks", value = "stacks" },
   { text = "Power (value)", value = "power" },
@@ -60,6 +61,7 @@ local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true
 local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true }
 local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true }
 local BOOL_OPTIONS = {
+  ready = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
   otheraura = { { text = "Active", value = true }, { text = "Missing", value = false } },
   othercd = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
   combat = { { text = "In combat", value = true }, { text = "Out of combat", value = false } },
