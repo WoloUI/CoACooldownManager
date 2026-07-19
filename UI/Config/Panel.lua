@@ -93,6 +93,10 @@ local TRACK_STYLE_OPTIONS = {
   { text = "Spell icon", value = "icon" },
   { text = "Color square", value = "square" },
 }
+local TRACK_MODE_OPTIONS = {
+  { text = "Aura on the unit", value = "aura" },
+  { text = "Summon timer (on cast)", value = "summon" },
+}
 
 local function TrackingCfg()
   return ns.profile and ns.profile.tracking
@@ -765,6 +769,25 @@ function Config:BuildControls()
     c.trackPreview.anchorBtns[i] = btn
   end
 
+  c.trackModeLabel = W.CreateLabel(parent, "Track", 12, W.colors.inkDim)
+  c.trackMode = W.CreateDropdown(parent, 150, function(_, value)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.mode = value
+    TouchTracking()
+    Config:Render()
+  end)
+  c.trackMode:SetOptions(TRACK_MODE_OPTIONS)
+  c.trackDurLabel = W.CreateLabel(parent, "Duration (s)", 12, W.colors.inkDim)
+  c.trackDur = W.CreateEditBox(parent, 40, 20, function(_, text)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.duration = math.max(tonumber(text) or 60, 1)
+    TouchTracking()
+  end)
+  c.trackSummonHint = W.CreateLabel(parent,
+    "For spells that leave no aura (pets, banners, totems): the timer starts\nwhen you cast the spell and the indicator shows on YOUR frame only.",
+    10, W.colors.inkDim)
   c.trackStyleLabel = W.CreateLabel(parent, "Style", 12, W.colors.inkDim)
   c.trackStyle = W.CreateDropdown(parent, 110, function(_, value)
     local ind = SelectedIndicator()
@@ -1317,7 +1340,8 @@ function Config:Render()
       row.remove.index = i
       local _, _, icon = GetSpellInfo(ind.spell)
       row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-      row.btn:SetLabel(tostring(ind.spell) .. "  |cff9aa3b5(" .. (ind.anchor or "CENTER"):lower() .. ")|r")
+      local modeTag = (ind.mode or "aura") == "summon" and "summon, " or ""
+      row.btn:SetLabel(tostring(ind.spell) .. "  |cff9aa3b5(" .. modeTag .. (ind.anchor or "CENTER"):lower() .. ")|r")
       if state.selectedTrack == i then
         row.btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       else
@@ -1352,6 +1376,15 @@ function Config:Render()
       -- Options to the right of the preview
       local RL, RC = 210, 280
       local ry = y2
+      local isSummon = (ind.mode or "aura") == "summon"
+      c2.trackModeLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackModeLabel:Show()
+      c2.trackMode:SetPoint("TOPLEFT", RC, ry); c2.trackMode:SetValue(ind.mode or "aura"); c2.trackMode:Show()
+      ry = ry - 26
+      if isSummon then
+        c2.trackDurLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackDurLabel:Show()
+        c2.trackDur:SetPoint("TOPLEFT", RC, ry); c2.trackDur:SetText(tostring(ind.duration or 60)); c2.trackDur:Show()
+        ry = ry - 26
+      end
       c2.trackStyleLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackStyleLabel:Show()
       c2.trackStyle:SetPoint("TOPLEFT", RC, ry); c2.trackStyle:SetValue(ind.style or "icon"); c2.trackStyle:Show()
       ry = ry - 26
@@ -1377,14 +1410,21 @@ function Config:Render()
         c2.trackTimeFont:SetPoint("TOPLEFT", 148, y2); c2.trackTimeFont:SetText(tostring(ind.timeFontSize or 9)); c2.trackTimeFont:Show()
       end
       c2.trackSweep:SetPoint("TOPLEFT", 210, y2); c2.trackSweep:SetChecked(ind.sweep); c2.trackSweep:Show()
-      c2.trackStacks:SetPoint("TOPLEFT", 350, y2); c2.trackStacks:SetChecked(ind.showStacks); c2.trackStacks:Show()
+      if not isSummon then -- summon timers have no stacks
+        c2.trackStacks:SetPoint("TOPLEFT", 350, y2); c2.trackStacks:SetChecked(ind.showStacks); c2.trackStacks:Show()
+      end
       y2 = y2 - 26
       c2.trackBlink:SetPoint("TOPLEFT", 0, y2); c2.trackBlink:SetChecked(ind.blink); c2.trackBlink:Show()
       if ind.blink then
         c2.trackBlinkThLabel:SetPoint("TOPLEFT", 148, y2 - 4); c2.trackBlinkThLabel:Show()
         c2.trackBlinkTh:SetPoint("TOPLEFT", 174, y2); c2.trackBlinkTh:SetText(tostring(ind.blinkThreshold or 3)); c2.trackBlinkTh:Show()
       end
-      y2 = y2 - 30
+      y2 = y2 - 26
+      if isSummon then
+        c2.trackSummonHint:SetPoint("TOPLEFT", 0, y2); c2.trackSummonHint:Show()
+        y2 = y2 - 30
+      end
+      y2 = y2 - 4
     end
 
     win.content:SetHeight(math.max(-y2 + 40, 400))

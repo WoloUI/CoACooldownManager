@@ -100,4 +100,39 @@ check("caster-less Rejuvenation passes", ns.Tracking.AuraPasses(rejuv) == true)
 local lifebloom = ns.Auras:GetAura("party1", "Lifebloom", false)
 check("someone else's Lifebloom filtered", ns.Tracking.AuraPasses(lifebloom) == false)
 
+-- Summon timers: spells that leave no aura (pets, banners, totems)
+local sInd = ns.Tracking.NewIndicator("Storm Banner")
+check("indicators default to aura mode", sInd.mode == "aura" and sInd.duration == 60)
+sInd.mode = "summon"
+sInd.duration = 30
+local aInd = ns.Tracking.NewIndicator("Renew") -- aura mode, must never match casts
+ns.profile.tracking.indicators = { sInd, aInd }
+
+check("non-matching cast ignored", ns.Tracking:OnCastSucceeded("Fireball", 1000) == false)
+check("aura-mode indicator ignores casts", ns.Tracking:OnCastSucceeded("Renew", 1000) == false)
+check("no timer before the cast",
+  ns.Tracking.EvaluateSummon(sInd, ns.Tracking.GetSummonTimer("Storm Banner"), 1000).shown == false)
+
+check("matching cast starts the timer (case-insensitive)",
+  ns.Tracking:OnCastSucceeded("storm banner", 1000) == true)
+local timer = ns.Tracking.GetSummonTimer("Storm Banner")
+check("timer holds the configured duration",
+  timer ~= nil and timer.duration == 30 and timer.expirationTime == 1030)
+
+local sd = ns.Tracking.EvaluateSummon(sInd, timer, 1010)
+check("summon shown while running", sd.shown == true and sd.timeLeft == 20)
+check("summon sweep window", sd.start == 1000 and sd.duration == 30)
+sInd.blink = true
+sd = ns.Tracking.EvaluateSummon(sInd, timer, 1028)
+check("summon blinks near expiry", sd.blinking == true)
+check("summon hidden after expiry", ns.Tracking.EvaluateSummon(sInd, timer, 1030).shown == false)
+
+-- Numeric spell IDs resolve to the cast name
+__spells[555] = { name = "Raise Dead", rank = "", icon = "i" }
+local byId = ns.Tracking.NewIndicator(555)
+byId.mode = "summon"
+table.insert(ns.profile.tracking.indicators, byId)
+check("ID-based summon matches the cast name", ns.Tracking:OnCastSucceeded("Raise Dead", 2000) == true)
+check("ID key resolves via GetSpellInfo", ns.Tracking.GetSummonTimer(555) ~= nil)
+
 return T
