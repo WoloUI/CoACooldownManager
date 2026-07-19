@@ -85,6 +85,10 @@ local function SetButtonDisplay(btn, display, cfg, now)
     btn.icon:SetVertexColor(1, 1, 1)
   end
 
+  -- Swipe direction: default darkens what's left; "Reverse sweep" darkens
+  -- the elapsed part instead (color = time remaining)
+  btn.cooldown:SetReverse(cfg.reverseSweep and true or false)
+
   -- Cooldown sweep: only re-fire SetCooldown when the spell's timer changed
   if display.start > 0 and display.duration > 0 then
     if btn._cdStart ~= display.start or btn._cdDuration ~= display.duration then

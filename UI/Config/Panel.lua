@@ -346,6 +346,10 @@ function Config:BuildControls()
     SelectedViewer().showStacks = checked
     Touch()
   end)
+  c.reverseSweep = W.CreateCheckbox(parent, "Reverse sweep", function(_, checked)
+    SelectedViewer().reverseSweep = checked
+    Touch()
+  end)
 
   c.visLabel = W.CreateLabel(parent, "Show bar", 12, W.colors.inkDim)
   c.visibility = W.CreateDropdown(parent, 110, function(_, value)
@@ -857,6 +861,12 @@ function Config:BuildControls()
     local ind = SelectedIndicator()
     if not ind then return end
     ind.showStacks = checked
+    TouchTracking()
+  end)
+  c.trackSweepRev = W.CreateCheckbox(parent, "Reverse sweep", function(_, checked)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.reverseSweep = checked
     TouchTracking()
   end)
   c.trackBlink = W.CreateCheckbox(parent, "Blink when expiring", function(_, checked)
@@ -1422,6 +1432,9 @@ function Config:Render()
         c2.trackBlinkThLabel:SetPoint("TOPLEFT", 148, y2 - 4); c2.trackBlinkThLabel:Show()
         c2.trackBlinkTh:SetPoint("TOPLEFT", 174, y2); c2.trackBlinkTh:SetText(tostring(ind.blinkThreshold or 3)); c2.trackBlinkTh:Show()
       end
+      if ind.sweep then
+        c2.trackSweepRev:SetPoint("TOPLEFT", 210, y2); c2.trackSweepRev:SetChecked(ind.reverseSweep); c2.trackSweepRev:Show()
+      end
       y2 = y2 - 30
     end
 
@@ -1798,6 +1811,9 @@ function Config:Render()
       c.showKeybind:SetChecked(viewer.showKeybind ~= false)
       c.showKeybind:Show()
       c.showStacks:SetPoint("TOPLEFT", C2, y)
+      c.reverseSweep:SetPoint("TOPLEFT", C3 - 60, y)
+      c.reverseSweep:SetChecked(viewer.reverseSweep)
+      c.reverseSweep:Show()
     end
     c.showStacks:SetChecked(viewer.showStacks ~= false)
     c.showStacks:Show()

@@ -212,6 +212,8 @@ local function SetWidget(w, cfg, display, now)
     w.icon:Show()
   end
 
+  -- Default is reversed (color = time left); the checkbox flips it
+  w.cooldown:SetReverse(cfg.reverseSweep and false or true)
   if cfg.sweep and display.start > 0 and display.duration > 0 then
     if w._cdStart ~= display.start or w._cdDuration ~= display.duration then
       w._cdStart, w._cdDuration = display.start, display.duration
