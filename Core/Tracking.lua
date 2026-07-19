@@ -152,6 +152,7 @@ function Tracking:Debug()
       .. (frame:IsShown() and "" or " (frame hidden)")
     local first = tracking and tracking.indicators[1]
     if first then
+      ns.Auras:ForceScan(unit)
       local aura = ns.Auras:GetAura(unit, first.spell, false)
       if aura then
         line = line .. " | '" .. tostring(first.spell) .. "' FOUND (mine="
@@ -161,6 +162,16 @@ function Tracking:Debug()
       end
     end
     ns:Print(line)
+    -- What the unit actually carries, so misnamed HoTs are easy to spot
+    local names = ns.Auras:CachedNames(unit)
+    if names and #names > 0 then
+      local shown = {}
+      for i = 1, math.min(#names, 10) do shown[i] = names[i] end
+      ns:Print("    auras: " .. table.concat(shown, ", ")
+        .. (#names > 10 and (" (+" .. (#names - 10) .. " more)") or ""))
+    else
+      ns:Print("    auras: none cached for this unit")
+    end
   end
   if count == 0 then
     ns:Print("no unit frames mapped. In a group, ElvUI headers (ElvUF_Party/Raid) should appear here.")

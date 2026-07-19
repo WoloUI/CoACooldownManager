@@ -113,6 +113,18 @@ function Auras:ForceScan(unit)
   ScanUnit(unit)
 end
 
+-- Debug helper: cached aura names on the unit ("*" = cast by the player)
+function Auras:CachedNames(unit)
+  local store = cache[unit]
+  if not store then return nil end
+  local names = {}
+  for name, aura in pairs(store.byName) do
+    names[#names + 1] = name .. (aura.mine and "*" or "")
+  end
+  table.sort(names)
+  return names
+end
+
 --------------------------------------------------------------------------------
 -- Events + throttled flush
 --------------------------------------------------------------------------------
