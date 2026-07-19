@@ -206,10 +206,14 @@ local function CreateWidget(overlay)
   local textOverlay = CreateFrame("Frame", nil, w)
   textOverlay:SetAllPoints()
   textOverlay:SetFrameLevel(w.cooldown:GetFrameLevel() + 1)
+  -- SetText on a font-less FontString is an error on this client: always
+  -- start with a default font (SetWidget re-applies the configured one)
   w.timeText = textOverlay:CreateFontString(nil, "OVERLAY")
   w.timeText:SetPoint("CENTER")
+  w.timeText:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
   w.stacksText = textOverlay:CreateFontString(nil, "OVERLAY")
   w.stacksText:SetPoint("BOTTOMRIGHT", 1, -1)
+  w.stacksText:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
 
   w._cdStart, w._cdDuration = 0, 0
   return w
