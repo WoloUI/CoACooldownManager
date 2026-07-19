@@ -313,6 +313,96 @@ function ns.IsSpellKnownByPlayer(spellID)
 end
 
 --------------------------------------------------------------------------------
+-- Class HUD hider: CoA draws extra per-class HUD frames (CoAResourceSegmentBar,
+-- CoAResourceOrb, ...). Checked frames stay hidden via an OnShow hook.
+-- Lives here (not in a new file) so it works without a full client restart.
+--------------------------------------------------------------------------------
+local HudHider = {}
+ns.HudHider = HudHider
+
+local hudHooked = {} -- [frame] = global name, once the OnShow hook is installed
+
+-- Known CoA HUD frames; always listed even before the client creates them
+local HUD_SEEDS = { "CoAResourceSegmentBar", "CoAResourceOrb" }
+
+function HudHider:Hidden()
+  local profile = ns.profile
+  if not profile then return {} end
+  profile.hiddenHuds = profile.hiddenHuds or {}
+  return profile.hiddenHuds
+end
+
+local function IsHudFrame(name, obj)
+  if type(name) ~= "string" or type(obj) ~= "table" then return false end
+  if not name:find("^CoA") or name:find("^CoACDM") then return false end
+  local ok, isFrame = pcall(function()
+    return obj.IsObjectType and obj:IsObjectType("Frame") and true or false
+  end)
+  return (ok and isFrame) and true or false
+end
+
+-- Scans for CoA HUD frames. `pool` defaults to _G (injectable for tests).
+function HudHider:Discover(pool)
+  pool = pool or _G
+  local found = {}
+  for _, name in ipairs(HUD_SEEDS) do found[name] = true end
+  for name in pairs(self:Hidden()) do found[name] = true end
+  for name, obj in pairs(pool) do
+    if IsHudFrame(name, obj) then found[name] = true end
+  end
+  local list = {}
+  for name in pairs(found) do list[#list + 1] = name end
+  table.sort(list)
+  return list
+end
+
+local function EnsureHudHook(frame, name)
+  if hudHooked[frame] or not frame.HookScript then return end
+  hudHooked[frame] = name
+  frame:HookScript("OnShow", function(f)
+    local hidden = ns.profile and ns.profile.hiddenHuds
+    if hidden and hidden[name] then f:Hide() end
+  end)
+end
+
+function HudHider:SetHidden(name, hidden)
+  local set = self:Hidden()
+  set[name] = hidden and true or nil
+  local frame = _G[name]
+  if frame and frame.Hide then
+    if hidden then
+      EnsureHudHook(frame, name)
+      frame:Hide()
+    elseif frame.Show then
+      frame:Show()
+    end
+  end
+end
+
+function HudHider:Apply()
+  local hidden = self:Hidden()
+  for name in pairs(hidden) do
+    local frame = _G[name]
+    if frame and frame.Hide then
+      EnsureHudHook(frame, name)
+      frame:Hide()
+    end
+  end
+  -- Frames hidden by an earlier profile come back when no longer listed
+  for frame, name in pairs(hudHooked) do
+    if not hidden[name] and frame.IsShown and not frame:IsShown() then
+      frame:Show()
+    end
+  end
+end
+
+ns:On("READY", function()
+  ns:On("PROFILE_CHANGED", function() HudHider:Apply() end)
+  ns:RegisterEvent("PLAYER_ENTERING_WORLD", function() HudHider:Apply() end)
+  HudHider:Apply()
+end)
+
+--------------------------------------------------------------------------------
 -- Login sequence
 --------------------------------------------------------------------------------
 ns:RegisterEvent("PLAYER_LOGIN", function()

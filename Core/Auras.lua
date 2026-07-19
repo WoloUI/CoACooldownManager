@@ -31,6 +31,9 @@ local function ScanFilter(unit, filter, store)
     -- Prefer the player's own copy when the same aura exists from two casters
     if spellId and (not store.byId[spellId] or aura.mine) then store.byId[spellId] = aura end
     if not store.byName[name] or aura.mine then store.byName[name] = aura end
+    -- Case-insensitive fallback for hand-typed names ("soothing flames")
+    local lower = name:lower()
+    if not store.byNameLower[lower] or aura.mine then store.byNameLower[lower] = aura end
   end
 end
 
@@ -39,7 +42,7 @@ local function ScanUnit(unit)
     cache[unit] = nil
     return
   end
-  local store = { byId = {}, byName = {}, scannedAt = GetTime() }
+  local store = { byId = {}, byName = {}, byNameLower = {}, scannedAt = GetTime() }
   ScanFilter(unit, "HELPFUL", store)
   ScanFilter(unit, "HARMFUL", store)
   cache[unit] = store
@@ -79,7 +82,12 @@ function Auras:GetAura(unit, spellRef, onlyMine)
       aura = name and store.byName[name]
     end
   else
+    -- Exact name first, then case/whitespace-insensitive (hand-typed names)
     aura = store.byName[spellRef]
+    if not aura and store.byNameLower then
+      local lower = spellRef:lower():gsub("^%s+", ""):gsub("%s+$", "")
+      aura = store.byNameLower[lower]
+    end
   end
   -- "Only mine" is meaningful for DoTs on enemies; on the player itself it
   -- causes misses (many Ascension buffs report no caster), so skip it there.

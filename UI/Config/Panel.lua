@@ -41,6 +41,7 @@ local KIND_OPTIONS = {
   { text = "Spell cooldown", value = "cooldown" },
   { text = "Buff", value = "buff" },
   { text = "Debuff", value = "debuff" },
+  { text = "Summon timer", value = "summon" },
 }
 local POWER_TYPE_OPTIONS = {
   { text = "Auto", value = "auto" },
@@ -92,10 +93,6 @@ local TRACK_ANCHORS = {
 local TRACK_STYLE_OPTIONS = {
   { text = "Spell icon", value = "icon" },
   { text = "Color square", value = "square" },
-}
-local TRACK_MODE_OPTIONS = {
-  { text = "Aura on the unit", value = "aura" },
-  { text = "Summon timer (on cast)", value = "summon" },
 }
 
 local function TrackingCfg()
@@ -160,8 +157,15 @@ local function BuildWindow()
   end)
   win.trackingBtn:SetPoint("TOPLEFT", PAD, -95)
 
+  win.hudBtn = W.CreateButton(win.sidebar, "Class HUD", SIDEBAR_W - 2 * PAD, 21, function()
+    state.selected = "__hud"
+    state.selectedElement = nil
+    Config:Render()
+  end)
+  win.hudBtn:SetPoint("TOPLEFT", PAD, -118)
+
   win.sidebar.header = W.CreateSection(win.sidebar, "BARS")
-  win.sidebar.header:SetPoint("TOPLEFT", PAD, -125)
+  win.sidebar.header:SetPoint("TOPLEFT", PAD, -148)
   win.sidebar.buttons = {}
 
   win.newBar = W.CreateButton(win.sidebar, "+ New bar...", SIDEBAR_W - 2 * PAD, 22, function()
@@ -551,8 +555,8 @@ function Config:BuildControls()
   c.addKind:SetValue("cooldown")
   c.addBtn = W.CreateButton(parent, "Add", 50, 20, function()
     local viewer = SelectedViewer()
-    local input = c.addInput:GetText()
-    if not input or input == "" then return end
+    local input = (c.addInput:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if input == "" then return end
     local id, name, icon = ns.ResolveSpell(input)
     if not id and not name then
       if c.addKind.value == "cooldown" then
@@ -568,6 +572,7 @@ function Config:BuildControls()
       kind = kind,
       unit = isDots and "target" or "player",
       onlyMine = true, conditions = {},
+      duration = kind == "summon" and 60 or nil,
       showWhen = (kind ~= "cooldown" and not isDots) and "present" or "always",
     })
     c.addInput:SetText("")
@@ -576,6 +581,16 @@ function Config:BuildControls()
   end)
   c.addHint = W.CreateLabel(parent, "Type a name or spell ID, or drag a spell from your spellbook.", 10, W.colors.inkDim)
   c.addLabel = W.CreateLabel(parent, "Add spell", 12, W.colors.inkDim)
+  -- Summon elements: manual countdown started by casting the spell
+  c.elDurLabel = W.CreateLabel(parent, "Summon duration (s)", 12, W.colors.inkDim)
+  c.elDur = W.CreateEditBox(parent, 40, 20, function(_, text)
+    local viewer = SelectedViewer()
+    local el = viewer and state.selectedElement and viewer.elements[state.selectedElement]
+    if not el then return end
+    el.duration = math.max(tonumber(text) or 60, 1)
+    Touch()
+    Config:Render()
+  end)
   c.remTypeLabel = W.CreateLabel(parent, "Type", 12, W.colors.inkDim)
 
   -- Reminder elements
@@ -724,8 +739,8 @@ function Config:BuildControls()
   c.trackAddBtn = W.CreateButton(parent, "Add", 50, 20, function()
     local tracking = TrackingCfg()
     if not tracking or not ns.Tracking then return end
-    local input = c.trackAddInput:GetText()
-    if not input or input == "" then return end
+    local input = (c.trackAddInput:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if input == "" then return end
     -- Names preferred (survive spell-ID changes); unknown text matches
     -- aura names at runtime; unknown numeric IDs match by aura spellId
     local _, name = ns.ResolveSpell(input)
@@ -769,25 +784,6 @@ function Config:BuildControls()
     c.trackPreview.anchorBtns[i] = btn
   end
 
-  c.trackModeLabel = W.CreateLabel(parent, "Track", 12, W.colors.inkDim)
-  c.trackMode = W.CreateDropdown(parent, 150, function(_, value)
-    local ind = SelectedIndicator()
-    if not ind then return end
-    ind.mode = value
-    TouchTracking()
-    Config:Render()
-  end)
-  c.trackMode:SetOptions(TRACK_MODE_OPTIONS)
-  c.trackDurLabel = W.CreateLabel(parent, "Duration (s)", 12, W.colors.inkDim)
-  c.trackDur = W.CreateEditBox(parent, 40, 20, function(_, text)
-    local ind = SelectedIndicator()
-    if not ind then return end
-    ind.duration = math.max(tonumber(text) or 60, 1)
-    TouchTracking()
-  end)
-  c.trackSummonHint = W.CreateLabel(parent,
-    "For spells that leave no aura (pets, banners, totems): the timer starts\nwhen you cast the spell and the indicator shows on YOUR frame only.",
-    10, W.colors.inkDim)
   c.trackStyleLabel = W.CreateLabel(parent, "Style", 12, W.colors.inkDim)
   c.trackStyle = W.CreateDropdown(parent, 110, function(_, value)
     local ind = SelectedIndicator()
@@ -878,6 +874,16 @@ function Config:BuildControls()
     TouchTracking()
   end)
 
+  -- Class HUD view (hide CoA per-class HUD frames)
+  c.hudHint = W.CreateLabel(parent,
+    "CoA adds its own class HUDs (resource orbs, segment bars, ...). Check a\nframe to hide it; uncheck to show it again. The list scans for CoA-named\nframes - open this tab while the HUD is on screen so it can be found.",
+    10, W.colors.inkDim)
+  c.hudHeader = W.CreateSection(parent, "COA HUD FRAMES")
+  c.hudRows = {}
+  c.hudRescan = W.CreateButton(parent, "Rescan", 70, 20, function()
+    Config:Render()
+  end)
+
   c.trigger = ns.TriggerBuilder:Create(parent)
 
   -- Utility buttons at the bottom of the sidebar. Stored on `win`, not in
@@ -920,11 +926,12 @@ local function HideAllControls()
   for _, row in ipairs(controls.profRows) do row:Hide() end
   for _, row in ipairs(controls.specRows) do row:Hide() end
   for _, row in ipairs(controls.trackRows) do row:Hide() end
+  for _, row in ipairs(controls.hudRows) do row:Hide() end
 end
 
 local function RenderSidebar()
   -- General entry highlights
-  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups", [win.profilesBtn] = "__profiles", [win.trackingBtn] = "__tracking" }) do
+  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups", [win.profilesBtn] = "__profiles", [win.trackingBtn] = "__tracking", [win.hudBtn] = "__hud" }) do
     if state.selected == key then
       btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       btn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
@@ -934,7 +941,7 @@ local function RenderSidebar()
     end
   end
 
-  local y = -145
+  local y = -168
   local buttons = win.sidebar.buttons
   local index = 0
   for _, cfg in ipairs(ns.profile.viewers) do
@@ -997,7 +1004,8 @@ local function ElementLabel(el)
     end
     return "Weapon enchant  |cff9aa3b5(" .. (el.slot or "mainhand") .. ")|r"
   end
-  local kindText = el.kind == "cooldown" and "CD" or el.kind == "buff" and "Buff" or "Debuff"
+  local kindText = el.kind == "cooldown" and "CD" or el.kind == "buff" and "Buff"
+    or el.kind == "summon" and ("Summon " .. (el.duration or 60) .. "s") or "Debuff"
   local idText = el.spellID and (" #" .. el.spellID) or ""
   return (el.name or "?") .. "  |cff9aa3b5(" .. kindText .. idText .. ")|r"
 end
@@ -1053,6 +1061,13 @@ local function RenderElementList(c, viewer, y, isReminders)
 
     -- Trigger builder under the selected element (not for reminders)
     if not isReminders and state.selectedElement == i then
+      if el.kind == "summon" then
+        c.elDurLabel:SetPoint("TOPLEFT", 16, y - 8); c.elDurLabel:Show()
+        c.elDur:SetPoint("TOPLEFT", 140, y - 4)
+        c.elDur:SetText(tostring(el.duration or 60))
+        c.elDur:Show()
+        y = y - 28
+      end
       c.trigger:ClearAllPoints()
       c.trigger:SetPoint("TOPLEFT", 16, y - 4)
       c.trigger:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
@@ -1340,8 +1355,7 @@ function Config:Render()
       row.remove.index = i
       local _, _, icon = GetSpellInfo(ind.spell)
       row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-      local modeTag = (ind.mode or "aura") == "summon" and "summon, " or ""
-      row.btn:SetLabel(tostring(ind.spell) .. "  |cff9aa3b5(" .. modeTag .. (ind.anchor or "CENTER"):lower() .. ")|r")
+      row.btn:SetLabel(tostring(ind.spell) .. "  |cff9aa3b5(" .. (ind.anchor or "CENTER"):lower() .. ")|r")
       if state.selectedTrack == i then
         row.btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       else
@@ -1376,15 +1390,6 @@ function Config:Render()
       -- Options to the right of the preview
       local RL, RC = 210, 280
       local ry = y2
-      local isSummon = (ind.mode or "aura") == "summon"
-      c2.trackModeLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackModeLabel:Show()
-      c2.trackMode:SetPoint("TOPLEFT", RC, ry); c2.trackMode:SetValue(ind.mode or "aura"); c2.trackMode:Show()
-      ry = ry - 26
-      if isSummon then
-        c2.trackDurLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackDurLabel:Show()
-        c2.trackDur:SetPoint("TOPLEFT", RC, ry); c2.trackDur:SetText(tostring(ind.duration or 60)); c2.trackDur:Show()
-        ry = ry - 26
-      end
       c2.trackStyleLabel:SetPoint("TOPLEFT", RL, ry - 4); c2.trackStyleLabel:Show()
       c2.trackStyle:SetPoint("TOPLEFT", RC, ry); c2.trackStyle:SetValue(ind.style or "icon"); c2.trackStyle:Show()
       ry = ry - 26
@@ -1410,22 +1415,64 @@ function Config:Render()
         c2.trackTimeFont:SetPoint("TOPLEFT", 148, y2); c2.trackTimeFont:SetText(tostring(ind.timeFontSize or 9)); c2.trackTimeFont:Show()
       end
       c2.trackSweep:SetPoint("TOPLEFT", 210, y2); c2.trackSweep:SetChecked(ind.sweep); c2.trackSweep:Show()
-      if not isSummon then -- summon timers have no stacks
-        c2.trackStacks:SetPoint("TOPLEFT", 350, y2); c2.trackStacks:SetChecked(ind.showStacks); c2.trackStacks:Show()
-      end
+      c2.trackStacks:SetPoint("TOPLEFT", 350, y2); c2.trackStacks:SetChecked(ind.showStacks); c2.trackStacks:Show()
       y2 = y2 - 26
       c2.trackBlink:SetPoint("TOPLEFT", 0, y2); c2.trackBlink:SetChecked(ind.blink); c2.trackBlink:Show()
       if ind.blink then
         c2.trackBlinkThLabel:SetPoint("TOPLEFT", 148, y2 - 4); c2.trackBlinkThLabel:Show()
         c2.trackBlinkTh:SetPoint("TOPLEFT", 174, y2); c2.trackBlinkTh:SetText(tostring(ind.blinkThreshold or 3)); c2.trackBlinkTh:Show()
       end
-      y2 = y2 - 26
-      if isSummon then
-        c2.trackSummonHint:SetPoint("TOPLEFT", 0, y2); c2.trackSummonHint:Show()
-        y2 = y2 - 30
-      end
-      y2 = y2 - 4
+      y2 = y2 - 30
     end
+
+    win.content:SetHeight(math.max(-y2 + 40, 400))
+    return
+  end
+
+  -- Class HUD view (hide CoA per-class HUD frames)
+  if state.selected == "__hud" then
+    local c2 = controls
+    local y2 = -10
+    c2.title:SetPoint("TOPLEFT", 0, y2)
+    c2.title:SetText("Class HUD")
+    c2.title:Show()
+    c2.hudRescan:SetPoint("TOPRIGHT", win.content, "TOPRIGHT", 0, y2); c2.hudRescan:Show()
+    y2 = y2 - 30
+    c2.hudHint:SetPoint("TOPLEFT", 0, y2); c2.hudHint:Show()
+    y2 = y2 - 48
+    c2.hudHeader:SetPoint("TOPLEFT", 0, y2); c2.hudHeader:Show()
+    y2 = y2 - 20
+
+    local hidden = ns.HudHider:Hidden()
+    local names = ns.HudHider:Discover()
+    for i, name in ipairs(names) do
+      local row = c2.hudRows[i]
+      if not row then
+        row = CreateFrame("Frame", nil, win.content)
+        row:SetHeight(22)
+        -- Pooled rows: the frame name is resolved from the checkbox at click time
+        row.check = W.CreateCheckbox(row, "", function(check, checked)
+          ns.HudHider:SetHidden(check.hudName, checked)
+          Config:Render()
+        end)
+        row.check:SetPoint("LEFT", 4, 0)
+        row.label = W.CreateLabel(row, "", 12)
+        row.label:SetPoint("LEFT", 34, 0)
+        c2.hudRows[i] = row
+      end
+      row.check.hudName = name
+      row.check:SetChecked(hidden[name])
+      local exists = _G[name] ~= nil
+      row.label:SetText(name
+        .. (hidden[name] and "  |cffd86a5a(hidden)|r" or "")
+        .. (exists and "" or "  |cff9aa3b5(not loaded on this class)|r"))
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", 0, y2)
+      row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      row:Show()
+      y2 = y2 - 24
+    end
+    for i = #names + 1, #c2.hudRows do c2.hudRows[i]:Hide() end
 
     win.content:SetHeight(math.max(-y2 + 40, 400))
     return

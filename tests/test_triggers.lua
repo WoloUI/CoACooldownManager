@@ -149,4 +149,30 @@ xEl.conditions[1].value = true
 d = ns.Triggers:Evaluate(xEl, Ctx({ cooldown = CdLookup }))
 check("no glow while other spell not ready", not d.glow)
 
+-- Summon timers: casting starts a manual countdown (no aura to read)
+ns.profile = { viewers = { { elements = {
+  { kind = "summon", name = "Storm Banner", duration = 30, showWhen = "present" },
+} } } }
+local sEl = ns.profile.viewers[1].elements[1]
+check("summon hidden before any cast", not ns.Triggers:Evaluate(sEl, Ctx()).shown)
+check("non-matching cast ignored", ns.Triggers:OnCastSucceeded("Fireball", NOW) == false)
+check("matching cast starts the timer (case-insensitive)",
+  ns.Triggers:OnCastSucceeded("storm banner", NOW) == true)
+d = ns.Triggers:Evaluate(sEl, Ctx())
+check("summon shown with its countdown",
+  d.shown and d.duration == 30 and d.expirationTime == NOW + 30 and d.start == NOW)
+
+local late = Ctx({ now = function() return NOW + 30 end })
+check("summon hidden after expiry", not ns.Triggers:Evaluate(sEl, late).shown)
+sEl.showWhen = "always"
+d = ns.Triggers:Evaluate(sEl, late)
+check("showWhen=always grays an expired summon", d.shown and d.missing and d.desaturate)
+
+-- Numeric spell IDs resolve to the cast name
+__spells[555] = { name = "Raise Dead", rank = "", icon = "i" }
+table.insert(ns.profile.viewers[1].elements,
+  { kind = "summon", spellID = 555, duration = 60 })
+check("ID-based summon matches the cast name", ns.Triggers:OnCastSucceeded("Raise Dead", NOW) == true)
+check("timer readable through the ID", ns.Triggers.GetSummonTimer(555) ~= nil)
+
 return T

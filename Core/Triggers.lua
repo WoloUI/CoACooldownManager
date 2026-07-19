@@ -94,6 +94,51 @@ local function ApplyCondition(cond, matched, display)
 end
 
 --------------------------------------------------------------------------------
+-- Summon timers: casting the spell starts a manual countdown (for summons
+-- that leave no aura). Keyed by lowercase spell name.
+--------------------------------------------------------------------------------
+local summonTimers = {}
+
+function Triggers.SummonKey(spell)
+  if type(spell) == "number" then
+    local name = GetSpellInfo(spell)
+    spell = name or spell
+  end
+  local key = tostring(spell):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  return key
+end
+
+function Triggers.GetSummonTimer(spell)
+  return summonTimers[Triggers.SummonKey(spell)]
+end
+
+-- Called on every successful player cast (test seam: pass now explicitly).
+function Triggers:OnCastSucceeded(spellName, now)
+  if not (ns.profile and ns.profile.viewers) then return false end
+  local castKey = Triggers.SummonKey(spellName or "")
+  local matched = false
+  for _, viewer in ipairs(ns.profile.viewers) do
+    for _, element in ipairs(viewer.elements or {}) do
+      if element.kind == "summon"
+        and Triggers.SummonKey(element.name or element.spellID) == castKey then
+        local duration = element.duration or 60
+        summonTimers[castKey] = { duration = duration, expirationTime = now + duration }
+        matched = true
+      end
+    end
+  end
+  return matched
+end
+
+ns:On("READY", function()
+  ns:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, spellName)
+    if unit == "player" then
+      Triggers:OnCastSucceeded(spellName, GetTime())
+    end
+  end)
+end)
+
+--------------------------------------------------------------------------------
 -- Element evaluation
 --------------------------------------------------------------------------------
 -- Returns a display table:
@@ -137,6 +182,23 @@ function Triggers:Evaluate(element, ctx)
     end
     if not state.usable and not state.onCooldown then
       display.desaturate = true
+    end
+  elseif element.kind == "summon" then
+    -- Manual timer for spells that leave no aura (pets, banners, totems):
+    -- casting the spell starts a countdown of element.duration seconds
+    local timer = Triggers.GetSummonTimer(element.name or element.spellID)
+    local now = ctx.now()
+    if timer and now < timer.expirationTime then
+      display.shown = true
+      display.duration = timer.duration
+      display.expirationTime = timer.expirationTime
+      display.start = timer.expirationTime - timer.duration
+    else
+      display.missing = true
+      if (element.showWhen or "present") == "always" then
+        display.shown = true -- gray: prompts a re-summon
+        display.desaturate = true
+      end
     end
   else -- "buff" | "debuff"
     local aura = ctx.aura(element.unit or "player", element.spellID or element.name, element.onlyMine)

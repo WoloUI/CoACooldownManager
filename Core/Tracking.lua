@@ -15,9 +15,6 @@ Tracking.ANCHORS = {
 function Tracking.NewIndicator(spell)
   return {
     spell = spell,
-    -- "aura": HoT on the unit; "summon": manual timer started by casting the
-    -- spell (pets, banners, totems - things that leave no aura), player frame only
-    mode = "aura", duration = 60,
     anchor = "CENTER", x = 0, y = 0,
     style = "icon", color = { 0.3, 0.8, 0.4 },
     w = 12, h = 12,
@@ -54,46 +51,6 @@ function Tracking.Evaluate(cfg, aura, now)
   if not Tracking.AuraPasses(aura) then return { shown = false } end
   return BuildDisplay(cfg, aura.icon, aura.duration or 0, aura.expirationTime or 0,
     aura.count or 0, now)
-end
-
---------------------------------------------------------------------------------
--- Summon timers: spells that leave no aura (pets, banners, totems). Casting
--- the spell starts a manual countdown of cfg.duration seconds.
---------------------------------------------------------------------------------
-local summonTimers = {} -- [lowercase spell name] = { duration, expirationTime }
-
-function Tracking.SummonKey(spell)
-  if type(spell) == "number" then
-    local name = GetSpellInfo(spell)
-    spell = name or spell
-  end
-  return tostring(spell):lower()
-end
-
-function Tracking.EvaluateSummon(cfg, timer, now)
-  if not timer or now >= timer.expirationTime then return { shown = false } end
-  return BuildDisplay(cfg, nil, timer.duration, timer.expirationTime, 0, now)
-end
-
-function Tracking.GetSummonTimer(spell)
-  return summonTimers[Tracking.SummonKey(spell)]
-end
-
--- Called on every successful player cast; returns true when a summon
--- indicator matched (test seam - the event handler passes GetTime()).
-function Tracking:OnCastSucceeded(spellName, now)
-  local tracking = ns.profile and ns.profile.tracking
-  if not tracking then return false end
-  local castKey = tostring(spellName or ""):lower()
-  local matched = false
-  for _, cfg in ipairs(tracking.indicators) do
-    if (cfg.mode or "aura") == "summon" and Tracking.SummonKey(cfg.spell) == castKey then
-      local duration = cfg.duration or 60
-      summonTimers[castKey] = { duration = duration, expirationTime = now + duration }
-      matched = true
-    end
-  end
-  return matched
 end
 
 --------------------------------------------------------------------------------
@@ -295,16 +252,6 @@ local function FakeDisplay(now)
   }
 end
 
--- The player can be mapped as "player", "party0"-style or "raidN" in raid frames
-local function IsPlayerUnit(unit)
-  if unit == "player" then return true end
-  if UnitIsUnit then
-    local ok, same = pcall(UnitIsUnit, unit, "player")
-    return ok and same and true or false
-  end
-  return false
-end
-
 local function UpdateFrame(frame, unit)
   local overlay = GetOverlay(frame)
   local tracking = ns.profile.tracking
@@ -319,12 +266,6 @@ local function UpdateFrame(frame, unit)
     local display
     if testing then
       display = FakeDisplay(now)
-    elseif (cfg.mode or "aura") == "summon" then
-      if IsPlayerUnit(unit) then
-        display = Tracking.EvaluateSummon(cfg, Tracking.GetSummonTimer(cfg.spell), now)
-      else
-        display = { shown = false }
-      end
     else
       display = Tracking.Evaluate(cfg, ns.Auras:GetAura(unit, cfg.spell, false), now)
     end
@@ -352,12 +293,6 @@ end
 
 function Tracking:HideAll()
   for _, overlay in pairs(overlays) do overlay:Hide() end
-end
-
-local function RefreshPlayerFrames()
-  for unit, frame in pairs(unitFrames) do
-    if IsPlayerUnit(unit) then UpdateFrame(frame, unit) end
-  end
 end
 
 -- Applies the current profile: watch group auras + rescan when enabled.
@@ -389,13 +324,6 @@ ns:On("READY", function()
   ns:RegisterEvent("PARTY_MEMBERS_CHANGED", QueueRescan)
   ns:RegisterEvent("PLAYER_ENTERING_WORLD", QueueRescan)
 
-  -- Summon timers start when the player successfully casts the spell
-  ns:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, spellName)
-    if unit == "player" and Enabled() and Tracking:OnCastSucceeded(spellName, GetTime()) then
-      RefreshPlayerFrames()
-    end
-  end)
-
   local textAcc, verifyAcc = 0, 0
   ns:OnTick(function(dt)
     if not Enabled() then return end
@@ -413,13 +341,6 @@ ns:On("READY", function()
           for _, w in ipairs(overlay.widgets) do
             if w._exp then UpdateDynamic(w, now) end
           end
-        end
-      end
-      -- Expired summon timers: drop them and clear the player indicators
-      for key, timer in pairs(summonTimers) do
-        if now >= timer.expirationTime then
-          summonTimers[key] = nil
-          RefreshPlayerFrames()
         end
       end
     end
