@@ -506,6 +506,8 @@ SlashCmdList["COACDM"] = function(msg)
     ns.Scanner:Scan(true)
   elseif msg == "reset" then
     ns.DB:ResetProfile()
+  elseif msg == "debug" then
+    if ns.Tracking then ns.Tracking:Debug() end
   else
     ns.Config:Toggle()
   end

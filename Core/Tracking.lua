@@ -56,21 +56,14 @@ end
 --------------------------------------------------------------------------------
 -- Unit frame discovery (ElvUI first, Blizzard fallback)
 --------------------------------------------------------------------------------
-local candidates
+-- Individually named frames (player + Blizzard party fallback)
+local SINGLE_CANDIDATES = { "ElvUF_Player", "PlayerFrame",
+  "PartyMemberFrame1", "PartyMemberFrame2", "PartyMemberFrame3", "PartyMemberFrame4" }
 
-local function BuildCandidates()
-  local list = { "ElvUF_Player", "PlayerFrame" }
-  for b = 1, 5 do list[#list + 1] = "ElvUF_PartyGroup1UnitButton" .. b end
-  for i = 1, 4 do list[#list + 1] = "PartyMemberFrame" .. i end
-  for _, prefix in ipairs({ "ElvUF_Raid", "ElvUF_Raid10", "ElvUF_Raid25", "ElvUF_Raid40" }) do
-    for g = 1, 8 do
-      for b = 1, 5 do
-        list[#list + 1] = prefix .. "Group" .. g .. "UnitButton" .. b
-      end
-    end
-  end
-  return list
-end
+-- ElvUI containers whose descendants are the real unit buttons. Walking the
+-- children (instead of guessing button names) survives any group count,
+-- raid-wide sorting and custom layouts.
+local HEADER_ROOTS = { "ElvUF_Party", "ElvUF_Raid", "ElvUF_Raid10", "ElvUF_Raid25", "ElvUF_Raid40" }
 
 local function FrameUnit(frame, name)
   local unit = frame.unit -- oUF (ElvUI) stores it on the button
@@ -99,22 +92,38 @@ local function Enabled()
   return tracking and tracking.enabled and #tracking.indicators > 0
 end
 
+local function TryMap(frame, name)
+  if not frame or not frame.IsShown then return end
+  local unit = FrameUnit(frame, name or "")
+  if not unit or not UnitExists(unit) then return end
+  local current = unitFrames[unit]
+  -- Prefer a visible frame (ElvUI hides the Blizzard ones)
+  if not current or (not current:IsShown() and frame:IsShown()) then
+    unitFrames[unit] = frame
+    frameNames[frame] = name or (frame.GetName and frame:GetName()) or "?"
+  end
+end
+
+local function WalkHeader(parent, depth)
+  local children = { parent:GetChildren() }
+  for _, child in ipairs(children) do
+    TryMap(child)
+    if depth < 3 and child.GetChildren then
+      WalkHeader(child, depth + 1)
+    end
+  end
+end
+
 function Tracking:Rescan()
   rescanNeeded = false
   for unit in pairs(unitFrames) do unitFrames[unit] = nil end
-  candidates = candidates or BuildCandidates()
-  for _, name in ipairs(candidates) do
-    local frame = _G[name]
-    if frame and frame.IsShown then
-      local unit = FrameUnit(frame, name)
-      if unit and UnitExists(unit) then
-        local current = unitFrames[unit]
-        -- Prefer a visible frame (ElvUI hides the Blizzard ones)
-        if not current or (not current:IsShown() and frame:IsShown()) then
-          unitFrames[unit] = frame
-          frameNames[frame] = name
-        end
-      end
+  for _, name in ipairs(SINGLE_CANDIDATES) do
+    TryMap(_G[name], name)
+  end
+  for _, rootName in ipairs(HEADER_ROOTS) do
+    local root = _G[rootName]
+    if root and root.GetChildren then
+      WalkHeader(root, 1)
     end
   end
   -- Overlays on frames that no longer track a unit go dark
@@ -122,6 +131,39 @@ function Tracking:Rescan()
   for _, frame in pairs(unitFrames) do active[frame] = true end
   for frame, overlay in pairs(overlays) do
     if not active[frame] then overlay:Hide() end
+  end
+end
+
+-- /cdm debug: prints what the tracker sees (frame mapping + aura lookups)
+function Tracking:Debug()
+  local tracking = ns.profile and ns.profile.tracking
+  ns:Print("tracking enabled: " .. tostring(tracking and tracking.enabled or false)
+    .. " | indicators: " .. (tracking and #tracking.indicators or 0))
+  if tracking then
+    for _, cfg in ipairs(tracking.indicators) do
+      ns:Print("  - '" .. tostring(cfg.spell) .. "' (" .. (cfg.style or "icon") .. ", " .. (cfg.anchor or "CENTER") .. ")")
+    end
+  end
+  self:Rescan()
+  local count = 0
+  for unit, frame in pairs(unitFrames) do
+    count = count + 1
+    local line = unit .. " -> " .. (frameNames[frame] or "?")
+      .. (frame:IsShown() and "" or " (frame hidden)")
+    local first = tracking and tracking.indicators[1]
+    if first then
+      local aura = ns.Auras:GetAura(unit, first.spell, false)
+      if aura then
+        line = line .. " | '" .. tostring(first.spell) .. "' FOUND (mine="
+          .. tostring(aura.mine) .. ", caster known=" .. tostring(aura.hasCaster) .. ")"
+      else
+        line = line .. " | '" .. tostring(first.spell) .. "' not on this unit"
+      end
+    end
+    ns:Print(line)
+  end
+  if count == 0 then
+    ns:Print("no unit frames mapped. In a group, ElvUI headers (ElvUF_Party/Raid) should appear here.")
   end
 end
 
