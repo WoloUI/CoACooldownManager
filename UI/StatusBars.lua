@@ -158,30 +158,88 @@ end
 local ShieldBar = {}
 ns.ShieldBar = ShieldBar
 
--- UnitGetTotalAbsorbs is a UNIT total (no per-aura split on this client):
--- the max is learned when the aura instance appears and corrected upward
--- while it lasts, so the column reads "full when just applied".
-local shieldState = setmetatable({}, { __mode = "k" })
+-- UnitGetTotalAbsorbs is a UNIT total (no per-aura split on this client).
+-- A per-unit ledger splits it across the tracked shields: each instance's
+-- size is the total's jump when its aura (re)appears, drains are attributed
+-- to the OLDEST shield first (WoW consumes absorbs in application order),
+-- and every tick the ledger is reconciled so the sum matches the real total.
+-- With a single shield up the value is exact.
+local ledgers = {} -- [unit] = weak table [element] = {exp, initial, remaining, appliedAt, seenAt}
+local STALE = 0.4  -- instances updated within this window count as live
 
-local function AbsorbFraction(element, display, unit)
-  if not UnitGetTotalAbsorbs then
-    -- No absorb API: fall back to draining with the buff's remaining time
-    if display.duration and display.duration > 0 then
-      return math.max(0, display.expirationTime - GetTime()) / display.duration, nil
+-- entries: array of { element, exp }. Returns the unit's instance table.
+local function UpdateLedger(unit, entries, total, now)
+  local insts = ledgers[unit]
+  if not insts then
+    insts = setmetatable({}, { __mode = "k" })
+    ledgers[unit] = insts
+  end
+
+  -- stamp known instances; collect (re)applied shields
+  local fresh = {}
+  for _, entry in ipairs(entries) do
+    local inst = insts[entry.element]
+    if inst and inst.exp == entry.exp then
+      inst.seenAt = now
+    else
+      fresh[#fresh + 1] = entry
     end
-    return 1, nil
   end
-  local absorb = UnitGetTotalAbsorbs(unit) or 0
-  local st = shieldState[element]
-  if not st or st.exp ~= display.expirationTime then
-    st = { exp = display.expirationTime, max = math.max(absorb, 1) }
-    shieldState[element] = st
-  elseif absorb > st.max then
-    st.max = absorb
+
+  -- live set: recently-updated instances (covers several viewers ticking the
+  -- same unit) — expired shields age out of the math on their own
+  local live, sum = {}, 0
+  for _, inst in pairs(insts) do
+    if now - (inst.seenAt or 0) <= STALE then
+      live[#live + 1] = inst
+      sum = sum + inst.remaining
+    end
   end
-  return math.min(absorb / st.max, 1), absorb
+
+  -- new instances split whatever the total holds beyond the known shields
+  if #fresh > 0 then
+    local share = math.max(total - sum, 1) / #fresh
+    for _, entry in ipairs(fresh) do
+      local inst = { exp = entry.exp, initial = share, remaining = share,
+        appliedAt = now, seenAt = now }
+      insts[entry.element] = inst
+      live[#live + 1] = inst
+      sum = sum + share
+    end
+  end
+
+  -- reconcile with the real total
+  local excess = sum - total
+  if excess > 0 then
+    table.sort(live, function(a, b) return (a.appliedAt or 0) < (b.appliedAt or 0) end)
+    for _, inst in ipairs(live) do
+      if excess <= 0 then break end
+      local cut = math.min(inst.remaining, excess)
+      inst.remaining = inst.remaining - cut
+      excess = excess - cut
+    end
+  elseif excess < 0 then
+    -- total grew without a tracked (re)application (e.g. an untracked
+    -- shield): top up the newest, capped at its own size
+    local newest
+    for _, inst in ipairs(live) do
+      if not newest or (inst.appliedAt or 0) > (newest.appliedAt or 0) then newest = inst end
+    end
+    if newest then
+      newest.remaining = math.min(newest.remaining - excess, newest.initial)
+    end
+  end
+  return insts
 end
-ShieldBar._AbsorbFraction = AbsorbFraction -- test seam
+ShieldBar._UpdateLedger = UpdateLedger -- test seam
+
+-- No absorb API: fall back to draining with the buff's remaining time
+local function TimeFraction(display)
+  if display.duration and display.duration > 0 then
+    return math.max(0, display.expirationTime - GetTime()) / display.duration, nil
+  end
+  return 1, nil
+end
 
 local function AcquireColumn(frame, index)
   frame.shieldCols = frame.shieldCols or {}
@@ -256,18 +314,41 @@ function ShieldBar:Update(frame, cfg)
     col:Show()
     shown = 1
   else
+    -- Evaluate first, then run ONE ledger pass per unit so simultaneous
+    -- shields on the same unit split the absorb total correctly
+    local toShow, byUnit = {}, {}
     for _, element in ipairs(cfg.elements or {}) do
       local display = ns.Triggers:Evaluate(element)
       if display.shown then
-        shown = shown + 1
-        local col = AcquireColumn(frame, shown)
-        local fraction, absorb = 0, nil
-        if not display.missing then
-          fraction, absorb = AbsorbFraction(element, display, element.unit or "player")
+        toShow[#toShow + 1] = { element = element, display = display }
+        if not display.missing and UnitGetTotalAbsorbs then
+          local unit = element.unit or "player"
+          byUnit[unit] = byUnit[unit] or {}
+          table.insert(byUnit[unit], { element = element, exp = display.expirationTime })
         end
-        SetColumnDisplay(col, fraction, absorb, display.missing, cfg)
-        col:Show()
       end
+    end
+    local now = GetTime()
+    local instsByUnit = {}
+    for unit, entries in pairs(byUnit) do
+      instsByUnit[unit] = UpdateLedger(unit, entries, UnitGetTotalAbsorbs(unit) or 0, now)
+    end
+    for _, entry in ipairs(toShow) do
+      shown = shown + 1
+      local col = AcquireColumn(frame, shown)
+      local fraction, absorb = 0, nil
+      if not entry.display.missing then
+        local unit = entry.element.unit or "player"
+        local inst = instsByUnit[unit] and instsByUnit[unit][entry.element]
+        if inst then
+          fraction = inst.initial > 0 and math.min(inst.remaining / inst.initial, 1) or 0
+          absorb = math.floor(inst.remaining + 0.5)
+        else
+          fraction, absorb = TimeFraction(entry.display)
+        end
+      end
+      SetColumnDisplay(col, fraction, absorb, entry.display.missing, cfg)
+      col:Show()
     end
   end
   if frame.shieldCols then

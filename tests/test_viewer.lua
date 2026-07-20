@@ -44,27 +44,29 @@ check("shield columns hidden", hidden.shieldCol == true)
 local ok = pcall(ns.Viewer._HideStyleWidgets, {})
 check("frame without pools tolerated", ok == true)
 
--- Shield absorb fraction: learns each instance's max and drains against it
-local absorbValue = 0
-_G.UnitGetTotalAbsorbs = function() return absorbValue end
-local el = {}
-absorbValue = 5000
-local f = ns.ShieldBar._AbsorbFraction(el, { expirationTime = 100 }, "player")
-check("fresh shield reads full", f == 1)
-absorbValue = 2500
-f = ns.ShieldBar._AbsorbFraction(el, { expirationTime = 100 }, "player")
-check("drains to the absorbed fraction", f == 0.5)
-absorbValue = 6000
-local a
-f, a = ns.ShieldBar._AbsorbFraction(el, { expirationTime = 130 }, "player")
-check("reapplied shield resets the max", f == 1 and a == 6000)
-absorbValue = 9000
-f = ns.ShieldBar._AbsorbFraction(el, { expirationTime = 130 }, "player")
-check("max corrects upward while the instance lasts", f == 1)
-absorbValue = 4500
-f = ns.ShieldBar._AbsorbFraction(el, { expirationTime = 130 }, "player")
-check("drains against the corrected max", f == 0.5)
-_G.UnitGetTotalAbsorbs = nil
+-- Shield ledger: splits the unit's absorb total across tracked shields.
+-- Sizes come from the total's jump on application; drains hit the oldest
+-- shield first; a single shield is exact.
+local UL = ns.ShieldBar._UpdateLedger
+local e1, e2 = {}, {}
+local insts = UL("player", { { element = e1, exp = 100 } }, 5000, 10)
+check("single shield reads its full size", insts[e1].remaining == 5000)
+insts = UL("player", { { element = e1, exp = 100 } }, 2500, 10.1)
+check("single shield drains exactly", insts[e1].remaining == 2500)
+insts = UL("player", { { element = e1, exp = 100 }, { element = e2, exp = 200 } }, 6500, 10.2)
+check("second shield sized from the total's jump",
+  insts[e2].remaining == 4000 and insts[e1].remaining == 2500)
+insts = UL("player", { { element = e1, exp = 100 }, { element = e2, exp = 200 } }, 3500, 10.3)
+check("drain consumes the oldest shield first",
+  insts[e1].remaining == 0 and insts[e2].remaining == 3500)
+insts = UL("player", { { element = e2, exp = 200 } }, 3500, 10.4)
+check("expired shield does not disturb the survivor", insts[e2].remaining == 3500)
+insts = UL("player", { { element = e1, exp = 300 }, { element = e2, exp = 200 } }, 9500, 10.5)
+check("reapplied shield sized from the new jump",
+  insts[e1].remaining == 6000 and insts[e2].remaining == 3500)
+insts = UL("player", { { element = e1, exp = 300 }, { element = e2, exp = 200 } }, 0, 10.6)
+check("burst to zero empties every shield",
+  insts[e1].remaining == 0 and insts[e2].remaining == 0)
 
 -- Short number formatting for absorb amounts
 check("short numbers: plain", ns.FormatShortNumber(897) == "897")
