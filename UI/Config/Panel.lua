@@ -15,7 +15,7 @@ local STYLE_OPTIONS = {
   { text = "Icon row", value = "icons" },
   { text = "Duration bars", value = "bars" },
   { text = "Stack points", value = "stacks" },
-  { text = "Shield column (curved)", value = "shield" },
+  { text = "NaNShield", value = "shield" },
   { text = "Alert row", value = "reminders" },
 }
 local POSITION_OPTIONS = {
@@ -559,7 +559,7 @@ function Config:BuildControls()
       curve = 12, showValue = true, color = { 1, 0.72, 0.2 } }
     return viewer.shield
   end
-  c.shieldHeader = W.CreateSection(parent, "SHIELD COLUMN")
+  c.shieldHeader = W.CreateSection(parent, "NANSHIELD")
   c.shieldSegLabel = W.CreateLabel(parent, "Segments", 12, W.colors.inkDim)
   c.shieldSegs = W.CreateEditBox(parent, 40, 20, function(_, text)
     ShieldCfg().segments = math.min(math.max(tonumber(text) or 14, 3), 40)
