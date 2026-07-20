@@ -111,6 +111,12 @@ local function GetPopup()
   popup.catcher:SetScript("OnClick", function() popup:Hide() end)
   popup:SetScript("OnHide", function() popup.catcher:Hide() end)
   popup:SetScript("OnShow", function() popup.catcher:Show() end)
+  -- The popup is parented to UIParent (must sit above the panel), so it
+  -- survives its owner: close it when the owner dropdown stops being visible
+  -- (panel closed, view switched, pooled row hidden)
+  popup:SetScript("OnUpdate", function(self)
+    if self.owner and not self.owner:IsVisible() then self:Hide() end
+  end)
   popup:Hide()
   popup.catcher:Hide()
   return popup
