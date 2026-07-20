@@ -524,6 +524,95 @@ ns:On("READY", function()
 end)
 
 --------------------------------------------------------------------------------
+-- Minimap button (own icon in Textures/Icon.tga). Drag it around the rim;
+-- left click opens the config, right click toggles edit mode.
+--------------------------------------------------------------------------------
+local minimapBtn
+
+local function MinimapDB()
+  local g = ns.DB.db.global
+  g.minimap = g.minimap or { hide = false, pos = 220 }
+  return g.minimap
+end
+
+local function UpdateMinimapButton()
+  if not minimapBtn then return end
+  local db = MinimapDB()
+  if db.hide then
+    minimapBtn:Hide()
+    return
+  end
+  local angle = math.rad(db.pos or 220)
+  minimapBtn:ClearAllPoints()
+  minimapBtn:SetPoint("CENTER", Minimap, "CENTER",
+    math.cos(angle) * 80, math.sin(angle) * 80)
+  minimapBtn:Show()
+end
+ns.UpdateMinimapButton = UpdateMinimapButton
+
+local function CreateMinimapButton()
+  if minimapBtn or not Minimap then return end
+  local btn = CreateFrame("Button", "CoACDMMinimapBtn", Minimap)
+  minimapBtn = btn
+  btn:SetFrameStrata("MEDIUM")
+  btn:SetSize(31, 31)
+  btn:SetFrameLevel(8)
+  btn:RegisterForClicks("AnyUp")
+  btn:RegisterForDrag("LeftButton")
+  btn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+  local overlay = btn:CreateTexture(nil, "OVERLAY")
+  overlay:SetSize(53, 53)
+  overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+  overlay:SetPoint("TOPLEFT")
+
+  local icon = btn:CreateTexture(nil, "BACKGROUND")
+  icon:SetSize(20, 20)
+  icon:SetTexture("Interface\\AddOns\\CoACooldownManager\\Textures\\Icon")
+  icon:SetPoint("CENTER", 0, 1)
+
+  btn:SetMovable(true)
+  btn:SetScript("OnDragStart", function(self)
+    local throttle = 0
+    self:SetScript("OnUpdate", function(_, elapsed)
+      throttle = throttle + elapsed
+      if throttle < 0.016 then return end
+      throttle = 0
+      local x, y = GetCursorPosition()
+      local scale = Minimap:GetEffectiveScale()
+      local cx, cy = Minimap:GetCenter()
+      MinimapDB().pos = math.deg(math.atan2(y / scale - cy, x / scale - cx))
+      UpdateMinimapButton()
+    end)
+  end)
+  btn:SetScript("OnDragStop", function(self)
+    self:SetScript("OnUpdate", nil)
+  end)
+
+  btn:SetScript("OnClick", function(_, button)
+    if button == "RightButton" then
+      ns.EditMode:Toggle()
+    else
+      ns.Config:Toggle()
+    end
+  end)
+
+  btn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("CoA Cooldown Manager")
+    GameTooltip:AddLine("Left click: settings", 1, 1, 1)
+    GameTooltip:AddLine("Right click: edit mode", 1, 1, 1)
+    GameTooltip:AddLine("/cdm minimap hides this button", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+  end)
+  btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+  UpdateMinimapButton()
+end
+
+ns:On("READY", CreateMinimapButton)
+
+--------------------------------------------------------------------------------
 -- Login sequence
 --------------------------------------------------------------------------------
 ns:RegisterEvent("PLAYER_LOGIN", function()
@@ -549,6 +638,12 @@ SlashCmdList["COACDM"] = function(msg)
     ns.DB:ResetProfile()
   elseif msg == "debug" then
     if ns.Tracking then ns.Tracking:Debug() end
+  elseif msg == "minimap" then
+    local db = ns.DB.db.global.minimap or {}
+    ns.DB.db.global.minimap = db
+    db.hide = not db.hide
+    ns.UpdateMinimapButton()
+    ns:Print("minimap button " .. (db.hide and "hidden" or "shown") .. ".")
   else
     ns.Config:Toggle()
   end
