@@ -164,6 +164,13 @@ ns:On("READY", function()
     ScanUnit("focus")
     ns:Fire("AURAS_UPDATE", "focus")
   end)
+  -- Pet summoned/swapped/dismissed: its existing auras fire no UNIT_AURA
+  ns:RegisterEvent("UNIT_PET", function(unit)
+    if unit == "player" then
+      ScanUnit("pet")
+      ns:Fire("AURAS_UPDATE", "pet")
+    end
+  end)
   ns:RegisterEvent("PLAYER_ENTERING_WORLD", function()
     for unit in pairs(watched) do dirty[unit] = true end
   end)
