@@ -170,7 +170,9 @@ local function LayoutConditionRow(row, cond)
   local x = 0
   local function place(widget, width)
     widget:ClearAllPoints()
-    widget:SetPoint("LEFT", row, "LEFT", x, 0)
+    -- Anchor to the FIRST line (row may be double-height when a sound line
+    -- shows below): center the widget at half a row from the top
+    widget:SetPoint("LEFT", row, "TOPLEFT", x, -ROW_H / 2)
     widget:Show()
     x = x + width + 4
   end
