@@ -148,3 +148,142 @@ function StatusBars:Update(frame, cfg)
   end
   LayoutBars(frame, cfg, shown)
 end
+
+--------------------------------------------------------------------------------
+-- Shield style ("shield"): a vertical, slightly curved column of segments per
+-- tracked shield buff, draining with the REAL absorb left on the unit
+-- (Ascension backports UnitGetTotalAbsorbs), amount below. Lives in this file
+-- so no .toc change is needed (a new file would need a full client restart).
+--------------------------------------------------------------------------------
+local ShieldBar = {}
+ns.ShieldBar = ShieldBar
+
+-- UnitGetTotalAbsorbs is a UNIT total (no per-aura split on this client):
+-- the max is learned when the aura instance appears and corrected upward
+-- while it lasts, so the column reads "full when just applied".
+local shieldState = setmetatable({}, { __mode = "k" })
+
+local function AbsorbFraction(element, display, unit)
+  if not UnitGetTotalAbsorbs then
+    -- No absorb API: fall back to draining with the buff's remaining time
+    if display.duration and display.duration > 0 then
+      return math.max(0, display.expirationTime - GetTime()) / display.duration, nil
+    end
+    return 1, nil
+  end
+  local absorb = UnitGetTotalAbsorbs(unit) or 0
+  local st = shieldState[element]
+  if not st or st.exp ~= display.expirationTime then
+    st = { exp = display.expirationTime, max = math.max(absorb, 1) }
+    shieldState[element] = st
+  elseif absorb > st.max then
+    st.max = absorb
+  end
+  return math.min(absorb / st.max, 1), absorb
+end
+ShieldBar._AbsorbFraction = AbsorbFraction -- test seam
+
+local function AcquireColumn(frame, index)
+  frame.shieldCols = frame.shieldCols or {}
+  local col = frame.shieldCols[index]
+  if not col then
+    col = CreateFrame("Frame", nil, frame)
+    col.segs = {}
+    col.valueText = col:CreateFontString(nil, "OVERLAY")
+    col.valueText:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+    col.valueText:SetPoint("TOP", col, "BOTTOM", 0, -2)
+    frame.shieldCols[index] = col
+  end
+  return col
+end
+
+local function SetColumnDisplay(col, fraction, absorb, missing, cfg)
+  local sc = cfg.shield or {}
+  local count = sc.segments or 14
+  local segW, segH = sc.segW or 24, sc.segH or 7
+  local gap = sc.gap or 2
+  local curve = sc.curve or 12
+  local color = sc.color or { 1, 0.72, 0.2 }
+  col:SetSize(segW + math.abs(curve), count * (segH + gap) - gap)
+
+  local lit = missing and 0 or math.floor(fraction * count + 0.5)
+  local base = curve >= 0 and 0 or -curve -- keep negative bows inside the frame
+  for i = 1, count do
+    local seg = col.segs[i]
+    if not seg then
+      seg = col:CreateTexture(nil, "ARTWORK")
+      seg:SetTexture("Interface\\Buttons\\WHITE8X8")
+      col.segs[i] = seg
+    end
+    local t = count > 1 and (i - 1) / (count - 1) or 0
+    seg:SetSize(segW, segH)
+    seg:ClearAllPoints()
+    seg:SetPoint("BOTTOMLEFT", col, "BOTTOMLEFT",
+      base + curve * math.sin(t * math.pi), (i - 1) * (segH + gap))
+    if i <= lit then
+      seg:SetVertexColor(color[1], color[2], color[3], 1)
+    else
+      seg:SetVertexColor(0.18, 0.18, 0.22, 0.55)
+    end
+    seg:Show()
+  end
+  for i = count + 1, #col.segs do col.segs[i]:Hide() end
+
+  col.valueText:SetFont(ns.GetFont(), ns.FontSize(cfg.fontSize or 11), "OUTLINE")
+  if missing then
+    col.valueText:SetText("--")
+    col.valueText:SetTextColor(0.65, 0.65, 0.65)
+  elseif sc.showValue ~= false and absorb then
+    col.valueText:SetText(ns.FormatShortNumber(absorb))
+    col.valueText:SetTextColor(1, 1, 1)
+  else
+    col.valueText:SetText("")
+  end
+end
+
+function ShieldBar:Build(frame, cfg)
+  frame.shieldCols = frame.shieldCols or {}
+  for _, col in ipairs(frame.shieldCols) do col:Hide() end
+end
+
+function ShieldBar:Update(frame, cfg)
+  local shown = 0
+  if ns.TestMode and ns.TestMode.active then
+    -- Looping preview: a shield draining over 10 seconds
+    local fraction = 1 - (GetTime() % 10) / 10
+    local col = AcquireColumn(frame, 1)
+    SetColumnDisplay(col, fraction, math.floor(fraction * 18500), false, cfg)
+    col:Show()
+    shown = 1
+  else
+    for _, element in ipairs(cfg.elements or {}) do
+      local display = ns.Triggers:Evaluate(element)
+      if display.shown then
+        shown = shown + 1
+        local col = AcquireColumn(frame, shown)
+        local fraction, absorb = 0, nil
+        if not display.missing then
+          fraction, absorb = AbsorbFraction(element, display, element.unit or "player")
+        end
+        SetColumnDisplay(col, fraction, absorb, display.missing, cfg)
+        col:Show()
+      end
+    end
+  end
+  if frame.shieldCols then
+    for i = shown + 1, #frame.shieldCols do frame.shieldCols[i]:Hide() end
+  end
+
+  -- Columns sit side by side; +14px under them for the amount text
+  local sc = cfg.shield or {}
+  local colW = (sc.segW or 24) + math.abs(sc.curve or 12)
+  local colH = (sc.segments or 14) * ((sc.segH or 7) + (sc.gap or 2)) - (sc.gap or 2)
+  local spacing = cfg.spacing or 10
+  local total = shown > 0 and (shown * colW + (shown - 1) * spacing) or colW
+  frame:SetSize(math.max(total, 20), colH + 14)
+  for i = 1, shown do
+    local col = frame.shieldCols[i]
+    col:ClearAllPoints()
+    col:SetPoint("TOPLEFT", frame, "TOPLEFT", (i - 1) * (colW + spacing), 0)
+  end
+end

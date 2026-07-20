@@ -263,6 +263,15 @@ function ns.GetGlowThickness()
   return Appearance().glowThickness or 2
 end
 
+-- Short amounts for shield/absorb values: 897, 12.4k, 1.2M
+function ns.FormatShortNumber(n)
+  n = n or 0
+  if n >= 1e6 then return string.format("%.1fM", n / 1e6) end
+  if n >= 1e4 then return string.format("%.0fk", n / 1e3) end
+  if n >= 1e3 then return string.format("%.1fk", n / 1e3) end
+  return tostring(math.floor(n + 0.5))
+end
+
 --------------------------------------------------------------------------------
 -- Alert sounds (trigger conditions can play one when they become true)
 --------------------------------------------------------------------------------

@@ -15,6 +15,7 @@ local STYLE_OPTIONS = {
   { text = "Icon row", value = "icons" },
   { text = "Duration bars", value = "bars" },
   { text = "Stack points", value = "stacks" },
+  { text = "Shield column (curved)", value = "shield" },
   { text = "Alert row", value = "reminders" },
 }
 local POSITION_OPTIONS = {
@@ -219,11 +220,11 @@ function Config:HandleSpellDrop()
   if kind ~= "spell" then return end
   ClearCursor()
   local viewer = SelectedViewer()
-  if not viewer or (viewer.style ~= "icons" and viewer.style ~= "bars") then return end
+  if not viewer or (viewer.style ~= "icons" and viewer.style ~= "bars" and viewer.style ~= "shield") then return end
   local id, name, icon = ns.ResolveSpell(spellID)
   if not id then return end
   local isDots = viewer.name == "Target DoTs"
-  local kind = viewer.style == "bars" and (isDots and "debuff" or "buff") or "cooldown"
+  local kind = viewer.style == "icons" and "cooldown" or (isDots and "debuff" or "buff")
   table.insert(viewer.elements, {
     spellID = id, name = name, icon = icon,
     kind = kind,
@@ -549,6 +550,52 @@ function Config:BuildControls()
     SelectedViewer().power.subHeight = tonumber(text) or 18
     Touch()
   end)
+
+  -- Shield style (curved absorb columns). Config resolved at CLICK time:
+  -- these controls are pooled and the selected viewer changes between renders.
+  local function ShieldCfg()
+    local viewer = SelectedViewer()
+    viewer.shield = viewer.shield or { segments = 14, segW = 24, segH = 7, gap = 2,
+      curve = 12, showValue = true, color = { 1, 0.72, 0.2 } }
+    return viewer.shield
+  end
+  c.shieldHeader = W.CreateSection(parent, "SHIELD COLUMN")
+  c.shieldSegLabel = W.CreateLabel(parent, "Segments", 12, W.colors.inkDim)
+  c.shieldSegs = W.CreateEditBox(parent, 40, 20, function(_, text)
+    ShieldCfg().segments = math.min(math.max(tonumber(text) or 14, 3), 40)
+    Touch()
+  end)
+  c.shieldWLabel = W.CreateLabel(parent, "Seg width", 12, W.colors.inkDim)
+  c.shieldW = W.CreateEditBox(parent, 40, 20, function(_, text)
+    ShieldCfg().segW = math.min(math.max(tonumber(text) or 24, 4), 80)
+    Touch()
+  end)
+  c.shieldHLabel = W.CreateLabel(parent, "Seg height", 12, W.colors.inkDim)
+  c.shieldH = W.CreateEditBox(parent, 40, 20, function(_, text)
+    ShieldCfg().segH = math.min(math.max(tonumber(text) or 7, 2), 40)
+    Touch()
+  end)
+  c.shieldGapLabel = W.CreateLabel(parent, "Gap", 12, W.colors.inkDim)
+  c.shieldGap = W.CreateEditBox(parent, 40, 20, function(_, text)
+    ShieldCfg().gap = math.min(math.max(tonumber(text) or 2, 0), 20)
+    Touch()
+  end)
+  c.shieldCurveLabel = W.CreateLabel(parent, "Curve", 12, W.colors.inkDim)
+  c.shieldCurve = W.CreateEditBox(parent, 40, 20, function(_, text)
+    ShieldCfg().curve = math.min(math.max(tonumber(text) or 12, -40), 40)
+    Touch()
+  end)
+  c.shieldColorLabel = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
+  c.shieldColor = W.CreateColorSwatch(parent, function(_, color)
+    ShieldCfg().color = color
+    Touch()
+  end)
+  c.shieldValue = W.CreateCheckbox(parent, "Show amount", function(_, checked)
+    ShieldCfg().showValue = checked
+    Touch()
+  end)
+  c.shieldHint = W.CreateLabel(parent,
+    "Each tracked shield buff shows as a curved column that drains with the\nabsorb left on the unit (negative curve bows left). Add the shield spells\nas Buff elements below.", 10, W.colors.inkDim)
 
   -- Elements
   c.elementsHeader = W.CreateSection(parent, "ELEMENTS")
@@ -1779,6 +1826,41 @@ function Config:Render()
       c.spacing:SetPoint("TOPLEFT", C3, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
     end
     y = y - 34
+  elseif style == "shield" then
+    viewer.shield = viewer.shield or { segments = 14, segW = 24, segH = 7, gap = 2,
+      curve = 12, showValue = true, color = { 1, 0.72, 0.2 } }
+    c.shieldHeader:SetPoint("TOPLEFT", 0, y)
+    c.shieldHeader:Show()
+    y = y - 22
+    -- Row: Segments / Seg width / Seg height
+    c.shieldSegLabel:SetPoint("TOPLEFT", L1, y - 4); c.shieldSegLabel:Show()
+    c.shieldSegs:SetPoint("TOPLEFT", C1, y); c.shieldSegs:SetText(tostring(viewer.shield.segments or 14)); c.shieldSegs:Show()
+    c.shieldWLabel:SetPoint("TOPLEFT", L2, y - 4); c.shieldWLabel:Show()
+    c.shieldW:SetPoint("TOPLEFT", C2, y); c.shieldW:SetText(tostring(viewer.shield.segW or 24)); c.shieldW:Show()
+    c.shieldHLabel:SetPoint("TOPLEFT", L3, y - 4); c.shieldHLabel:Show()
+    c.shieldH:SetPoint("TOPLEFT", C3, y); c.shieldH:SetText(tostring(viewer.shield.segH or 7)); c.shieldH:Show()
+    y = y - 26
+    -- Row: Gap / Curve / Color
+    c.shieldGapLabel:SetPoint("TOPLEFT", L1, y - 4); c.shieldGapLabel:Show()
+    c.shieldGap:SetPoint("TOPLEFT", C1, y); c.shieldGap:SetText(tostring(viewer.shield.gap or 2)); c.shieldGap:Show()
+    c.shieldCurveLabel:SetPoint("TOPLEFT", L2, y - 4); c.shieldCurveLabel:Show()
+    c.shieldCurve:SetPoint("TOPLEFT", C2, y); c.shieldCurve:SetText(tostring(viewer.shield.curve or 12)); c.shieldCurve:Show()
+    c.shieldColorLabel:SetPoint("TOPLEFT", L3, y - 4); c.shieldColorLabel:Show()
+    c.shieldColor:SetPoint("TOPLEFT", C3, y)
+    c.shieldColor:SetColor(viewer.shield.color or { 1, 0.72, 0.2 })
+    c.shieldColor:Show()
+    y = y - 26
+    -- Row: Spacing / Font / Show amount
+    c.spacingLabel:SetPoint("TOPLEFT", L1, y - 4); c.spacingLabel:Show()
+    c.spacing:SetPoint("TOPLEFT", C1, y); c.spacing:SetText(tostring(viewer.spacing or 10)); c.spacing:Show()
+    c.fontLabel:SetPoint("TOPLEFT", L2, y - 4); c.fontLabel:Show()
+    c.fontSize:SetPoint("TOPLEFT", C2, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
+    c.shieldValue:SetPoint("TOPLEFT", C3 - 60, y)
+    c.shieldValue:SetChecked(viewer.shield.showValue ~= false)
+    c.shieldValue:Show()
+    y = y - 26
+    c.shieldHint:SetPoint("TOPLEFT", L1, y); c.shieldHint:Show()
+    y = y - 48
   elseif style ~= "reminders" then
     c.lookHeader:SetPoint("TOPLEFT", 0, y)
     c.lookHeader:Show()
@@ -1844,15 +1926,20 @@ function Config:Render()
   y = y - 36
 
   -- Elements
-  if style == "icons" or style == "bars" then
+  if style == "icons" or style == "bars" or style == "shield" then
     y = RenderElementList(c, viewer, y, false)
     y = y - 6
     c.addLabel:SetPoint("TOPLEFT", L1, y - 4); c.addLabel:Show()
     c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
     c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
+    if style == "shield" and c.addKind.value == "cooldown" then
+      c.addKind:SetValue("buff") -- shields are buffs; save the extra click
+    end
     c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
     y = y - 24
-    c.addHint:SetText("Type a name or spell ID, or drag a spell from your spellbook.")
+    c.addHint:SetText(style == "shield"
+      and "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
+      or "Type a name or spell ID, or drag a spell from your spellbook.")
     c.addHint:SetPoint("TOPLEFT", C1, y); c.addHint:Show()
     y = y - 24
   elseif style == "reminders" then

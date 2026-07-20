@@ -87,6 +87,11 @@ local viewer = ns.DB:AddViewer("Soul Shards", "stacks")
 check("stack viewer created", viewer ~= nil and viewer.stack ~= nil)
 check("duplicate name rejected", (ns.DB:AddViewer("Soul Shards")) == nil)
 
+local wards = ns.DB:AddViewer("Wards", "shield")
+check("shield viewer gets curved-column defaults",
+  wards ~= nil and wards.shield ~= nil and wards.shield.segments == 14 and wards.shield.curve == 12)
+ns.DB:DeleteViewer("Wards")
+
 local child = ns.DB:AddViewer("Child")
 child.anchor.parent = "Soul Shards"
 ns.DB:DeleteViewer("Soul Shards")

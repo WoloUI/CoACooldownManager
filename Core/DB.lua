@@ -322,6 +322,11 @@ function DB:AddViewer(name, style)
   if style == "stacks" then
     -- CoA pseudo-resource: an aura whose stacks render as filled segments
     viewer.stack = { spellID = nil, maxStacks = 3, onlyMine = true, unit = "player", showCount = true }
+  elseif style == "shield" then
+    -- Curved absorb column per tracked shield buff
+    viewer.shield = { segments = 14, segW = 24, segH = 7, gap = 2, curve = 12,
+      showValue = true, color = { 1, 0.72, 0.2 } }
+    viewer.spacing = 10
   end
   table.insert(self.profile.viewers, viewer)
   ns:Fire("VIEWERS_CHANGED")
