@@ -3,7 +3,7 @@ local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local DB = {}
 ns.DB = DB
 
-local DB_VERSION = 2
+local DB_VERSION = 3
 
 --------------------------------------------------------------------------------
 -- Defaults
@@ -148,20 +148,39 @@ function DB:Init()
       end
     end
   end
-  db.version = DB_VERSION
   db.global = db.global or {}
-  db.global.layouts = db.global.layouts or { default = {} }
   db.global.equivGroups = db.global.equivGroups or {}
   db.global.appearance = db.global.appearance or {} -- font/texture/fontScale
-  db.global.profiles = db.global.profiles or {}     -- named profiles (shared account-wide)
+  db.global.profiles = db.global.profiles or {}     -- named profile templates (account-wide library)
   db.chars = db.chars or {}
+
+  -- v3: config becomes per-character. Layouts (positions) move from the
+  -- account-global table into each character, and spec assignments stop being
+  -- live references: they materialize as independent copies of the template,
+  -- so what each character sees today stays identical but no longer bleeds.
+  if db.version < 3 then
+    local globalLayouts = db.global.layouts
+    for _, char in pairs(db.chars) do
+      if globalLayouts and not char.layouts then
+        char.layouts = ns.CopyTable(globalLayouts)
+      end
+      char.specs = char.specs or {}
+      for specKey, name in pairs(char.assignments or {}) do
+        local named = db.global.profiles[name]
+        if named then char.specs[specKey] = ns.CopyTable(named) end
+      end
+    end
+    db.global.layouts = nil
+  end
+  db.version = DB_VERSION
 
   local char = db.chars[CharKey()] or {}
   db.chars[CharKey()] = char
   char.specs = char.specs or {}
+  char.layouts = char.layouts or { default = {} }
   char.activeLayout = char.activeLayout or "default"
   char.lastSpec = char.lastSpec or nil
-  char.assignments = char.assignments or {} -- [specKey] = named profile
+  char.assignments = char.assignments or {} -- [specKey] = template it was loaded from (label only)
 
   self.db = db
   self.char = char
@@ -177,20 +196,6 @@ end
 
 function DB:ActivateProfile()
   local specKey = self:GetSpecKey()
-
-  -- A named profile assigned to this spec wins (used by REFERENCE: edits made
-  -- while it is active are saved into the named profile, shared everywhere)
-  local assigned = self.char.assignments[specKey]
-  local named = assigned and self.db.global.profiles[assigned]
-  if named then
-    named.scanner = named.scanner or { seen = {}, rejected = {} }
-    named.tracking = named.tracking or DefaultTracking()
-    self.char.lastSpec = specKey
-    self.profile = named
-    ns.profile = named
-    return
-  end
-
   local profile = self.char.specs[specKey]
   if not profile then
     -- New spec: start from the previously active profile when there is one,
@@ -232,28 +237,30 @@ function DB:CreateNamedProfile(name)
   return true
 end
 
--- Binds a named profile to a spec (nil = back to the per-spec profile).
+-- Loads an independent COPY of the named template into the spec: later edits
+-- stay on this character (templates never change under you). nil only clears
+-- the "loaded from" label and keeps the spec's bars as they are.
 function DB:AssignProfile(specKey, profileName)
   self.char.assignments[specKey] = profileName
-  if specKey == self:GetSpecKey() then
-    local before = self.profile
-    self:ActivateProfile()
-    if self.profile ~= before then ns:Fire("PROFILE_CHANGED") end
+  if profileName then
+    local named = self.db.global.profiles[profileName]
+    if not named then return end
+    local copy = ns.CopyTable(named)
+    copy.scanner = copy.scanner or { seen = {}, rejected = {} }
+    copy.tracking = copy.tracking or DefaultTracking()
+    self.char.specs[specKey] = copy
+    if specKey == self:GetSpecKey() then
+      self:ActivateProfile()
+      ns:Fire("PROFILE_CHANGED")
+    end
   end
 end
 
+-- Deletes the template only; character copies loaded from it are untouched.
 function DB:DeleteNamedProfile(name)
   self.db.global.profiles[name] = nil
-  local changed = false
   for specKey, assigned in pairs(self.char.assignments) do
-    if assigned == name then
-      self.char.assignments[specKey] = nil
-      if specKey == self:GetSpecKey() then changed = true end
-    end
-  end
-  if changed then
-    self:ActivateProfile()
-    ns:Fire("PROFILE_CHANGED")
+    if assigned == name then self.char.assignments[specKey] = nil end
   end
 end
 
@@ -339,10 +346,10 @@ function DB:DeleteViewer(name)
 end
 
 --------------------------------------------------------------------------------
--- Layout (positions/anchors, shared across profiles by default)
+-- Layout (positions/anchors, per CHARACTER, shared across its specs/profiles)
 --------------------------------------------------------------------------------
 function DB:GetLayout()
-  local layouts = self.db.global.layouts
+  local layouts = self.char.layouts
   local name = self.char.activeLayout
   layouts[name] = layouts[name] or {}
   return layouts[name]
@@ -503,8 +510,7 @@ function DB:ImportProfile(text)
 
   data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {} }
   data.profile.tracking = data.profile.tracking or DefaultTracking()
-  -- Import lands as this spec's own profile; a named-profile assignment
-  -- would shadow it, so drop it for predictability
+  -- Import replaces the spec's profile: the "loaded from" label no longer applies
   self.char.assignments[self:GetSpecKey()] = nil
   self.char.specs[self:GetSpecKey()] = data.profile
   self.profile = data.profile

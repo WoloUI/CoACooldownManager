@@ -263,6 +263,38 @@ function ns.GetGlowThickness()
   return Appearance().glowThickness or 2
 end
 
+--------------------------------------------------------------------------------
+-- Alert sounds (trigger conditions can play one when they become true)
+--------------------------------------------------------------------------------
+ns.SoundOptions = {
+  { text = "Raid Warning", value = "Sound\\Interface\\RaidWarning.wav" },
+  { text = "Ready Check", value = "Sound\\Interface\\ReadyCheck.wav" },
+  { text = "Alarm Clock", value = "Sound\\Interface\\AlarmClockWarning3.wav" },
+  { text = "Level Up", value = "Sound\\Interface\\LevelUp.wav" },
+  { text = "Map Ping", value = "Sound\\Interface\\MapPing.wav" },
+  { text = "Bell (Alliance)", value = "Sound\\Doodad\\BellTollAlliance.wav" },
+  { text = "Bell (Horde)", value = "Sound\\Doodad\\BellTollHorde.wav" },
+  { text = "Auction Bell", value = "Sound\\Interface\\AuctionWindowOpen.wav" },
+}
+
+function ns.GetSoundOptions()
+  local lib = LSM()
+  if lib then
+    local options = {}
+    for _, name in ipairs(lib:List("sound")) do
+      options[#options + 1] = { text = name, value = name }
+    end
+    if #options > 0 then return options end
+  end
+  return ns.SoundOptions
+end
+
+function ns.PlayAlertSound(value)
+  if not value or value == "" then return end
+  local path = ResolveMedia("sound", value, value)
+  if PlaySoundFile then pcall(PlaySoundFile, path) end
+end
+
 -- 20% zoom on spell icons: crops the baked-in dark border
 function ns.CropIcon(tex)
   tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)

@@ -186,4 +186,35 @@ table.insert(ns.profile.viewers[1].elements,
 check("ID-based summon matches the cast name", ns.Triggers:OnCastSucceeded("Raise Dead", NOW) == true)
 check("timer readable through the ID", ns.Triggers.GetSummonTimer(555) ~= nil)
 
+-- Alert sounds: play once on the false -> true edge, re-arm on false
+local played = {}
+ns.PlayAlertSound = function(v) played[#played + 1] = v end
+local readyCtx = Ctx({ cooldown = function() return readyState end })
+local cdCtx = Ctx({ cooldown = function() return cdState end })
+local soundEl = { kind = "cooldown", spellID = 5, showWhen = "always",
+  conditions = { { ctype = "ready", value = true, action = "glow", sound = "Sound\\x.wav" } } }
+d = ns.Triggers:Evaluate(soundEl, readyCtx)
+check("glow+sound: plays when the condition turns true",
+  d.glow and #played == 1 and played[1] == "Sound\\x.wav")
+ns.Triggers:Evaluate(soundEl, readyCtx)
+check("sound does not repeat while the condition stays true", #played == 1)
+ns.Triggers:Evaluate(soundEl, cdCtx)
+ns.Triggers:Evaluate(soundEl, readyCtx)
+check("sound re-arms after the condition turns false", #played == 2)
+
+local pureSound = { kind = "cooldown", spellID = 6, showWhen = "always",
+  conditions = { { ctype = "ready", value = true, action = "sound", sound = "s" } } }
+d = ns.Triggers:Evaluate(pureSound, readyCtx)
+check("play-sound action: fires without glowing", not d.glow and #played == 3)
+
+local hideSound = { kind = "cooldown", spellID = 7, showWhen = "always",
+  conditions = { { ctype = "hastarget", value = true, action = "hide", sound = "s" } } }
+ns.Triggers:Evaluate(hideSound, readyCtx)
+check("non-glow actions ignore the sound field", #played == 3)
+
+local noSound = { kind = "cooldown", spellID = 8, showWhen = "always",
+  conditions = { { ctype = "ready", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(noSound, readyCtx)
+check("glow without a sound stays silent", d.glow and #played == 3)
+
 return T

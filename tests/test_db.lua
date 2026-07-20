@@ -41,7 +41,43 @@ do
   }
   ns.DB:Init()
   check("v2 migration adds Alerts to old profiles", ns.DB:GetViewer("Alerts") ~= nil)
-  check("migration bumps version", CoACDM_DB.version == 2)
+  check("migration bumps version", CoACDM_DB.version == 3)
+  CoACDM_DB = old
+  ns.DB:Init()
+end
+
+-- v2 -> v3 migration: layouts move per character, assignments become copies
+do
+  local old = CoACDM_DB
+  local template = { viewers = {
+    { name = "Power", style = "power", enabled = true, anchor = { parent = "FREE" }, power = {}, elements = {} },
+    { name = "Alerts", style = "reminders", enabled = true, anchor = { parent = "FREE" }, elements = {} },
+  }, scanner = { seen = {}, rejected = {} } }
+  CoACDM_DB = {
+    version = 2,
+    global = {
+      layouts = { default = { Essential = { parent = "FREE", x = 5, y = 7 } } },
+      equivGroups = {},
+      profiles = { Shared = template },
+    },
+    chars = {
+      ["Tester-Area52"] = { activeLayout = "default", assignments = { talents1 = "Shared" }, specs = {} },
+      ["Other-Area52"] = { activeLayout = "default", assignments = {}, specs = {} },
+    },
+  }
+  ns.DB:Init()
+  check("v3 copies the layout into every char",
+    CoACDM_DB.chars["Other-Area52"].layouts.default.Essential.x == 5
+    and CoACDM_DB.chars["Tester-Area52"].layouts.default.Essential.y == 7)
+  check("v3 drops the global layout table", CoACDM_DB.global.layouts == nil)
+  check("v3 materializes assignments as copies",
+    ns.profile ~= CoACDM_DB.global.profiles.Shared and ns.DB:GetViewer("Power") ~= nil)
+  ns.DB:AddViewer("OnlyHere")
+  local leaked = false
+  for _, v in ipairs(CoACDM_DB.global.profiles.Shared.viewers) do
+    if v.name == "OnlyHere" then leaked = true end
+  end
+  check("edits after migration stay off the template", not leaked)
   CoACDM_DB = old
   ns.DB:Init()
 end
@@ -63,7 +99,8 @@ ns.DB:SetAnchor(essential, { parent = "FREE", point = "CENTER", x = 10, y = 20 }
 local anchor = ns.DB:GetAnchor(essential)
 check("layout override wins", anchor.parent == "FREE" and anchor.x == 10)
 check("viewer default untouched", essential.anchor.parent == "Power")
-check("stored in global layout", CoACDM_DB.global.layouts.default.Essential ~= nil)
+check("stored in the character's own layout",
+  CoACDM_DB.chars["Tester-Area52"].layouts.default.Essential ~= nil)
 
 -- Cycle validation
 local a = ns.DB:AddViewer("A")
@@ -84,6 +121,17 @@ table.insert(ns.DB:GetViewer("Essential").elements, { spellID = 1000, name = "Ot
 activeGroup = 1
 ns.DB:OnSpecChanged()
 check("original profile unaffected by copy edits", #ns.DB:GetViewer("Essential").elements == 1)
+
+-- Named profiles are templates: assigning loads an independent copy
+ns.DB:SaveProfileAs("Tpl")
+local tplViewers = #CoACDM_DB.global.profiles.Tpl.viewers
+ns.DB:AssignProfile(ns.DB:GetSpecKey(), "Tpl")
+check("assign loads a copy, not a reference", ns.profile ~= CoACDM_DB.global.profiles.Tpl)
+ns.DB:AddViewer("LocalOnly")
+check("template untouched by later edits", #CoACDM_DB.global.profiles.Tpl.viewers == tplViewers)
+ns.DB:DeleteNamedProfile("Tpl")
+check("deleting the template keeps the loaded copy", ns.DB:GetViewer("LocalOnly") ~= nil)
+check("delete clears the loaded-from label", ns.DB.char.assignments[ns.DB:GetSpecKey()] == nil)
 
 -- Corrupt DB recovery
 CoACDM_DB = "garbage"

@@ -50,10 +50,22 @@ local OP_OPTIONS = {
 }
 local ACTION_OPTIONS = {
   { text = "Glow", value = "glow" },
+  { text = "Play sound", value = "sound" },
   { text = "Desaturate", value = "desaturate" },
   { text = "Hide", value = "hide" },
   { text = "Show only if", value = "show" },
 }
+
+-- Actions that can carry an alert sound (glow = optional, sound = required)
+local HAS_SOUND = { glow = true, sound = true }
+
+local function SoundOptions()
+  local options = { { text = "None", value = "" } }
+  for _, opt in ipairs(ns.GetSoundOptions()) do
+    options[#options + 1] = opt
+  end
+  return options
+end
 
 -- Which extra widgets each condition type needs
 local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true,
@@ -131,12 +143,22 @@ local function CreateConditionRow(parent)
 
   row.action = W.CreateDropdown(row, 92, function(_, value)
     row.cond.action = value
+    Rebuild() -- the sound line appears/disappears with the action
   end)
   row.action:SetOptions(ACTION_OPTIONS)
 
   row.remove = W.CreateButton(row, "X", 20, 20, function()
     table.remove(builder.element.conditions, row.index)
     Rebuild()
+  end)
+
+  -- Second line: optional alert sound for glow/sound actions
+  row.soundLabel = W.CreateLabel(row, "Sound", 11, W.colors.inkDim)
+  row.sound = W.CreateDropdown(row, 150, function(_, value)
+    row.cond.sound = value ~= "" and value or nil
+  end)
+  row.soundPlay = W.CreateButton(row, "Play", 40, 20, function()
+    ns.PlayAlertSound(row.cond and row.cond.sound)
   end)
 
   return row
@@ -191,6 +213,27 @@ local function LayoutConditionRow(row, cond)
   row.action:SetValue(cond.action or "glow")
   place(row.action, 92)
   place(row.remove, 20)
+
+  -- Sound line under the condition (glow/sound actions only)
+  if HAS_SOUND[cond.action or "glow"] then
+    row.soundLabel:ClearAllPoints()
+    row.soundLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 14, -ROW_H - 6)
+    row.soundLabel:Show()
+    row.sound:ClearAllPoints()
+    row.sound:SetPoint("TOPLEFT", row, "TOPLEFT", 52, -ROW_H - 1)
+    row.sound:SetOptions(SoundOptions())
+    row.sound:SetValue(cond.sound or "")
+    row.sound:Show()
+    row.soundPlay:ClearAllPoints()
+    row.soundPlay:SetPoint("TOPLEFT", row, "TOPLEFT", 208, -ROW_H - 1)
+    row.soundPlay:Show()
+    row:SetHeight(ROW_H * 2)
+  else
+    row.soundLabel:Hide()
+    row.sound:Hide()
+    row.soundPlay:Hide()
+    row:SetHeight(ROW_H)
+  end
 end
 
 function TriggerBuilder:Create(parent)
@@ -312,7 +355,7 @@ function TriggerBuilder:Load(element, onChange)
     row:SetPoint("RIGHT", builder, "RIGHT", -PAD, 0)
     LayoutConditionRow(row, cond)
     row:Show()
-    y = y - ROW_H
+    y = y - row:GetHeight() -- sound line doubles the row
   end
   for i = #conditions + 1, #builder.condRows do
     builder.condRows[i]:Hide()

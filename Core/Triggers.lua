@@ -95,8 +95,30 @@ local function ApplyCondition(cond, matched, display)
     elseif action == "desaturate" then
       display.desaturate = true
     end
+    -- action == "sound" changes nothing visually; CheckSound handles it
   end
 end
+
+-- Edge-triggered alert sounds: a condition with a sound plays it once when it
+-- flips false -> true and re-arms when it turns false again. State is keyed
+-- by the condition table itself (weak: dropped configs release their entry)
+-- and never written into SavedVariables.
+local soundState = setmetatable({}, { __mode = "k" })
+
+local function CheckSound(cond, matched)
+  local action = cond.action or "glow"
+  if action ~= "glow" and action ~= "sound" then return end
+  if not cond.sound or cond.sound == "" then
+    soundState[cond] = nil
+    return
+  end
+  local was = soundState[cond]
+  soundState[cond] = matched or nil
+  if matched and not was and ns.PlayAlertSound then
+    ns.PlayAlertSound(cond.sound)
+  end
+end
+Triggers._CheckSound = CheckSound -- test seam
 
 --------------------------------------------------------------------------------
 -- Summon timers: casting the spell starts a manual countdown (for summons
@@ -228,7 +250,9 @@ function Triggers:Evaluate(element, ctx)
 
   if display.shown and element.conditions then
     for _, cond in ipairs(element.conditions) do
-      ApplyCondition(cond, ConditionMatches(cond, element, display, ctx), display)
+      local matched = ConditionMatches(cond, element, display, ctx)
+      ApplyCondition(cond, matched, display)
+      CheckSound(cond, matched)
     end
   end
 

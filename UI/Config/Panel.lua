@@ -684,7 +684,7 @@ function Config:BuildControls()
 
   -- Profiles view
   c.profHint = W.CreateLabel(parent,
-    "Saved profiles are shared by all your characters and used by REFERENCE:\nchanges made while one is active are saved into it. Assign one per spec\nbelow and it activates automatically when you switch specs.", 10, W.colors.inkDim)
+    "Saved profiles are TEMPLATES visible from all your characters. Picking one\nfor a spec below loads an independent COPY: later changes stay on this\ncharacter. Use 'Save current as' again to update the saved template.", 10, W.colors.inkDim)
   c.profNewName = W.CreateEditBox(parent, 170, 20)
   c.profSaveBtn = W.CreateButton(parent, "Save current as", 110, 20, function()
     local name = c.profNewName:GetText()
@@ -1258,7 +1258,7 @@ function Config:Render()
         c2.profRows[i] = row
       end
       row.remove.profileName = name
-      local marker = currentAssignment == name and "  |cff58d3a5(active on this spec)|r" or ""
+      local marker = currentAssignment == name and "  |cff58d3a5(loaded on this spec)|r" or ""
       row.label:SetText(name .. marker)
       row:ClearAllPoints()
       row:SetPoint("TOPLEFT", 0, y2)
@@ -1275,7 +1275,7 @@ function Config:Render()
     y2 = y2 - 20
     local specs = ns.DB:GetSpecs()
     local currentKey = ns.DB:GetSpecKey()
-    local options = { { text = "Per-spec (default)", value = "__none" } }
+    local options = { { text = "(keep own bars)", value = "__none" } }
     for _, name in ipairs(names) do
       options[#options + 1] = { text = name, value = name }
     end
