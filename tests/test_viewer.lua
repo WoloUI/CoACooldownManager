@@ -88,6 +88,23 @@ check("refresh keeps the running value, not 1", insts[e4].remaining == 1500)
 insts = UL("player", { { element = e4, exp = 650 } }, 4000, 30.3)   -- total catches up
 check("refresh grows to the new amount", insts[e4].remaining == 4000)
 
+-- Frame strata: getter defaults to MEDIUM, rejects garbage, and ApplyStrata
+-- propagates the configured value to every viewer frame.
+ns.DB = { db = { global = { appearance = {} } } }
+check("strata defaults to MEDIUM", ns.GetFrameStrata() == "MEDIUM")
+ns.DB.db.global.appearance.frameStrata = "LOW"
+check("strata honors a valid override", ns.GetFrameStrata() == "LOW")
+ns.DB.db.global.appearance.frameStrata = "BOGUS"
+check("strata falls back on a bad value", ns.GetFrameStrata() == "MEDIUM")
+
+ns.DB.db.global.appearance.frameStrata = "BACKGROUND"
+local strataFrame = { applied = nil, SetFrameStrata = function(_, s) end }
+strataFrame.SetFrameStrata = function(_, s) strataFrame.applied = s end
+ns.Viewer.frames.__test = strataFrame
+ns.Viewer:ApplyStrata()
+check("ApplyStrata pushes the value onto frames", strataFrame.applied == "BACKGROUND")
+ns.Viewer.frames.__test = nil
+
 -- Short number formatting for absorb amounts
 check("short numbers: plain", ns.FormatShortNumber(897) == "897")
 check("short numbers: 1k-10k keeps a decimal", ns.FormatShortNumber(2500) == "2.5k")

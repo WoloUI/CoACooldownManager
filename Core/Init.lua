@@ -242,6 +242,18 @@ ns.GlowThicknessOptions = {
   { text = "1 px", value = 1 }, { text = "2 px", value = 2 },
   { text = "3 px", value = 3 }, { text = "4 px", value = 4 },
 }
+-- Frame strata for the bars, ordered back-to-front. Lower values let game
+-- windows (world map, character, bags) draw on top of the bars.
+ns.FrameStrataOptions = {
+  { text = "Background", value = "BACKGROUND" },
+  { text = "Low", value = "LOW" },
+  { text = "Medium", value = "MEDIUM" },
+  { text = "High", value = "HIGH" },
+  { text = "Dialog", value = "DIALOG" },
+}
+local VALID_STRATA = {
+  BACKGROUND = true, LOW = true, MEDIUM = true, HIGH = true, DIALOG = true,
+}
 
 function ns.GetGlowStyle()
   return Appearance().glow or "proc"
@@ -261,6 +273,11 @@ end
 
 function ns.GetGlowThickness()
   return Appearance().glowThickness or 2
+end
+
+function ns.GetFrameStrata()
+  local strata = Appearance().frameStrata
+  return VALID_STRATA[strata] and strata or "MEDIUM"
 end
 
 -- Short amounts for shield/absorb values: 897, 12.4k, 1.2M

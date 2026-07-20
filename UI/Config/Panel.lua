@@ -469,6 +469,13 @@ function Config:BuildControls()
   end)
   c.genGlowThick:SetOptions(ns.GlowThicknessOptions)
   c.genGlowHint = W.CreateLabel(parent, "Lines and thickness apply to the Pixel style; speed applies to all.", 10, W.colors.inkDim)
+  c.genStrataLabel = W.CreateLabel(parent, "Frame layer", 12, W.colors.inkDim)
+  c.genStrata = W.CreateDropdown(parent, 120, function(_, value)
+    AppearanceCfg().frameStrata = value
+    Touch()
+  end)
+  c.genStrata:SetOptions(ns.FrameStrataOptions)
+  c.genStrataHint = W.CreateLabel(parent, "Lower this so game windows (map, character, bags) appear above the bars.", 10, W.colors.inkDim)
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
 
   -- Stack bar options
@@ -1260,13 +1267,20 @@ function Config:Render()
     y2 = y2 - 24
     c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
     y2 = y2 - 40
+    c2.genStrataLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genStrataLabel:Show()
+    c2.genStrata:SetPoint("TOPLEFT", 80, y2)
+    c2.genStrata:SetValue(ns.GetFrameStrata())
+    c2.genStrata:Show()
+    y2 = y2 - 24
+    c2.genStrataHint:SetPoint("TOPLEFT", 0, y2); c2.genStrataHint:Show()
+    y2 = y2 - 34
     c2.shareHeader:SetPoint("TOPLEFT", 0, y2); c2.shareHeader:Show()
     y2 = y2 - 22
     c2.exportBtn:SetPoint("TOPLEFT", 0, y2); c2.exportBtn:Show()
     c2.importBtn:SetPoint("TOPLEFT", 120, y2); c2.importBtn:Show()
     y2 = y2 - 28
     c2.shareHint:SetPoint("TOPLEFT", 0, y2); c2.shareHint:Show()
-    win.content:SetHeight(520)
+    win.content:SetHeight(590)
     return
   end
 

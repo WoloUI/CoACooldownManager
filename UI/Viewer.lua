@@ -63,6 +63,15 @@ local function ApplyAnchor(frame, cfg, resolving)
     anchor.x or 0, anchor.y or 0)
 end
 
+-- Layer all bars at the configured strata so the user can push them behind
+-- game windows (world map, character, bags) that otherwise get covered.
+function Viewer:ApplyStrata()
+  local strata = ns.GetFrameStrata and ns.GetFrameStrata() or "MEDIUM"
+  for _, frame in pairs(frames) do
+    frame:SetFrameStrata(strata)
+  end
+end
+
 function Viewer:ApplyAllAnchors()
   local resolving = {}
   for _, cfg in ipairs(ns.profile.viewers) do
@@ -144,6 +153,7 @@ function Viewer:BuildAll()
     end
   end
   self:ApplyAllAnchors()
+  self:ApplyStrata()
   self:UpdateVisibility()
   self:UpdateAll()
 end
