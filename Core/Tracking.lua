@@ -376,9 +376,26 @@ end
 --------------------------------------------------------------------------------
 ns:On("READY", function()
   ns:On("PROFILE_CHANGED", function() Tracking:Apply() end)
+
+  -- Self-heal triggers can fire often (aura spam, verify tick): rate-limit
+  -- them so a stuck condition cannot rescan+forcescan every 0.1s tick
+  local lastMapRescan = 0
+  local function QueueMapRescan()
+    local now = GetTime()
+    if now - lastMapRescan > 3 then
+      lastMapRescan = now
+      rescanNeeded = true
+    end
+  end
+
   ns:On("AURAS_UPDATE", function(unit)
-    if Enabled() and unitFrames[unit] then
-      UpdateFrame(unitFrames[unit], unit)
+    if not Enabled() then return end
+    local frame = unitFrames[unit]
+    if frame then
+      UpdateFrame(frame, unit)
+    elseif unit:match("^party%d$") or unit:match("^raid%d+$") then
+      -- Aura data for a group unit we have no frame for: the map is stale
+      QueueMapRescan()
     end
   end)
 
@@ -407,15 +424,26 @@ ns:On("READY", function()
         end
       end
     end
-    -- ElvUI re-sorts units between buttons; verify the map stays true
+    -- ElvUI re-sorts units between buttons (role/HP sorting, joins/leaves);
+    -- verify the map stays true and that every group member has a frame
     verifyAcc = verifyAcc + dt
-    if verifyAcc >= 2 then
+    if verifyAcc >= 0.5 then
       verifyAcc = 0
+      local mapped = 0
       for unit, frame in pairs(unitFrames) do
+        mapped = mapped + 1
         if FrameUnit(frame, frameNames[frame] or "") ~= unit then
           rescanNeeded = true
           break
         end
+      end
+      -- Members with no mapped frame (offline/loading when we scanned,
+      -- headers built late): remap until everyone is covered
+      local raidN = GetNumRaidMembers and GetNumRaidMembers() or 0
+      local expected = raidN > 0 and raidN
+        or ((GetNumPartyMembers and GetNumPartyMembers() or 0) + 1)
+      if mapped < expected then
+        QueueMapRescan()
       end
     end
   end)
