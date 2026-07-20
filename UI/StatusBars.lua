@@ -166,6 +166,7 @@ ns.ShieldBar = ShieldBar
 -- With a single shield up the value is exact.
 local ledgers = {} -- [unit] = weak table [element] = {exp, initial, remaining, appliedAt, seenAt}
 local STALE = 0.4  -- instances updated within this window count as live
+local GRACE = 1.0  -- absorb registration can lag the aura: grow freely this long
 
 -- entries: array of { element, exp }. Returns the unit's instance table.
 local function UpdateLedger(unit, entries, total, now)
@@ -175,13 +176,16 @@ local function UpdateLedger(unit, entries, total, now)
     ledgers[unit] = insts
   end
 
-  -- stamp known instances; collect (re)applied shields
+  -- stamp known instances; collect (re)applied shields. A replaced instance
+  -- (refresh changed the expiration) is dropped NOW so its old value does
+  -- not count against the new one's size
   local fresh = {}
   for _, entry in ipairs(entries) do
     local inst = insts[entry.element]
     if inst and inst.exp == entry.exp then
       inst.seenAt = now
     else
+      insts[entry.element] = nil
       fresh[#fresh + 1] = entry
     end
   end
@@ -219,14 +223,23 @@ local function UpdateLedger(unit, entries, total, now)
       excess = excess - cut
     end
   elseif excess < 0 then
-    -- total grew without a tracked (re)application (e.g. an untracked
-    -- shield): top up the newest, capped at its own size
+    -- Total grew without a tracked (re)application: goes to the newest.
+    -- Right after an application the absorb amount can register LATE (the
+    -- aura event beats it), so young instances grow freely — their real size
+    -- is this late jump. Past the grace window, cap at the known size so an
+    -- untracked external shield cannot inflate ours.
     local newest
     for _, inst in ipairs(live) do
       if not newest or (inst.appliedAt or 0) > (newest.appliedAt or 0) then newest = inst end
     end
     if newest then
-      newest.remaining = math.min(newest.remaining - excess, newest.initial)
+      local grown = newest.remaining - excess
+      if now - (newest.appliedAt or 0) <= GRACE then
+        newest.remaining = grown
+        if grown > newest.initial then newest.initial = grown end
+      else
+        newest.remaining = math.min(grown, newest.initial)
+      end
     end
   end
   return insts

@@ -68,6 +68,26 @@ insts = UL("player", { { element = e1, exp = 300 }, { element = e2, exp = 200 } 
 check("burst to zero empties every shield",
   insts[e1].remaining == 0 and insts[e2].remaining == 0)
 
+-- Absorb registration lagging the aura event (the stuck-at-1 bug): the aura
+-- shows up while the total still reads 0, the amount lands a tick later
+local e3 = {}
+insts = UL("player", { { element = e3, exp = 500 } }, 0, 20)
+check("late absorb: empty while the total still reads 0", insts[e3].remaining == 0)
+insts = UL("player", { { element = e3, exp = 500 } }, 5000, 20.1)
+check("late absorb: young shield grows to the real amount",
+  insts[e3].remaining == 5000 and insts[e3].initial == 5000)
+insts = UL("player", { { element = e3, exp = 500 } }, 9000, 25)
+check("past the grace window untracked gains stay capped", insts[e3].remaining == 5000)
+
+-- Refresh with a stale total: the old value must not shrink the new instance
+local e4 = {}
+insts = UL("player", { { element = e4, exp = 600 } }, 4000, 30)
+insts = UL("player", { { element = e4, exp = 600 } }, 1500, 30.1)   -- drained
+insts = UL("player", { { element = e4, exp = 650 } }, 1500, 30.2)   -- refreshed, total stale
+check("refresh keeps the running value, not 1", insts[e4].remaining == 1500)
+insts = UL("player", { { element = e4, exp = 650 } }, 4000, 30.3)   -- total catches up
+check("refresh grows to the new amount", insts[e4].remaining == 4000)
+
 -- Short number formatting for absorb amounts
 check("short numbers: plain", ns.FormatShortNumber(897) == "897")
 check("short numbers: 1k-10k keeps a decimal", ns.FormatShortNumber(2500) == "2.5k")
