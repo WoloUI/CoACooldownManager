@@ -54,16 +54,25 @@ function Tracking.Evaluate(cfg, aura, now)
 end
 
 --------------------------------------------------------------------------------
--- Unit frame discovery (ElvUI first, Blizzard fallback)
+-- Unit frame discovery (ElvUI headers win, standalone frames are the fallback)
 --------------------------------------------------------------------------------
--- Individually named frames (player + Blizzard party fallback)
+-- ElvUI containers whose descendants are the real unit buttons. Walking the
+-- children (instead of guessing button names) survives any group count,
+-- raid-wide sorting and custom layouts. These are PRIMARY: they win over the
+-- standalone frames below for every unit -- including the player when shown in
+-- the party frame ("Show Player"), so the player's HoTs land on that button
+-- and not on the standalone ElvUF_Player.
+local HEADER_ROOTS = { "ElvUF_Party", "ElvUF_Raid", "ElvUF_Raid10", "ElvUF_Raid25", "ElvUF_Raid40" }
+
+-- Individually named frames, used only when no addon header claims the unit.
+-- ElvUI keeps the Blizzard party frames "shown" but off-screen, so they must
+-- never win over an ElvUI header (that was the party-indicator bug).
 local SINGLE_CANDIDATES = { "ElvUF_Player", "PlayerFrame",
   "PartyMemberFrame1", "PartyMemberFrame2", "PartyMemberFrame3", "PartyMemberFrame4" }
 
--- ElvUI containers whose descendants are the real unit buttons. Walking the
--- children (instead of guessing button names) survives any group count,
--- raid-wide sorting and custom layouts.
-local HEADER_ROOTS = { "ElvUF_Party", "ElvUF_Raid", "ElvUF_Raid10", "ElvUF_Raid25", "ElvUF_Raid40" }
+-- Blizzard raid frame container, also fallback-only. Its children carry the
+-- unit as a field (CompactUnitFrame), which FrameUnit already reads.
+local BLIZZARD_HEADER_ROOTS = { "CompactRaidFrameContainer" }
 
 local function FrameUnit(frame, name)
   local unit = frame.unit -- oUF (ElvUI) stores it on the button
@@ -84,32 +93,44 @@ end
 
 local unitFrames = {}   -- [unit] = frame
 local frameNames = {}   -- [frame] = global name (for unit re-checks)
+local framePrimary = {} -- [frame] = true when it came from an addon header
 local overlays = {}     -- [frame] = overlay container with pooled widgets
 local rescanNeeded = false
+
+-- Pure priority decision (test seam): given the frame currently mapped to a
+-- unit and a candidate for it, should the candidate replace it? Addon group
+-- headers (primary) always beat standalone frames (fallback); same-tier ties
+-- keep whatever is visible.
+function Tracking.ShouldReplace(current, cand)
+  if not current then return true end
+  if cand.primary ~= current.primary then return cand.primary end
+  return (not current.shown) and cand.shown or false
+end
 
 local function Enabled()
   local tracking = ns.profile and ns.profile.tracking
   return tracking and tracking.enabled and #tracking.indicators > 0
 end
 
-local function TryMap(frame, name)
+local function TryMap(frame, name, primary)
   if not frame or not frame.IsShown then return end
   local unit = FrameUnit(frame, name or "")
   if not unit or not UnitExists(unit) then return end
   local current = unitFrames[unit]
-  -- Prefer a visible frame (ElvUI hides the Blizzard ones)
-  if not current or (not current:IsShown() and frame:IsShown()) then
+  local curInfo = current and { primary = framePrimary[current], shown = current:IsShown() }
+  if Tracking.ShouldReplace(curInfo, { primary = primary or false, shown = frame:IsShown() }) then
     unitFrames[unit] = frame
     frameNames[frame] = name or (frame.GetName and frame:GetName()) or "?"
+    framePrimary[frame] = primary or false
   end
 end
 
-local function WalkHeader(parent, depth)
+local function WalkHeader(parent, depth, primary)
   local children = { parent:GetChildren() }
   for _, child in ipairs(children) do
-    TryMap(child)
+    TryMap(child, nil, primary)
     if depth < 3 and child.GetChildren then
-      WalkHeader(child, depth + 1)
+      WalkHeader(child, depth + 1, primary)
     end
   end
 end
@@ -117,13 +138,23 @@ end
 function Tracking:Rescan()
   rescanNeeded = false
   for unit in pairs(unitFrames) do unitFrames[unit] = nil end
-  for _, name in ipairs(SINGLE_CANDIDATES) do
-    TryMap(_G[name], name)
-  end
+  for frame in pairs(framePrimary) do framePrimary[frame] = nil end
+  -- Addon headers first (primary): they claim every unit they draw, including
+  -- the player when shown in the party/raid frame.
   for _, rootName in ipairs(HEADER_ROOTS) do
     local root = _G[rootName]
     if root and root.GetChildren then
-      WalkHeader(root, 1)
+      WalkHeader(root, 1, true)
+    end
+  end
+  -- Standalone frames and Blizzard raid fill only units no header claimed.
+  for _, name in ipairs(SINGLE_CANDIDATES) do
+    TryMap(_G[name], name, false)
+  end
+  for _, rootName in ipairs(BLIZZARD_HEADER_ROOTS) do
+    local root = _G[rootName]
+    if root and root.GetChildren then
+      WalkHeader(root, 1, false)
     end
   end
   -- Overlays on frames that no longer track a unit go dark
@@ -149,6 +180,7 @@ function Tracking:Debug()
   for unit, frame in pairs(unitFrames) do
     count = count + 1
     local line = unit .. " -> " .. (frameNames[frame] or "?")
+      .. (framePrimary[frame] and " [header]" or " [fallback]")
       .. (frame:IsShown() and "" or " (frame hidden)")
     local first = tracking and tracking.indicators[1]
     if first then

@@ -105,6 +105,23 @@ local soothing = ns.Auras:GetAura("party1", "renew", false)
 check("lowercase name still matches the aura", soothing ~= nil and soothing.name == "Renew")
 check("padded name still matches the aura", ns.Auras:GetAura("party1", " Renew ", false) ~= nil)
 
+-- Frame priority: addon group headers (primary) beat standalone frames
+-- (fallback) for every unit, so the player's own HoTs land on the party-frame
+-- button (ElvUF_Party, "Show Player") and party HoTs land on ElvUI instead of
+-- the off-screen-but-still-"shown" Blizzard PartyMemberFrames.
+local P = ns.Tracking.ShouldReplace
+check("nothing mapped yet: candidate wins", P(nil, { primary = true, shown = true }) == true)
+check("primary header beats a shown fallback (party HoT bug)",
+  P({ primary = false, shown = true }, { primary = true, shown = true }) == true)
+check("fallback never replaces a primary header (player-on-party-button bug)",
+  P({ primary = true, shown = true }, { primary = false, shown = true }) == false)
+check("fallback does not replace an existing fallback (keeps first, e.g. ElvUF_Player over PlayerFrame)",
+  P({ primary = false, shown = true }, { primary = false, shown = true }) == false)
+check("same tier: a visible frame replaces a hidden one",
+  P({ primary = true, shown = false }, { primary = true, shown = true }) == true)
+check("same tier: a hidden frame never replaces a visible one",
+  P({ primary = true, shown = true }, { primary = true, shown = false }) == false)
+
 -- Class HUD hider: picker candidates, smallest-under-cursor pick, hidden set
 local function FakeHudFrame(name, w, h, over, visible)
   return {
