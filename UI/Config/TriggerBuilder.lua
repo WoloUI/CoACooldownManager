@@ -12,6 +12,11 @@ local KIND_OPTIONS = {
   { text = "Spell cooldown", value = "cooldown" },
   { text = "Buff", value = "buff" },
   { text = "Debuff", value = "debuff" },
+  { text = "Trinket", value = "trinket" },
+}
+local SLOT_OPTIONS = {
+  { text = "Trinket 1", value = 13 },
+  { text = "Trinket 2", value = 14 },
 }
 local UNIT_OPTIONS = {
   { text = "Player", value = "player" },
@@ -42,6 +47,7 @@ local CONDITION_TYPES = {
   { text = "Other aura stacks", value = "otherstacks" },
   { text = "Other aura time left", value = "otherremaining" },
   { text = "Other spell ready", value = "othercd" },
+  { text = "Pet active", value = "petactive" },
 }
 local OP_OPTIONS = {
   { text = "<", value = "<" }, { text = ">", value = ">" },
@@ -85,12 +91,14 @@ local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true
 local NEEDS_POWER = { power = true, powerpct = true }
 local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true }
 local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true }
+local NEEDS_PET = { petactive = true } -- shows a pet name/id filter box
 local BOOL_OPTIONS = {
   ready = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
   otheraura = { { text = "Active", value = true }, { text = "Missing", value = false } },
   othercd = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
   combat = { { text = "In combat", value = true }, { text = "Out of combat", value = false } },
   hastarget = { { text = "Has target", value = true }, { text = "No target", value = false } },
+  petactive = { { text = "Active", value = true }, { text = "Missing", value = false } },
 }
 
 --------------------------------------------------------------------------------
@@ -121,9 +129,18 @@ local function CreateConditionRow(parent)
     if not NEEDS_SPELL[value] then
       row.cond.spellID, row.cond.spellName = nil, nil
     end
+    if not NEEDS_PET[value] then
+      row.cond.petName = nil
+    end
     Rebuild()
   end)
   row.ctype:SetOptions(CONDITION_TYPES)
+
+  -- Pet name/id filter (petactive condition). Stored raw: a number matches the
+  -- pet's npc id, text matches its name; empty means "any pet".
+  row.pet = W.CreateEditBox(row, 90, 20, function(self, text)
+    row.cond.petName = (text and text ~= "") and text or nil
+  end)
 
   row.spell = W.CreateEditBox(row, 76, 20, function(self, text)
     if not text or text == "" then return end
@@ -217,6 +234,13 @@ local function LayoutConditionRow(row, cond)
     row.unit:Hide()
   end
 
+  if NEEDS_PET[ctype] then
+    row.pet:SetText(cond.petName or "")
+    place(row.pet, 90)
+  else
+    row.pet:Hide()
+  end
+
   if NEEDS_POWER[ctype] then
     row.power:SetValue(cond.powerType ~= nil and cond.powerType or "current")
     place(row.power, 118)
@@ -288,7 +312,10 @@ function TriggerBuilder:Create(parent)
   builder.kindLabel = W.CreateLabel(builder, "Track", 12, W.colors.inkDim)
   builder.kind = W.CreateDropdown(builder, 120, function(_, value)
     builder.element.kind = value
-    builder.element.showWhen = value == "cooldown" and "always" or "present"
+    -- Cooldown and trinket both default to "always" (gray on CD); auras default
+    -- to "present" (only while active)
+    builder.element.showWhen = (value == "cooldown" or value == "trinket") and "always" or "present"
+    if value == "trinket" then builder.element.slot = builder.element.slot or 13 end
     Rebuild()
   end)
   builder.kind:SetOptions(KIND_OPTIONS)
@@ -298,6 +325,18 @@ function TriggerBuilder:Create(parent)
     builder.element.unit = value
   end)
   builder.unit:SetOptions(UNIT_OPTIONS)
+
+  -- Trinket kind: pick the equipped slot instead of a unit
+  builder.slot = W.CreateDropdown(builder, 90, function(_, value)
+    builder.element.slot = value
+  end)
+  builder.slot:SetOptions(SLOT_OPTIONS)
+
+  -- Trinket kind: optional proc buff override (auto-detected when left blank)
+  builder.procLabel = W.CreateLabel(builder, "Proc buff (optional, auto if blank)", 11, W.colors.inkDim)
+  builder.proc = W.CreateEditBox(builder, 180, 20, function(self, text)
+    builder.element.procName = (text and text ~= "") and text or nil
+  end)
 
   builder.showLabel = W.CreateLabel(builder, "show", 12, W.colors.inkDim)
   builder.show = W.CreateDropdown(builder, 180, function(_, value)
@@ -332,7 +371,8 @@ function TriggerBuilder:Load(element, onChange)
   builder:Show()
 
   local kind = element.kind or "cooldown"
-  local isAura = kind ~= "cooldown"
+  local isAura = kind == "buff" or kind == "debuff"
+  local isTrinket = kind == "trinket"
   local y = -PAD
 
   -- TRIGGER header
@@ -349,14 +389,23 @@ function TriggerBuilder:Load(element, onChange)
   if isAura then
     builder.unitLabel:Show()
     builder.unit:Show()
+    builder.slot:Hide()
     builder.unitLabel:ClearAllPoints()
     builder.unitLabel:SetPoint("TOPLEFT", PAD + 170, y - 5)
     builder.unit:ClearAllPoints()
     builder.unit:SetPoint("TOPLEFT", PAD + 190, y)
     builder.unit:SetValue(element.unit or "player")
+  elseif isTrinket then
+    builder.unitLabel:Hide()
+    builder.unit:Hide()
+    builder.slot:Show()
+    builder.slot:ClearAllPoints()
+    builder.slot:SetPoint("TOPLEFT", PAD + 170, y)
+    builder.slot:SetValue(element.slot or 13)
   else
     builder.unitLabel:Hide()
     builder.unit:Hide()
+    builder.slot:Hide()
   end
   y = y - ROW_H
 
@@ -376,6 +425,21 @@ function TriggerBuilder:Load(element, onChange)
     builder.mine:Hide()
   end
   y = y - ROW_H - 4
+
+  -- Trinket: proc buff override row (auto-glows on the item's own proc when blank)
+  if isTrinket then
+    builder.procLabel:Show()
+    builder.procLabel:ClearAllPoints()
+    builder.procLabel:SetPoint("TOPLEFT", PAD, y - 5)
+    builder.proc:Show()
+    builder.proc:ClearAllPoints()
+    builder.proc:SetPoint("TOPLEFT", PAD + 210, y)
+    builder.proc:SetText(element.procName or "")
+    y = y - ROW_H - 4
+  else
+    builder.procLabel:Hide()
+    builder.proc:Hide()
+  end
 
   -- CONDITIONS header
   builder.condHeader:ClearAllPoints()

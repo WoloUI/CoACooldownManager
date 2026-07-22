@@ -43,6 +43,11 @@ local KIND_OPTIONS = {
   { text = "Buff", value = "buff" },
   { text = "Debuff", value = "debuff" },
   { text = "Summon timer", value = "summon" },
+  { text = "Trinket", value = "trinket" },
+}
+local TRINKET_SLOT_OPTIONS = {
+  { text = "Trinket 1", value = 13 },
+  { text = "Trinket 2", value = 14 },
 }
 local POWER_TYPE_OPTIONS = {
   { text = "Auto", value = "auto" },
@@ -608,22 +613,41 @@ function Config:BuildControls()
   c.elementsHeader = W.CreateSection(parent, "ELEMENTS")
   c.elementRows = {}
   c.addInput = W.CreateEditBox(parent, 170, 20)
-  c.addKind = W.CreateDropdown(parent, 120, nil)
+  -- Re-render on kind change so the trinket slot dropdown appears/disappears
+  c.addKind = W.CreateDropdown(parent, 120, function() Config:Render() end)
   c.addKind:SetOptions(KIND_OPTIONS)
   c.addKind:SetValue("cooldown")
+  -- Trinket elements track an equipped slot instead of a spell
+  c.addSlot = W.CreateDropdown(parent, 100, nil)
+  c.addSlot:SetOptions(TRINKET_SLOT_OPTIONS)
+  c.addSlot:SetValue(13)
   c.addBtn = W.CreateButton(parent, "Add", 50, 20, function()
     local viewer = SelectedViewer()
+    local kind = c.addKind.value
+
+    -- Trinket: no spell text, just the slot; the icon/proc resolve live
+    if kind == "trinket" then
+      local slot = c.addSlot.value or 13
+      table.insert(viewer.elements, {
+        kind = "trinket", slot = slot,
+        name = slot == 14 and "Trinket 2" or "Trinket 1",
+        conditions = {}, showWhen = "always",
+      })
+      Touch()
+      Config:Render()
+      return
+    end
+
     local input = (c.addInput:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if input == "" then return end
     local id, name, icon = ns.ResolveSpell(input)
     if not id and not name then
-      if c.addKind.value == "cooldown" then
+      if kind == "cooldown" then
         ns:Print("spell not found: " .. input .. " (cooldowns need a spell you know; try the ID)")
         return
       end
       name = input -- aura unknown to the client now: match by name at runtime
     end
-    local kind = c.addKind.value
     local isDots = viewer.name == "Target DoTs"
     table.insert(viewer.elements, {
       spellID = id, name = name or input, icon = icon,
@@ -1072,6 +1096,9 @@ local function ElementLabel(el)
       return (el.text or "Out of range!") .. "  |cff9aa3b5(range: " .. (el.spellName or el.spellID or "?") .. ")|r"
     end
     return "Weapon enchant  |cff9aa3b5(" .. (el.slot or "mainhand") .. ")|r"
+  end
+  if el.kind == "trinket" then
+    return (el.name or "Trinket") .. "  |cff9aa3b5(trinket slot " .. (el.slot or 13) .. ")|r"
   end
   local kindText = el.kind == "cooldown" and "CD" or el.kind == "buff" and "Buff"
     or el.kind == "summon" and ("Summon " .. (el.duration or 60) .. "s") or "Debuff"
@@ -1957,16 +1984,26 @@ function Config:Render()
     y = RenderElementList(c, viewer, y, false)
     y = y - 6
     c.addLabel:SetPoint("TOPLEFT", L1, y - 4); c.addLabel:Show()
-    c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
-    c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
     if style == "shield" and c.addKind.value == "cooldown" then
       c.addKind:SetValue("buff") -- shields are buffs; save the extra click
     end
+    local isTrinket = c.addKind.value == "trinket"
+    if isTrinket then
+      -- Trinket picks an equipped slot; the spell text box is not used
+      c.addInput:Hide()
+      c.addSlot:SetPoint("TOPLEFT", C1, y); c.addSlot:Show()
+    else
+      c.addSlot:Hide()
+      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
+    end
+    c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
     c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
     y = y - 24
-    c.addHint:SetText(style == "shield"
-      and "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
-      or "Type a name or spell ID, or drag a spell from your spellbook.")
+    c.addHint:SetText(isTrinket
+      and "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
+      or (style == "shield"
+        and "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
+        or "Type a name or spell ID, or drag a spell from your spellbook."))
     c.addHint:SetPoint("TOPLEFT", C1, y); c.addHint:Show()
     y = y - 24
   elseif style == "reminders" then

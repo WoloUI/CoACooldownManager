@@ -61,6 +61,10 @@ local function ConditionMatches(cond, element, display, ctx)
     return ctx.inCombat() == (cond.value ~= false)
   elseif ctype == "hastarget" then
     return ctx.hasTarget() == (cond.value ~= false)
+  elseif ctype == "petactive" then
+    -- Whether a pet is out (value=true) or not (value=false). An optional
+    -- cond.petName filters to a specific pet by name or npc id; empty = any pet.
+    return ctx.petActive(cond.petName) == (cond.value ~= false)
   elseif ctype == "otheraura" then
     -- A DIFFERENT aura is active (value=true) or missing (value=false)
     if not cond.spellID then return false end
@@ -229,6 +233,41 @@ function Triggers:Evaluate(element, ctx)
         display.desaturate = true
       end
     end
+  elseif element.kind == "trinket" then
+    -- An equipped trinket slot (13 or 14): item-use cooldown sweep, plus an
+    -- automatic glow while its proc buff is active. The proc buff name is
+    -- auto-detected (GetItemSpell) with an optional element.procName override.
+    local info = ctx.trinket(element.slot or 13)
+    if not info or not info.itemId then
+      display.missing = true
+      if (element.showWhen or "always") == "always" then
+        display.shown = true
+        display.desaturate = true
+      end
+      return display
+    end
+    if info.icon then display.icon = info.icon end
+    if info.name then display.name = info.name end
+    onCooldown = info.onCooldown and true or false
+    local showWhen = element.showWhen or "always"
+    if showWhen == "always" then
+      display.shown = true
+      display.desaturate = info.onCooldown
+    elseif showWhen == "ready" then
+      display.shown = not info.onCooldown
+    elseif showWhen == "cooldown" then
+      display.shown = info.onCooldown
+    end
+    if info.onCooldown then
+      display.start = info.cdStart or 0
+      display.duration = info.cdDuration or 0
+      display.expirationTime = (info.cdStart or 0) + (info.cdDuration or 0)
+    end
+    -- Automatic proc glow: manual override wins, else the item's own spell
+    local procRef = element.procName or info.procSpell
+    if procRef and procRef ~= "" and ctx.aura("player", procRef, false) then
+      display.glow = true
+    end
   else -- "buff" | "debuff"
     local aura = ctx.aura(element.unit or "player", element.spellID or element.name, element.onlyMine)
     local showWhen = element.showWhen or "always"
@@ -291,6 +330,39 @@ function Triggers:LiveContext()
       local max = UnitHealthMax("target")
       if max == 0 then return nil end
       return UnitHealth("target") / max * 100
+    end,
+    petActive = function(filter)
+      if not UnitExists("pet") then return false end
+      if not filter or filter == "" then return true end
+      local id = tonumber(filter)
+      if id then
+        local guid = UnitGUID("pet")
+        -- 3.3.5 GUID: the npc id lives in hex chars 8-12 (same as the WA port)
+        local npcId = guid and tonumber(guid:sub(8, 12), 16)
+        return npcId == id
+      end
+      local name = UnitName("pet")
+      return name ~= nil and name:lower() == tostring(filter):lower()
+    end,
+    trinket = function(slot)
+      local itemId = GetInventoryItemID and GetInventoryItemID("player", slot)
+      if not itemId then return { itemId = nil } end
+      local start, duration, enable = GetInventoryItemCooldown("player", slot)
+      start, duration = start or 0, duration or 0
+      local onCooldown = enable ~= 0 and start > 0 and duration > 1.5
+      -- GetItemSpell returns the item's spell NAME first; for proc trinkets it
+      -- is usually the proc buff, for on-use trinkets it is the use spell
+      -- (which is not a buff, so it never matches an aura -> no false glow).
+      local procSpell = GetItemSpell and GetItemSpell(itemId) or nil
+      return {
+        itemId = itemId,
+        icon = GetInventoryItemTexture("player", slot),
+        name = GetItemInfo and GetItemInfo(itemId) or nil,
+        onCooldown = onCooldown,
+        cdStart = onCooldown and start or 0,
+        cdDuration = onCooldown and duration or 0,
+        procSpell = procSpell,
+      }
     end,
   }
   return liveCtx

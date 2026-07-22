@@ -24,6 +24,8 @@ local function Ctx(overrides)
     inCombat = function() return false end,
     hasTarget = function() return true end,
     targetHpPct = function() return 50 end,
+    petActive = function() return false end,
+    trinket = function() return { itemId = nil } end,
   }
   for k, v in pairs(overrides or {}) do ctx[k] = v end
   return ctx
@@ -172,6 +174,50 @@ check("no glow while this spell on cooldown", not d.glow)
 rEl.conditions[1].value = false -- inverted: glow while on cooldown
 d = ns.Triggers:Evaluate(rEl, Ctx({ cooldown = function() return cdState end }))
 check("inverted: glow while on cooldown", d.glow)
+
+-- Pet-active condition: glow when a (specific) pet is missing
+local petEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "petactive", value = false, action = "glow" } } }
+d = ns.Triggers:Evaluate(petEl, Ctx({ cooldown = function() return readyState end,
+  petActive = function() return false end }))
+check("glow when pet missing", d.glow)
+d = ns.Triggers:Evaluate(petEl, Ctx({ cooldown = function() return readyState end,
+  petActive = function() return true end }))
+check("no glow when pet is out", not d.glow)
+-- filter is forwarded so ctx can match by name/id
+local askedFor
+petEl.conditions[1].petName = "Imp"
+ns.Triggers:Evaluate(petEl, Ctx({ cooldown = function() return readyState end,
+  petActive = function(f) askedFor = f; return false end }))
+check("pet filter forwarded to the context", askedFor == "Imp")
+
+-- Trinket: item cooldown sweep + automatic proc glow
+local procAura = { name = "Berserking", icon = "i", duration = 15, expirationTime = NOW + 10 }
+local readyTrinket = { itemId = 100, icon = "ti", name = "Trinket", onCooldown = false,
+  cdStart = 0, cdDuration = 0, procSpell = "Berserking" }
+local trinketEl = { kind = "trinket", slot = 13, showWhen = "always" }
+d = ns.Triggers:Evaluate(trinketEl, Ctx({ trinket = function() return readyTrinket end,
+  aura = function(_, ref) return ref == "Berserking" and procAura or nil end }))
+check("trinket shown with its item icon", d.shown and d.icon == "ti")
+check("trinket glows while its proc buff is active", d.glow)
+-- no proc buff -> no glow
+d = ns.Triggers:Evaluate(trinketEl, Ctx({ trinket = function() return readyTrinket end }))
+check("trinket does not glow without the proc", not d.glow)
+-- on cooldown -> desaturated with a timer
+local cdTrinket = { itemId = 100, icon = "ti", onCooldown = true, cdStart = NOW - 5,
+  cdDuration = 120, procSpell = "Berserking" }
+d = ns.Triggers:Evaluate(trinketEl, Ctx({ trinket = function() return cdTrinket end }))
+check("trinket on CD desaturated + timer", d.desaturate and d.expirationTime == NOW + 115)
+-- manual procName overrides the auto-detected spell
+trinketEl.procName = "Custom Proc"
+local checkedRef
+ns.Triggers:Evaluate(trinketEl, Ctx({ trinket = function() return readyTrinket end,
+  aura = function(_, ref) checkedRef = ref; return nil end }))
+check("manual procName overrides GetItemSpell", checkedRef == "Custom Proc")
+trinketEl.procName = nil
+-- empty slot -> gray prompt with showWhen=always
+d = ns.Triggers:Evaluate(trinketEl, Ctx({ trinket = function() return { itemId = nil } end }))
+check("empty trinket slot grays out", d.shown and d.missing and d.desaturate)
 
 -- Summon timers: casting starts a manual countdown (no aura to read)
 ns.profile = { viewers = { { elements = {
