@@ -655,6 +655,28 @@ SlashCmdList["COACDM"] = function(msg)
     ns.DB:ResetProfile()
   elseif msg == "debug" then
     if ns.Tracking then ns.Tracking:Debug() end
+  elseif msg == "trinket" then
+    -- Helps configure trinket proc glow/ICD: shows the auto-detected proc
+    -- spell and every buff currently on you, so you can copy the exact name
+    -- into the "Proc buff" field when auto-detection misses it.
+    for _, slot in ipairs({ 13, 14 }) do
+      local itemId = GetInventoryItemID("player", slot)
+      if not itemId then
+        ns:Print(("Trinket %d (slot %d): empty"):format(slot - 12, slot))
+      else
+        local itemName = GetItemInfo(itemId) or ("#" .. itemId)
+        local procName = GetItemSpell(itemId)
+        ns:Print(("Trinket %d: %s  |  auto proc = %s"):format(
+          slot - 12, itemName, procName or "|cffff5555none (set it manually)|r"))
+      end
+    end
+    local buffs = {}
+    for i = 1, 40 do
+      local name = UnitAura("player", i, "HELPFUL")
+      if not name then break end
+      buffs[#buffs + 1] = name
+    end
+    ns:Print("Your current buffs: " .. (#buffs > 0 and table.concat(buffs, ", ") or "(none)"))
   elseif msg == "minimap" then
     local db = ns.DB.db.global.minimap or {}
     ns.DB.db.global.minimap = db

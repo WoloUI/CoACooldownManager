@@ -63,11 +63,22 @@ function W.CreateEditBox(parent, width, height, onEnter, placeholder)
   box:SetTextColor(COLORS.ink[1], COLORS.ink[2], COLORS.ink[3])
   box:SetTextInsets(6, 6, 0, 0)
   ApplyBackdrop(box, { 0.05, 0.06, 0.09, 1 })
+  -- Commit on Enter AND on focus loss: users routinely type a value and click
+  -- away without pressing Enter, which used to silently drop the edit (e.g. the
+  -- trinket ICD never saved, so the icon never grayed). A committed-text guard
+  -- keeps the click-away and the Enter->ClearFocus path from firing twice.
+  local function commit(self)
+    local text = self:GetText()
+    if text == self._committed then return end
+    self._committed = text
+    if onEnter then onEnter(self, text) end
+  end
   box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   box:SetScript("OnEnterPressed", function(self)
-    if onEnter then onEnter(self, self:GetText()) end
+    commit(self)
     self:ClearFocus()
   end)
+  box:SetScript("OnEditFocusLost", function(self) commit(self) end)
 
   -- Placeholder: grey hint shown while the box is empty. Driven by
   -- OnTextChanged, which fires on both typing and programmatic SetText.
