@@ -165,7 +165,7 @@ local function CreateConditionRow(parent)
 
   row.value = W.CreateEditBox(row, 40, 20, function(_, text)
     row.cond.value = tonumber(text) or 0
-  end)
+  end, "0")
 
   row.bool = W.CreateDropdown(row, 100, function(_, value)
     row.cond.value = value
