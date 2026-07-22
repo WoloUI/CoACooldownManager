@@ -177,12 +177,14 @@ function Triggers:Evaluate(element, ctx)
     stacks = 0, start = 0, duration = 0, expirationTime = 0,
     icon = element.icon, name = element.name, spellID = element.spellID,
   }
+  local onCooldown = false -- set for cooldown elements; gates the alert actions
 
   if element.kind == "cooldown" then
     -- Prefer the NAME: it survives Ascension spell-ID changes and always
     -- points at the player's learned version; the stored ID is the fallback.
     local state = ctx.cooldown(element.name or element.spellID)
     if not state or not state.known then return display end
+    onCooldown = state.onCooldown and true or false
     local showWhen = element.showWhen or "always"
     if showWhen == "always" then
       display.shown = true
@@ -251,6 +253,14 @@ function Triggers:Evaluate(element, ctx)
   if display.shown and element.conditions then
     for _, cond in ipairs(element.conditions) do
       local matched = ConditionMatches(cond, element, display, ctx)
+      -- Opt-in: silence the alert actions (glow/sound) while the spell is on
+      -- cooldown. Flashing "use me" for an unusable spell is just noise; the
+      -- alert re-arms and fires the moment it comes off cooldown. Other actions
+      -- (hide/desaturate/show) still apply so the icon can gray out normally.
+      if matched and onCooldown and cond.muteOnCooldown then
+        local action = cond.action or "glow"
+        if action == "glow" or action == "sound" then matched = false end
+      end
       ApplyCondition(cond, matched, display)
       CheckSound(cond, matched)
     end

@@ -237,6 +237,31 @@ function DB:CreateNamedProfile(name)
   return true
 end
 
+-- Duplicates a saved template into a new one. newName is optional: when nil/empty
+-- an unused "<source> (copy)" / "(copy 2)" ... name is generated. An explicit name
+-- that already exists is rejected (like CreateNamedProfile). The copy is fully
+-- independent; scanner/tracking materialize on assign, same as any template.
+function DB:DuplicateNamedProfile(sourceName, newName)
+  local source = sourceName and self.db.global.profiles[sourceName]
+  if not source then return nil, "select a profile to duplicate" end
+  local finalName
+  if newName and newName ~= "" then
+    if self.db.global.profiles[newName] then
+      return nil, "a profile with that name already exists"
+    end
+    finalName = newName
+  else
+    finalName = sourceName .. " (copy)"
+    local n = 2
+    while self.db.global.profiles[finalName] do
+      finalName = sourceName .. " (copy " .. n .. ")"
+      n = n + 1
+    end
+  end
+  self.db.global.profiles[finalName] = ns.CopyTable(source)
+  return true, finalName
+end
+
 -- Loads an independent COPY of the named template into the spec: later edits
 -- stay on this character (templates never change under you). nil only clears
 -- the "loaded from" label and keeps the spec's bars as they are.

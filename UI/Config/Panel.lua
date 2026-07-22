@@ -1316,9 +1316,22 @@ function Config:Render()
           Config:Render()
         end)
         row.remove:SetPoint("RIGHT", -4, 0)
+        row.copy = W.CreateButton(row, "Copy", 44, 20, function(self)
+          local newName = controls.profNewName:GetText()
+          local ok, result = ns.DB:DuplicateNamedProfile(self.profileName, newName ~= "" and newName or nil)
+          if ok then
+            ns:Print("profile '" .. self.profileName .. "' duplicated as '" .. result .. "'.")
+            controls.profNewName:SetText("")
+          else
+            ns:Print(result)
+          end
+          Config:Render()
+        end)
+        row.copy:SetPoint("RIGHT", -28, 0)
         c2.profRows[i] = row
       end
       row.remove.profileName = name
+      row.copy.profileName = name
       local marker = currentAssignment == name and "  |cff58d3a5(loaded on this spec)|r" or ""
       row.label:SetText(name .. marker)
       row:ClearAllPoints()

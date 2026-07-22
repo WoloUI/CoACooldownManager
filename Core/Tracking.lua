@@ -96,6 +96,7 @@ local frameNames = {}   -- [frame] = global name (for unit re-checks)
 local framePrimary = {} -- [frame] = true when it came from an addon header
 local overlays = {}     -- [frame] = overlay container with pooled widgets
 local rescanNeeded = false
+local UpdateFrame       -- forward decl: Tracking:Debug() calls it above its definition
 
 -- Pure priority decision (test seam): given the frame currently mapped to a
 -- unit and a candidate for it, should the candidate replace it? Addon group
@@ -105,6 +106,22 @@ function Tracking.ShouldReplace(current, cand)
   if not current then return true end
   if cand.primary ~= current.primary then return cand.primary end
   return (not current.shown) and cand.shown or false
+end
+
+-- Pure upgrade decision (test seam): given the tier of every currently mapped
+-- frame (true = addon header / primary, false = standalone fallback) and
+-- whether an addon header is currently visible, should we queue a re-scan?
+-- A complete-but-fallback map happens when a header's buttons weren't built yet
+-- at the last rescan (common right after a group forms). The count-based
+-- self-heal can't catch it (the map IS complete), so the party HoTs stay on the
+-- off-screen Blizzard frames until a zone change or /reload. Only churns when a
+-- header is actually present, so pure-Blizzard users never re-scan needlessly.
+function Tracking.ShouldUpgradeMap(frameTiers, headerPresent)
+  if not headerPresent then return false end
+  for _, isPrimary in ipairs(frameTiers) do
+    if not isPrimary then return true end
+  end
+  return false
 end
 
 local function Enabled()
@@ -203,6 +220,29 @@ function Tracking:Debug()
         .. (#names > 10 and (" (+" .. (#names - 10) .. " more)") or ""))
     else
       ns:Print("    auras: none cached for this unit")
+    end
+    -- Render diagnostic: run the real display path, then inspect the widgets so
+    -- we can tell detection failures apart from pure visibility problems.
+    if tracking and #tracking.indicators > 0 then
+      UpdateFrame(frame, unit)
+      local overlay = overlays[frame]
+      local now = GetTime()
+      for i, cfg in ipairs(tracking.indicators) do
+        local disp = Tracking.Evaluate(cfg, ns.Auras:GetAura(unit, cfg.spell, false), now)
+        local w = overlay and overlay.widgets[i]
+        ns:Print(string.format("    [%s] eval=%s widget=%s alpha=%.1f",
+          tostring(cfg.spell), disp.shown and "SHOWN" or "hidden",
+          w and (w:IsShown() and "visible" or "hidden") or "none",
+          w and w:GetAlpha() or 0))
+      end
+      if overlay then
+        ns:Print(string.format("    overlay shown=%s lvl=%d strata=%s | parent lvl=%d strata=%s",
+          tostring(overlay:IsShown()), overlay:GetFrameLevel() or -1,
+          tostring(overlay:GetFrameStrata()), frame:GetFrameLevel() or -1,
+          tostring(frame:GetFrameStrata())))
+      else
+        ns:Print("    overlay: none created")
+      end
     end
   end
   if count == 0 then
@@ -343,7 +383,7 @@ local function FakeDisplay(now)
   }
 end
 
-local function UpdateFrame(frame, unit)
+function UpdateFrame(frame, unit)
   local overlay = GetOverlay(frame)
   local tracking = ns.profile.tracking
   local now = GetTime()
@@ -476,6 +516,28 @@ ns:On("READY", function()
         or ((GetNumPartyMembers and GetNumPartyMembers() or 0) + 1)
       if mapped < expected then
         QueueMapRescan()
+      elseif not rescanNeeded then
+        -- Complete map, but a unit may still be on the Blizzard fallback because
+        -- the ElvUI header buttons appeared after the last rescan. Upgrade once
+        -- the header is visible (the "party HoTs invisible until /reload or
+        -- dungeon entry" bug).
+        local headerPresent = false
+        for _, rootName in ipairs(HEADER_ROOTS) do
+          local root = _G[rootName]
+          if root and root.IsShown and root:IsShown() then
+            headerPresent = true
+            break
+          end
+        end
+        if headerPresent then
+          local tiers = {}
+          for _, frame in pairs(unitFrames) do
+            tiers[#tiers + 1] = framePrimary[frame] or false
+          end
+          if Tracking.ShouldUpgradeMap(tiers, headerPresent) then
+            QueueMapRescan()
+          end
+        end
       end
     end
   end)

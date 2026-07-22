@@ -67,9 +67,22 @@ local function SoundOptions()
   return options
 end
 
+-- Power (value)/(%) conditions pick which resource to read. "current" means the
+-- active bar (UnitPowerType) and stores no powerType -> back-compat with configs
+-- made before this selector existed. Others store the WoW power-type index.
+local POWER_OPTIONS = {
+  { text = "Current (active)", value = "current" },
+  { text = "Mana", value = 0 },
+  { text = "Rage", value = 1 },
+  { text = "Focus", value = 2 },
+  { text = "Energy", value = 3 },
+  { text = "Runic Power", value = 6 },
+}
+
 -- Which extra widgets each condition type needs
 local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true,
   targethp = true, otherstacks = true, otherremaining = true }
+local NEEDS_POWER = { power = true, powerpct = true }
 local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true }
 local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true }
 local BOOL_OPTIONS = {
@@ -141,6 +154,11 @@ local function CreateConditionRow(parent)
     row.cond.value = value
   end)
 
+  row.power = W.CreateDropdown(row, 118, function(_, value)
+    row.cond.powerType = value ~= "current" and value or nil
+  end)
+  row.power:SetOptions(POWER_OPTIONS)
+
   row.action = W.CreateDropdown(row, 92, function(_, value)
     row.cond.action = value
     Rebuild() -- the sound line appears/disappears with the action
@@ -159,6 +177,11 @@ local function CreateConditionRow(parent)
   end)
   row.soundPlay = W.CreateButton(row, "Play", 40, 20, function()
     ns.PlayAlertSound(row.cond and row.cond.sound)
+  end)
+
+  -- Cooldown elements only: silence this alert while the spell is on cooldown
+  row.muteCD = W.CreateCheckbox(row, "Silence on cooldown", function(_, checked)
+    row.cond.muteOnCooldown = checked or nil
   end)
 
   return row
@@ -192,6 +215,13 @@ local function LayoutConditionRow(row, cond)
     place(row.unit, 66)
   else
     row.unit:Hide()
+  end
+
+  if NEEDS_POWER[ctype] then
+    row.power:SetValue(cond.powerType ~= nil and cond.powerType or "current")
+    place(row.power, 118)
+  else
+    row.power:Hide()
   end
 
   if NUMERIC[ctype] then
@@ -229,11 +259,21 @@ local function LayoutConditionRow(row, cond)
     row.soundPlay:ClearAllPoints()
     row.soundPlay:SetPoint("TOPLEFT", row, "TOPLEFT", 208, -ROW_H - 1)
     row.soundPlay:Show()
+    -- "on cooldown" only means something for spells that have a cooldown
+    if builder.element and builder.element.kind == "cooldown" then
+      row.muteCD:ClearAllPoints()
+      row.muteCD:SetPoint("TOPLEFT", row, "TOPLEFT", 262, -ROW_H - 3)
+      row.muteCD:SetChecked(cond.muteOnCooldown)
+      row.muteCD:Show()
+    else
+      row.muteCD:Hide()
+    end
     row:SetHeight(ROW_H * 2)
   else
     row.soundLabel:Hide()
     row.sound:Hide()
     row.soundPlay:Hide()
+    row.muteCD:Hide()
     row:SetHeight(ROW_H)
   end
 end

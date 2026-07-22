@@ -122,6 +122,22 @@ check("same tier: a visible frame replaces a hidden one",
 check("same tier: a hidden frame never replaces a visible one",
   P({ primary = true, shown = true }, { primary = true, shown = false }) == false)
 
+-- Stale-but-complete map upgrade: right after a group forms the ElvUI header
+-- buttons may not exist yet, so units land on the off-screen Blizzard fallback.
+-- The map is complete (mapped == expected) so the count-based self-heal never
+-- fires; without this the party HoTs stay invisible until /reload or a zone
+-- change re-scans. When an addon header is present, any fallback-mapped unit
+-- must trigger a re-scan so the header can claim it.
+local U = ns.Tracking.ShouldUpgradeMap
+check("no addon header present: never churns (Blizzard-only user)",
+  U({ false, false }, false) == false)
+check("header present but all units already on it: no re-scan",
+  U({ true, true }, true) == false)
+check("header present and a unit still on fallback: re-scan to upgrade",
+  U({ true, false }, true) == true)
+check("header present but nothing mapped yet: no re-scan",
+  U({}, true) == false)
+
 -- Class HUD hider: picker candidates, smallest-under-cursor pick, hidden set
 local function FakeHudFrame(name, w, h, over, visible)
   return {

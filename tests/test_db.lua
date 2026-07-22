@@ -138,6 +138,25 @@ ns.DB:DeleteNamedProfile("Tpl")
 check("deleting the template keeps the loaded copy", ns.DB:GetViewer("LocalOnly") ~= nil)
 check("delete clears the loaded-from label", ns.DB.char.assignments[ns.DB:GetSpecKey()] == nil)
 
+-- Duplicating a saved template
+ns.DB:SaveProfileAs("Dup")
+local dupSrcViewers = #CoACDM_DB.global.profiles.Dup.viewers
+local okDup, autoName = ns.DB:DuplicateNamedProfile("Dup")
+check("duplicate auto-names with (copy)", okDup and autoName == "Dup (copy)")
+check("duplicate copies the viewers",
+  #CoACDM_DB.global.profiles["Dup (copy)"].viewers == dupSrcViewers)
+table.insert(CoACDM_DB.global.profiles["Dup (copy)"].viewers, { name = "OnlyCopy" })
+check("duplicate is independent of the source",
+  #CoACDM_DB.global.profiles.Dup.viewers == dupSrcViewers)
+check("duplicate collision bumps to (copy 2)",
+  select(2, ns.DB:DuplicateNamedProfile("Dup")) == "Dup (copy 2)")
+check("duplicate honors an explicit name",
+  select(2, ns.DB:DuplicateNamedProfile("Dup", "MyCopy")) == "MyCopy")
+check("duplicate rejects an existing explicit name",
+  (ns.DB:DuplicateNamedProfile("Dup", "MyCopy")) == nil)
+check("duplicate rejects a missing source",
+  (ns.DB:DuplicateNamedProfile("Nope")) == nil)
+
 -- Corrupt DB recovery
 CoACDM_DB = "garbage"
 ns.DB:Init()

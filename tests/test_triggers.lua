@@ -95,6 +95,19 @@ local cdEl = { kind = "cooldown", spellID = 1, showWhen = "always",
 d = ns.Triggers:Evaluate(cdEl, Ctx({ cooldown = function() return readyState end }))
 check("desaturate under 50% power", d.desaturate)
 
+-- Power condition targets a specific resource via cond.powerType
+local function PowerByType(pt) -- mana(0) full, energy(3) nearly empty
+  if pt == 3 then return 10, 100 end
+  return 90, 100
+end
+local pctEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "powerpct", op = "<", value = 30, action = "glow", powerType = 0 } } }
+d = ns.Triggers:Evaluate(pctEl, Ctx({ cooldown = function() return readyState end, power = PowerByType }))
+check("power condition reads mana (90%) -> no glow", not d.glow)
+pctEl.conditions[1].powerType = 3
+d = ns.Triggers:Evaluate(pctEl, Ctx({ cooldown = function() return readyState end, power = PowerByType }))
+check("power condition reads energy (10%) -> glow", d.glow)
+
 -- Charge spells: count always shown, recharge sweep while usable
 local chargeState = { start = 0, duration = 0, onCooldown = false, usable = true, known = true,
   charges = 1, maxCharges = 2, chargeStart = NOW - 5, chargeDuration = 20 }
@@ -216,5 +229,30 @@ local noSound = { kind = "cooldown", spellID = 8, showWhen = "always",
   conditions = { { ctype = "ready", value = true, action = "glow" } } }
 d = ns.Triggers:Evaluate(noSound, readyCtx)
 check("glow without a sound stays silent", d.glow and #played == 3)
+
+-- Silence on cooldown: opt-in gating of the alert actions while on CD.
+-- Default ctx power is 40/100 = 40%, so "powerpct < 50" matches.
+local muteEl = { kind = "cooldown", spellID = 10, showWhen = "always",
+  conditions = { { ctype = "powerpct", op = "<", value = 50, action = "glow", muteOnCooldown = true } } }
+d = ns.Triggers:Evaluate(muteEl, Ctx({ cooldown = function() return cdState end }))
+check("muteOnCooldown suppresses glow while on CD", not d.glow)
+d = ns.Triggers:Evaluate(muteEl, Ctx({ cooldown = function() return readyState end }))
+check("muteOnCooldown lets glow fire when ready", d.glow)
+
+-- Back-compat: without the flag, alerts still fire on CD (e.g. remaining glows)
+local noMuteEl = { kind = "cooldown", spellID = 11, showWhen = "always",
+  conditions = { { ctype = "powerpct", op = "<", value = 50, action = "glow" } } }
+d = ns.Triggers:Evaluate(noMuteEl, Ctx({ cooldown = function() return cdState end }))
+check("no flag -> glow still fires on CD (unchanged)", d.glow)
+
+-- Sound is silenced on CD, then plays once the moment the spell comes off CD
+played = {}
+local muteSound = { kind = "cooldown", spellID = 12, showWhen = "always",
+  conditions = { { ctype = "powerpct", op = "<", value = 50, action = "glow",
+    sound = "s", muteOnCooldown = true } } }
+ns.Triggers:Evaluate(muteSound, Ctx({ cooldown = function() return cdState end }))
+check("muteOnCooldown silences sound while on CD", #played == 0)
+ns.Triggers:Evaluate(muteSound, Ctx({ cooldown = function() return readyState end }))
+check("sound fires once when the spell comes off CD", #played == 1)
 
 return T
