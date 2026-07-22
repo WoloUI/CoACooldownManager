@@ -44,6 +44,7 @@ local KIND_OPTIONS = {
   { text = "Debuff", value = "debuff" },
   { text = "Summon timer", value = "summon" },
   { text = "Trinket", value = "trinket" },
+  { text = "Item (consumable)", value = "item" },
 }
 local TRINKET_SLOT_OPTIONS = {
   { text = "Trinket 1", value = 13 },
@@ -640,6 +641,21 @@ function Config:BuildControls()
 
     local input = (c.addInput:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if input == "" then return end
+
+    -- Item (consumable): resolve against items, not spells; the count and
+    -- cooldown resolve live so an uncached name still works once seen
+    if kind == "item" then
+      local itemId, itemName, itemIcon = ns.ResolveItem(input)
+      table.insert(viewer.elements, {
+        kind = "item", itemID = itemId, name = itemName or input, icon = itemIcon,
+        conditions = {}, showWhen = "always",
+      })
+      c.addInput:SetText("")
+      Touch()
+      Config:Render()
+      return
+    end
+
     local id, name, icon = ns.ResolveSpell(input)
     if not id and not name then
       if kind == "cooldown" then
@@ -1102,6 +1118,10 @@ local function ElementLabel(el)
   end
   if el.kind == "trinket" then
     return (el.name or "Trinket") .. "  |cff9aa3b5(trinket slot " .. (el.slot or 13) .. ")|r"
+  end
+  if el.kind == "item" then
+    local idText = el.itemID and (" #" .. el.itemID) or ""
+    return (el.name or "?") .. "  |cff9aa3b5(item" .. idText .. ")|r"
   end
   local kindText = el.kind == "cooldown" and "CD" or el.kind == "buff" and "Buff"
     or el.kind == "summon" and ("Summon " .. (el.duration or 60) .. "s") or "Debuff"
@@ -2002,11 +2022,17 @@ function Config:Render()
     c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
     c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
     y = y - 24
-    c.addHint:SetText(isTrinket
-      and "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
-      or (style == "shield"
-        and "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
-        or "Type a name or spell ID, or drag a spell from your spellbook."))
+    local addHint
+    if isTrinket then
+      addHint = "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
+    elseif c.addKind.value == "item" then
+      addHint = "Type a consumable's name or item ID. Shows its cooldown and the count you carry."
+    elseif style == "shield" then
+      addHint = "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
+    else
+      addHint = "Type a name or spell ID, or drag a spell from your spellbook."
+    end
+    c.addHint:SetText(addHint)
     c.addHint:SetPoint("TOPLEFT", C1, y); c.addHint:Show()
     y = y - 24
   elseif style == "reminders" then

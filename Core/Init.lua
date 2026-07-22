@@ -352,6 +352,22 @@ function ns.ResolveSpell(input)
   return nil, name, icon
 end
 
+-- Resolves an item by numeric id or name. Returns itemId, name, icon. Unlike
+-- spells, GetItemInfo only knows items the client has seen (bags, equipped, or
+-- cached), so a fresh name may not resolve until the item has been encountered;
+-- callers keep the raw text and re-resolve at runtime (same pattern as spells).
+function ns.ResolveItem(input)
+  local id = tonumber(input)
+  if id then
+    local name, _, _, _, _, _, _, _, _, icon = GetItemInfo(id)
+    return id, name, icon
+  end
+  local name, link, _, _, _, _, _, _, _, icon = GetItemInfo(input)
+  if not name then return nil end
+  local linkId = link and link:match("item:(%d+)")
+  return linkId and tonumber(linkId) or nil, name, icon
+end
+
 function ns.IsSpellKnownByPlayer(spellID)
   if type(spellID) == "string" then
     -- By-name lookup resolves only for learned spells

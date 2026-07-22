@@ -26,6 +26,7 @@ local function Ctx(overrides)
     targetHpPct = function() return 50 end,
     petActive = function() return false end,
     trinket = function() return { itemId = nil } end,
+    item = function() return nil end,
   }
   for k, v in pairs(overrides or {}) do ctx[k] = v end
   return ctx
@@ -241,6 +242,34 @@ check("icd: re-glows and restarts on a new proc", d.glow)
 d = ns.Triggers:Evaluate(icdEl, Ctx({ trinket = function() return readyTrinket end,
   now = function() return NOW + 45 end }))
 check("icd: gray again after the restarted proc", d.desaturate and d.expirationTime == NOW + 70)
+
+-- Item (consumable): count as stacks, use cooldown, gray at zero
+local potReady = { name = "Healing Potion", icon = "pi", count = 5, onCooldown = false,
+  cdStart = 0, cdDuration = 0 }
+local itemEl = { kind = "item", itemID = 100, showWhen = "always" }
+d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potReady end }))
+check("item shown with its icon and count", d.shown and d.icon == "pi"
+  and d.stacks == 5 and d.forceStacks)
+check("item with stock not grayed", not d.desaturate)
+-- on cooldown -> gray with timer
+local potCd = { name = "Healing Potion", icon = "pi", count = 5, onCooldown = true,
+  cdStart = NOW - 5, cdDuration = 60 }
+d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potCd end }))
+check("item on cooldown grayed + timer", d.desaturate and d.expirationTime == NOW + 55)
+-- zero count -> grayed even when ready
+local potNone = { name = "Healing Potion", icon = "pi", count = 0, onCooldown = false }
+d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potNone end }))
+check("item with no stock grayed", d.desaturate and d.stacks == 0)
+-- showWhen=ready hides while on cooldown
+itemEl.showWhen = "ready"
+d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potCd end }))
+check("item ready-only hidden on cooldown", not d.shown)
+itemEl.showWhen = "always"
+-- condition still applies: glow when count < 3
+itemEl.conditions = { { ctype = "stacks", op = "<", value = 3, action = "glow" } }
+d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potNone end }))
+check("item glows when low on stock", d.glow)
+itemEl.conditions = nil
 
 -- Summon timers: casting starts a manual countdown (no aura to read)
 ns.profile = { viewers = { { elements = {

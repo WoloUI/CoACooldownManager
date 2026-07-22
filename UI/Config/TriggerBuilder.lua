@@ -13,6 +13,7 @@ local KIND_OPTIONS = {
   { text = "Buff", value = "buff" },
   { text = "Debuff", value = "debuff" },
   { text = "Trinket", value = "trinket" },
+  { text = "Item (consumable)", value = "item" },
 }
 local SLOT_OPTIONS = {
   { text = "Trinket 1", value = 13 },
@@ -312,9 +313,10 @@ function TriggerBuilder:Create(parent)
   builder.kindLabel = W.CreateLabel(builder, "Track", 12, W.colors.inkDim)
   builder.kind = W.CreateDropdown(builder, 120, function(_, value)
     builder.element.kind = value
-    -- Cooldown and trinket both default to "always" (gray on CD); auras default
-    -- to "present" (only while active)
-    builder.element.showWhen = (value == "cooldown" or value == "trinket") and "always" or "present"
+    -- Cooldown-like kinds (cooldown/trinket/item) default to "always" (gray on
+    -- CD); auras default to "present" (only while active)
+    local cdLike = value == "cooldown" or value == "trinket" or value == "item"
+    builder.element.showWhen = cdLike and "always" or "present"
     if value == "trinket" then builder.element.slot = builder.element.slot or 13 end
     Rebuild()
   end)

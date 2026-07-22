@@ -298,6 +298,32 @@ function Triggers:Evaluate(element, ctx)
         end
       end
     end
+  elseif element.kind == "item" then
+    -- A consumable/inventory item tracked by id or name: item-use cooldown
+    -- sweep and the carried count shown as stacks. Grays at zero count.
+    local info = ctx.item(element.itemID or element.name)
+    if info and info.icon then display.icon = info.icon end
+    if info and info.name then display.name = info.name end
+    local count = info and info.count or 0
+    local showWhen = element.showWhen or "always"
+    local hasCd = info and info.onCooldown
+    onCooldown = hasCd and true or false
+    if showWhen == "always" then
+      display.shown = true
+    elseif showWhen == "ready" then
+      display.shown = not hasCd
+    elseif showWhen == "cooldown" then
+      display.shown = hasCd
+    end
+    display.stacks = count
+    display.forceStacks = true -- always show the count, even 0/1
+    if hasCd then
+      display.desaturate = true
+      display.start = info.cdStart or 0
+      display.duration = info.cdDuration or 0
+      display.expirationTime = (info.cdStart or 0) + (info.cdDuration or 0)
+    end
+    if count <= 0 then display.desaturate = true end -- none left
   else -- "buff" | "debuff"
     local aura = ctx.aura(element.unit or "player", element.spellID or element.name, element.onlyMine)
     local showWhen = element.showWhen or "always"
@@ -373,6 +399,21 @@ function Triggers:LiveContext()
       end
       local name = UnitName("pet")
       return name ~= nil and name:lower() == tostring(filter):lower()
+    end,
+    item = function(ref)
+      if not ref then return nil end
+      local name, _, _, _, _, _, _, _, _, icon = GetItemInfo(ref)
+      -- Count and cooldown accept an id or a name on this client
+      local count = GetItemCount and GetItemCount(ref) or 0
+      local start, duration, enable = GetItemCooldown and GetItemCooldown(ref)
+      start, duration = start or 0, duration or 0
+      local onCooldown = enable ~= 0 and start > 0 and duration > 1.5
+      return {
+        name = name, icon = icon, count = count or 0,
+        onCooldown = onCooldown,
+        cdStart = onCooldown and start or 0,
+        cdDuration = onCooldown and duration or 0,
+      }
     end,
     trinket = function(slot)
       local itemId = GetInventoryItemID and GetInventoryItemID("player", slot)
