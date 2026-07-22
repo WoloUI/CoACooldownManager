@@ -352,6 +352,15 @@ function DB:AddViewer(name, style)
     viewer.shield = { segments = 14, segW = 24, segH = 7, gap = 2, curve = 12,
       showValue = true, color = { 1, 0.72, 0.2 } }
     viewer.spacing = 10
+  elseif style == "swing" then
+    -- Main-hand/off-hand/ranged swing timers (event-driven, no elements)
+    viewer.swing = { width = 200, height = 16, showLabel = true, showTime = true,
+      show_mh = true, show_oh = true, show_ranged = true }
+    viewer.growth = "UP"
+  elseif style == "cast" then
+    -- Player cast bar with channel ticks (event-driven, no elements)
+    viewer.cast = { width = 220, height = 22, showIcon = true, showTime = true,
+      showTicks = true, tickSeconds = 1.0 }
   end
   table.insert(self.profile.viewers, viewer)
   ns:Fire("VIEWERS_CHANGED")

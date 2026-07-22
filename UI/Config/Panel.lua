@@ -16,6 +16,8 @@ local STYLE_OPTIONS = {
   { text = "Duration bars", value = "bars" },
   { text = "Stack points", value = "stacks" },
   { text = "NaNShield", value = "shield" },
+  { text = "Swing timer", value = "swing" },
+  { text = "Cast bar", value = "cast" },
   { text = "Alert row", value = "reminders" },
 }
 local POSITION_OPTIONS = {
@@ -609,6 +611,56 @@ function Config:BuildControls()
   end)
   c.shieldHint = W.CreateLabel(parent,
     "Each tracked shield buff shows as a curved column that drains with the\nabsorb left on the unit (negative curve bows left). Add the shield spells\nas Buff elements below.", 10, W.colors.inkDim)
+
+  -- Swing bar (config resolved at click time: pooled controls)
+  local function SwingCfg()
+    local viewer = SelectedViewer()
+    viewer.swing = viewer.swing or { width = 200, height = 16, showLabel = true,
+      showTime = true, show_mh = true, show_oh = true, show_ranged = true }
+    return viewer.swing
+  end
+  c.swingHeader = W.CreateSection(parent, "SWING BARS")
+  c.swingWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
+  c.swingW = W.CreateEditBox(parent, 46, 20, function(_, text)
+    SwingCfg().width = math.max(tonumber(text) or 200, 20); Touch()
+  end, "200")
+  c.swingHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
+  c.swingH = W.CreateEditBox(parent, 46, 20, function(_, text)
+    SwingCfg().height = math.max(tonumber(text) or 16, 4); Touch()
+  end, "16")
+  c.swingLabelChk = W.CreateCheckbox(parent, "Labels", function(_, ck) SwingCfg().showLabel = ck; Touch() end)
+  c.swingTimeChk = W.CreateCheckbox(parent, "Time left", function(_, ck) SwingCfg().showTime = ck; Touch() end)
+  c.swingMH = W.CreateCheckbox(parent, "Main hand", function(_, ck) SwingCfg().show_mh = ck; Touch() end)
+  c.swingOH = W.CreateCheckbox(parent, "Off hand", function(_, ck) SwingCfg().show_oh = ck; Touch() end)
+  c.swingRanged = W.CreateCheckbox(parent, "Ranged", function(_, ck) SwingCfg().show_ranged = ck; Touch() end)
+  c.swingHint = W.CreateLabel(parent,
+    "Melee swings are read from the combat log; off-hand and ranged bars appear\nonly when you have that weapon. In-combat visibility is set above.", 10, W.colors.inkDim)
+
+  -- Cast bar
+  local function CastCfg()
+    local viewer = SelectedViewer()
+    viewer.cast = viewer.cast or { width = 220, height = 22, showIcon = true,
+      showTime = true, showTicks = true, tickSeconds = 1.0 }
+    return viewer.cast
+  end
+  c.castHeader = W.CreateSection(parent, "CAST BAR")
+  c.castWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
+  c.castW = W.CreateEditBox(parent, 46, 20, function(_, text)
+    CastCfg().width = math.max(tonumber(text) or 220, 20); Touch()
+  end, "220")
+  c.castHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
+  c.castH = W.CreateEditBox(parent, 46, 20, function(_, text)
+    CastCfg().height = math.max(tonumber(text) or 22, 4); Touch()
+  end, "22")
+  c.castIconChk = W.CreateCheckbox(parent, "Icon", function(_, ck) CastCfg().showIcon = ck; Touch() end)
+  c.castTimeChk = W.CreateCheckbox(parent, "Time left", function(_, ck) CastCfg().showTime = ck; Touch() end)
+  c.castTicksChk = W.CreateCheckbox(parent, "Channel ticks", function(_, ck) CastCfg().showTicks = ck; Config:Render() end)
+  c.castTickLabel = W.CreateLabel(parent, "Tick every (s)", 12, W.colors.inkDim)
+  c.castTick = W.CreateEditBox(parent, 46, 20, function(_, text)
+    CastCfg().tickSeconds = math.max(tonumber(text) or 1.0, 0.1); Touch()
+  end, "1.0")
+  c.castHint = W.CreateLabel(parent,
+    "Your own casts and channels. Channel ticks are drawn one every N seconds\n(no per-spell tick API on this client - tune it to the channel).", 10, W.colors.inkDim)
 
   -- Elements
   c.elementsHeader = W.CreateSection(parent, "ELEMENTS")
@@ -1938,6 +1990,44 @@ function Config:Render()
     y = y - 26
     c.shieldHint:SetPoint("TOPLEFT", L1, y); c.shieldHint:Show()
     y = y - 48
+  elseif style == "swing" then
+    local sw = viewer.swing or {}
+    c.swingHeader:SetPoint("TOPLEFT", 0, y); c.swingHeader:Show()
+    y = y - 22
+    c.swingWLabel:SetPoint("TOPLEFT", L1, y - 4); c.swingWLabel:Show()
+    c.swingW:SetPoint("TOPLEFT", C1, y); c.swingW:SetText(tostring(sw.width or 200)); c.swingW:Show()
+    c.swingHLabel:SetPoint("TOPLEFT", L2, y - 4); c.swingHLabel:Show()
+    c.swingH:SetPoint("TOPLEFT", C2, y); c.swingH:SetText(tostring(sw.height or 16)); c.swingH:Show()
+    y = y - 28
+    c.swingLabelChk:SetPoint("TOPLEFT", C1, y); c.swingLabelChk:SetChecked(sw.showLabel ~= false); c.swingLabelChk:Show()
+    c.swingTimeChk:SetPoint("TOPLEFT", C2, y); c.swingTimeChk:SetChecked(sw.showTime ~= false); c.swingTimeChk:Show()
+    y = y - 26
+    c.swingMH:SetPoint("TOPLEFT", C1, y); c.swingMH:SetChecked(sw.show_mh ~= false); c.swingMH:Show()
+    c.swingOH:SetPoint("TOPLEFT", C2, y); c.swingOH:SetChecked(sw.show_oh ~= false); c.swingOH:Show()
+    c.swingRanged:SetPoint("TOPLEFT", C3, y); c.swingRanged:SetChecked(sw.show_ranged ~= false); c.swingRanged:Show()
+    y = y - 26
+    c.swingHint:SetPoint("TOPLEFT", L1, y); c.swingHint:Show()
+    y = y - 40
+  elseif style == "cast" then
+    local ca = viewer.cast or {}
+    c.castHeader:SetPoint("TOPLEFT", 0, y); c.castHeader:Show()
+    y = y - 22
+    c.castWLabel:SetPoint("TOPLEFT", L1, y - 4); c.castWLabel:Show()
+    c.castW:SetPoint("TOPLEFT", C1, y); c.castW:SetText(tostring(ca.width or 220)); c.castW:Show()
+    c.castHLabel:SetPoint("TOPLEFT", L2, y - 4); c.castHLabel:Show()
+    c.castH:SetPoint("TOPLEFT", C2, y); c.castH:SetText(tostring(ca.height or 22)); c.castH:Show()
+    y = y - 28
+    c.castIconChk:SetPoint("TOPLEFT", C1, y); c.castIconChk:SetChecked(ca.showIcon ~= false); c.castIconChk:Show()
+    c.castTimeChk:SetPoint("TOPLEFT", C2, y); c.castTimeChk:SetChecked(ca.showTime ~= false); c.castTimeChk:Show()
+    y = y - 26
+    c.castTicksChk:SetPoint("TOPLEFT", C1, y); c.castTicksChk:SetChecked(ca.showTicks ~= false); c.castTicksChk:Show()
+    if ca.showTicks ~= false then
+      c.castTickLabel:SetPoint("TOPLEFT", LW, y - 4); c.castTickLabel:Show()
+      c.castTick:SetPoint("TOPLEFT", CW, y); c.castTick:SetText(tostring(ca.tickSeconds or 1.0)); c.castTick:Show()
+    end
+    y = y - 28
+    c.castHint:SetPoint("TOPLEFT", L1, y); c.castHint:Show()
+    y = y - 40
   elseif style ~= "reminders" then
     c.lookHeader:SetPoint("TOPLEFT", 0, y)
     c.lookHeader:Show()

@@ -74,7 +74,7 @@ end)
 --  lerp  - eased approach to a target for power values (ElvUI-style smooth)
 --------------------------------------------------------------------------------
 local smoothFrame = CreateFrame("Frame")
-local lerpBars, drainBars = {}, {}
+local lerpBars, drainBars, fillBars = {}, {}, {}
 local LERP_SPEED = 12
 
 smoothFrame:SetScript("OnUpdate", function(_, dt)
@@ -102,6 +102,14 @@ smoothFrame:SetScript("OnUpdate", function(_, dt)
       bar:SetValue(math.max(expiration - now, 0))
     end
   end
+  -- Fill: rises from 0 at `startTime` up to `duration` (swing/cast bars)
+  for bar, f in pairs(fillBars) do
+    if not bar:IsVisible() then
+      fillBars[bar] = nil
+    else
+      bar:SetValue(math.min(math.max(now - f.start, 0), f.duration))
+    end
+  end
 end)
 
 -- Eases the bar toward `value` over the next frames.
@@ -116,10 +124,18 @@ function ns.SetBarDrain(bar, expirationTime)
   drainBars[bar] = expirationTime
 end
 
+-- Fills the bar from 0 up to `duration`, continuously (swing/cast bars).
+function ns.SetBarFill(bar, startTime, duration)
+  lerpBars[bar] = nil
+  drainBars[bar] = nil
+  fillBars[bar] = { start = startTime, duration = duration }
+end
+
 -- Static value, no animation.
 function ns.SetBarStatic(bar, value)
   lerpBars[bar] = nil
   drainBars[bar] = nil
+  fillBars[bar] = nil
   bar:SetValue(value)
 end
 

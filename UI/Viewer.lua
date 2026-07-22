@@ -18,6 +18,8 @@ local function Styles()
       reminders = ns.ReminderRow,
       stacks = ns.StackBar,
       shield = ns.ShieldBar,
+      swing = ns.SwingBar,
+      cast = ns.CastBar,
     }
   end
   return STYLE_MODULES
@@ -129,6 +131,8 @@ local function HideStyleWidgets(frame)
   if frame.countText then frame.countText:Hide() end            -- stacks
   for _, alert in ipairs(frame.alerts or {}) do alert:Hide() end -- reminders
   for _, col in ipairs(frame.shieldCols or {}) do col:Hide() end -- shield columns
+  for _, bar in ipairs(frame.swingBars or {}) do bar:Hide() end   -- swing
+  if frame.castBar then frame.castBar:Hide() end                  -- cast
 end
 Viewer._HideStyleWidgets = HideStyleWidgets -- test seam
 
