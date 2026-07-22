@@ -109,6 +109,13 @@ end
 -- and never written into SavedVariables.
 local soundState = setmetatable({}, { __mode = "k" })
 
+-- Trinket internal-cooldown tracking: remembers when each trinket element last
+-- saw its proc fire so the icon can gray out during the ICD. Keyed by the
+-- element table (weak: deleted/replaced elements release their entry) and never
+-- written into SavedVariables. Exposed as a test seam.
+local trinketState = setmetatable({}, { __mode = "k" })
+Triggers._trinketState = trinketState
+
 local function CheckSound(cond, matched)
   local action = cond.action or "glow"
   if action ~= "glow" and action ~= "sound" then return end
@@ -265,8 +272,31 @@ function Triggers:Evaluate(element, ctx)
     end
     -- Automatic proc glow: manual override wins, else the item's own spell
     local procRef = element.procName or info.procSpell
-    if procRef and procRef ~= "" and ctx.aura("player", procRef, false) then
+    local procActive = procRef and procRef ~= "" and ctx.aura("player", procRef, false)
+    local now = ctx.now()
+    local st = trinketState[element]
+    if procActive then
+      -- Record the proc's start on the false->true edge so the ICD counts from
+      -- when it fired (standard WoW internal-cooldown behavior)
+      if not (st and st.active) then
+        st = { active = true, procStart = now }
+        trinketState[element] = st
+      end
       display.glow = true
+    else
+      if st then st.active = false end
+      -- Internal cooldown: after the proc fades it can't fire again until the
+      -- ICD elapses. Gray the icon (and show the ICD as the sweep when no
+      -- item-use cooldown is already running) so it reads as "not ready".
+      local icd = tonumber(element.icd)
+      if icd and icd > 0 and st and st.procStart and now < st.procStart + icd then
+        display.desaturate = true
+        if display.start == 0 then
+          display.start = st.procStart
+          display.duration = icd
+          display.expirationTime = st.procStart + icd
+        end
+      end
     end
   else -- "buff" | "debuff"
     local aura = ctx.aura(element.unit or "player", element.spellID or element.name, element.onlyMine)

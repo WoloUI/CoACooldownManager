@@ -219,6 +219,29 @@ trinketEl.procName = nil
 d = ns.Triggers:Evaluate(trinketEl, Ctx({ trinket = function() return { itemId = nil } end }))
 check("empty trinket slot grays out", d.shown and d.missing and d.desaturate)
 
+-- Internal cooldown: after the proc fades the icon grays out until the ICD ends
+local icdEl = { kind = "trinket", slot = 13, showWhen = "always", icd = 30 }
+local procOn = function(_, ref) return ref == "Berserking" and procAura or nil end
+-- proc fires at NOW: glows and records the start
+d = ns.Triggers:Evaluate(icdEl, Ctx({ trinket = function() return readyTrinket end, aura = procOn }))
+check("icd: glows while proccing", d.glow and not d.desaturate)
+-- 5s later the proc is gone but still inside the 30s ICD: gray + sweep
+d = ns.Triggers:Evaluate(icdEl, Ctx({ trinket = function() return readyTrinket end,
+  now = function() return NOW + 5 end }))
+check("icd: desaturated during the internal cooldown", d.desaturate and not d.glow)
+check("icd: shows the ICD as a sweep to NOW+30", d.expirationTime == NOW + 30)
+-- past the ICD: ready again, no gray
+d = ns.Triggers:Evaluate(icdEl, Ctx({ trinket = function() return readyTrinket end,
+  now = function() return NOW + 35 end }))
+check("icd: ready again once the ICD elapses", not d.desaturate)
+-- a fresh proc restarts the ICD window
+d = ns.Triggers:Evaluate(icdEl, Ctx({ trinket = function() return readyTrinket end,
+  aura = procOn, now = function() return NOW + 40 end }))
+check("icd: re-glows and restarts on a new proc", d.glow)
+d = ns.Triggers:Evaluate(icdEl, Ctx({ trinket = function() return readyTrinket end,
+  now = function() return NOW + 45 end }))
+check("icd: gray again after the restarted proc", d.desaturate and d.expirationTime == NOW + 70)
+
 -- Summon timers: casting starts a manual countdown (no aura to read)
 ns.profile = { viewers = { { elements = {
   { kind = "summon", name = "Storm Banner", duration = 30, showWhen = "present" },

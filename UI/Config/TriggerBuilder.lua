@@ -338,6 +338,13 @@ function TriggerBuilder:Create(parent)
     builder.element.procName = (text and text ~= "") and text or nil
   end)
 
+  -- Trinket kind: internal cooldown (s). Grays the icon after a proc until it
+  -- can fire again. Blank/0 = no ICD gray-out.
+  builder.icdLabel = W.CreateLabel(builder, "Internal CD (s)", 11, W.colors.inkDim)
+  builder.icd = W.CreateEditBox(builder, 50, 20, function(self, text)
+    builder.element.icd = tonumber(text) or nil
+  end)
+
   builder.showLabel = W.CreateLabel(builder, "show", 12, W.colors.inkDim)
   builder.show = W.CreateDropdown(builder, 180, function(_, value)
     builder.element.showWhen = value
@@ -426,7 +433,7 @@ function TriggerBuilder:Load(element, onChange)
   end
   y = y - ROW_H - 4
 
-  -- Trinket: proc buff override row (auto-glows on the item's own proc when blank)
+  -- Trinket: proc buff override + internal cooldown row
   if isTrinket then
     builder.procLabel:Show()
     builder.procLabel:ClearAllPoints()
@@ -435,10 +442,19 @@ function TriggerBuilder:Load(element, onChange)
     builder.proc:ClearAllPoints()
     builder.proc:SetPoint("TOPLEFT", PAD + 210, y)
     builder.proc:SetText(element.procName or "")
+    builder.icdLabel:Show()
+    builder.icdLabel:ClearAllPoints()
+    builder.icdLabel:SetPoint("TOPLEFT", PAD + 400, y - 5)
+    builder.icd:Show()
+    builder.icd:ClearAllPoints()
+    builder.icd:SetPoint("TOPLEFT", PAD + 480, y)
+    builder.icd:SetText(element.icd and tostring(element.icd) or "")
     y = y - ROW_H - 4
   else
     builder.procLabel:Hide()
     builder.proc:Hide()
+    builder.icdLabel:Hide()
+    builder.icd:Hide()
   end
 
   -- CONDITIONS header
