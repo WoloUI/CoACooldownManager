@@ -612,7 +612,7 @@ function Config:BuildControls()
   -- Elements
   c.elementsHeader = W.CreateSection(parent, "ELEMENTS")
   c.elementRows = {}
-  c.addInput = W.CreateEditBox(parent, 170, 20)
+  c.addInput = W.CreateEditBox(parent, 170, 20, nil, "spell name or ID")
   -- Re-render on kind change so the trinket slot dropdown appears/disappears
   c.addKind = W.CreateDropdown(parent, 120, function() Config:Render() end)
   c.addKind:SetOptions(KIND_OPTIONS)
@@ -763,7 +763,7 @@ function Config:BuildControls()
   -- Profiles view
   c.profHint = W.CreateLabel(parent,
     "Saved profiles are TEMPLATES visible from all your characters. Picking one\nfor a spec below loads an independent COPY: later changes stay on this\ncharacter. Use 'Save current as' again to update the saved template.", 10, W.colors.inkDim)
-  c.profNewName = W.CreateEditBox(parent, 170, 20)
+  c.profNewName = W.CreateEditBox(parent, 170, 20, nil, "profile name")
   c.profSaveBtn = W.CreateButton(parent, "Save current as", 110, 20, function()
     local name = c.profNewName:GetText()
     local ok, err = ns.DB:SaveProfileAs(name)
@@ -1044,6 +1044,9 @@ local function RenderSidebar()
       btn = W.CreateButton(win.sidebar, "", SIDEBAR_W - 2 * PAD, 21, function(self)
         state.selected = self.viewerName
         state.selectedElement = nil
+        -- The Add-element kind is a shared control; reset it so a bar left on
+        -- "Trinket" doesn't carry the trinket Add UI onto the next bar.
+        if controls.addKind then controls.addKind:SetValue("cooldown") end
         Config:Render()
       end)
       buttons[index] = btn

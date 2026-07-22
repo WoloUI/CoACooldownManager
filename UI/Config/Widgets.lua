@@ -55,7 +55,7 @@ function W.CreateButton(parent, text, width, height, onClick)
   return btn
 end
 
-function W.CreateEditBox(parent, width, height, onEnter)
+function W.CreateEditBox(parent, width, height, onEnter, placeholder)
   local box = CreateFrame("EditBox", nil, parent)
   box:SetSize(width or 120, height or 20)
   box:SetAutoFocus(false)
@@ -68,6 +68,19 @@ function W.CreateEditBox(parent, width, height, onEnter)
     if onEnter then onEnter(self, self:GetText()) end
     self:ClearFocus()
   end)
+
+  -- Placeholder: grey hint shown while the box is empty. Driven by
+  -- OnTextChanged, which fires on both typing and programmatic SetText.
+  if placeholder then
+    local hint = W.CreateLabel(box, placeholder, 12, COLORS.inkDim)
+    hint:SetPoint("LEFT", 6, 0)
+    hint:SetTextColor(0.4, 0.43, 0.5)
+    local function refresh()
+      if (box:GetText() or "") == "" then hint:Show() else hint:Hide() end
+    end
+    box:HookScript("OnTextChanged", refresh)
+    refresh()
+  end
   return box
 end
 

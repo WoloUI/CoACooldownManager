@@ -140,7 +140,7 @@ local function CreateConditionRow(parent)
   -- pet's npc id, text matches its name; empty means "any pet".
   row.pet = W.CreateEditBox(row, 90, 20, function(self, text)
     row.cond.petName = (text and text ~= "") and text or nil
-  end)
+  end, "pet name / id")
 
   row.spell = W.CreateEditBox(row, 76, 20, function(self, text)
     if not text or text == "" then return end
@@ -151,7 +151,7 @@ local function CreateConditionRow(parent)
     row.cond.spellName = name or (not id and text or nil)
     self:SetText(name or (id and tostring(id)) or text)
     Rebuild()
-  end)
+  end, "spell name / id")
 
   row.unit = W.CreateDropdown(row, 66, function(_, value)
     row.cond.unit = value
@@ -336,14 +336,14 @@ function TriggerBuilder:Create(parent)
   builder.procLabel = W.CreateLabel(builder, "Proc buff (optional, auto if blank)", 11, W.colors.inkDim)
   builder.proc = W.CreateEditBox(builder, 180, 20, function(self, text)
     builder.element.procName = (text and text ~= "") and text or nil
-  end)
+  end, "buff name (blank = auto)")
 
   -- Trinket kind: internal cooldown (s). Grays the icon after a proc until it
   -- can fire again. Blank/0 = no ICD gray-out.
   builder.icdLabel = W.CreateLabel(builder, "Internal CD (s)", 11, W.colors.inkDim)
-  builder.icd = W.CreateEditBox(builder, 50, 20, function(self, text)
+  builder.icd = W.CreateEditBox(builder, 60, 20, function(self, text)
     builder.element.icd = tonumber(text) or nil
-  end)
+  end, "e.g. 45")
 
   builder.showLabel = W.CreateLabel(builder, "show", 12, W.colors.inkDim)
   builder.show = W.CreateDropdown(builder, 180, function(_, value)
@@ -433,7 +433,8 @@ function TriggerBuilder:Load(element, onChange)
   end
   y = y - ROW_H - 4
 
-  -- Trinket: proc buff override + internal cooldown row
+  -- Trinket: proc buff override + internal cooldown (own rows so they stay
+  -- inside the panel — the two side by side overflowed the frame)
   if isTrinket then
     builder.procLabel:Show()
     builder.procLabel:ClearAllPoints()
@@ -442,12 +443,13 @@ function TriggerBuilder:Load(element, onChange)
     builder.proc:ClearAllPoints()
     builder.proc:SetPoint("TOPLEFT", PAD + 210, y)
     builder.proc:SetText(element.procName or "")
+    y = y - ROW_H - 4
     builder.icdLabel:Show()
     builder.icdLabel:ClearAllPoints()
-    builder.icdLabel:SetPoint("TOPLEFT", PAD + 400, y - 5)
+    builder.icdLabel:SetPoint("TOPLEFT", PAD, y - 5)
     builder.icd:Show()
     builder.icd:ClearAllPoints()
-    builder.icd:SetPoint("TOPLEFT", PAD + 480, y)
+    builder.icd:SetPoint("TOPLEFT", PAD + 210, y)
     builder.icd:SetText(element.icd and tostring(element.icd) or "")
     y = y - ROW_H - 4
   else
