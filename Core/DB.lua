@@ -152,6 +152,11 @@ function DB:Init()
   db.global.equivGroups = db.global.equivGroups or {}
   db.global.appearance = db.global.appearance or {} -- font/texture/fontScale
   db.global.profiles = db.global.profiles or {}     -- named profile templates (account-wide library)
+  -- Aggro alert overlay (screen-space, shared by every character like the minimap)
+  db.global.aggro = db.global.aggro or {
+    enabled = true, size = 256, color = { 1, 0.1, 0.1 }, pulse = true,
+    sound = nil, x = 0, y = 40,
+  }
   db.chars = db.chars or {}
 
   -- v3: config becomes per-character. Layouts (positions) move from the

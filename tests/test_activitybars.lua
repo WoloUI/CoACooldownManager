@@ -65,4 +65,13 @@ active = ST:Active(600.1)
 check("active ordered mh, oh, ranged",
   active[1].hand == "mh" and active[2].hand == "oh" and active[3].hand == "ranged")
 
+-- Aggro alert: show only while enabled, in combat, and holding aggro (status 3)
+local AA = ns.AggroAlert
+local on = { enabled = true }
+check("aggro shows at status 3 in combat", AA.ShouldShow(3, true, on) == true)
+check("aggro hidden below status 3", AA.ShouldShow(2, true, on) == false)
+check("aggro hidden out of combat", AA.ShouldShow(3, false, on) == false)
+check("aggro hidden when disabled", AA.ShouldShow(3, true, { enabled = false }) == false)
+check("aggro hidden with nil status", AA.ShouldShow(nil, true, on) == false)
+
 return T

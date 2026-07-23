@@ -486,6 +486,41 @@ function Config:BuildControls()
   c.genStrataHint = W.CreateLabel(parent, "Lower this so game windows (map, character, bags) appear above the bars.", 10, W.colors.inkDim)
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
 
+  -- Aggro alert overlay (global, in db.global.aggro)
+  local function AggroCfg()
+    return ns.DB.db.global.aggro
+  end
+  c.aggroHeader = W.CreateSection(parent, "AGGRO ALERT")
+  c.aggroEnable = W.CreateCheckbox(parent, "Show AGGRO ON YOU overlay", function(_, ck)
+    AggroCfg().enabled = ck
+    if ns.AggroAlert then ns.AggroAlert:Apply() end
+  end)
+  c.aggroSizeLabel = W.CreateLabel(parent, "Size", 12, W.colors.inkDim)
+  c.aggroSize = W.CreateEditBox(parent, 46, 20, function(_, text)
+    AggroCfg().size = math.max(tonumber(text) or 256, 32)
+    if ns.AggroAlert then ns.AggroAlert:Apply() end
+  end, "256")
+  c.aggroColorLabel = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
+  c.aggroColor = W.CreateColorSwatch(parent, function(_, color)
+    AggroCfg().color = color
+    if ns.AggroAlert then ns.AggroAlert:Apply() end
+  end)
+  c.aggroColorReset = W.CreateButton(parent, "Red", 40, 20, function()
+    AggroCfg().color = { 1, 0.1, 0.1 }
+    if ns.AggroAlert then ns.AggroAlert:Apply() end
+    Config:Render()
+  end)
+  c.aggroPulse = W.CreateCheckbox(parent, "Pulse", function(_, ck) AggroCfg().pulse = ck end)
+  c.aggroSoundLabel = W.CreateLabel(parent, "Sound", 12, W.colors.inkDim)
+  c.aggroSound = W.CreateDropdown(parent, 150, function(_, value)
+    AggroCfg().sound = value ~= "" and value or nil
+  end)
+  c.aggroSoundPlay = W.CreateButton(parent, "Play", 40, 20, function()
+    ns.PlayAlertSound(AggroCfg().sound)
+  end)
+  c.aggroHint = W.CreateLabel(parent,
+    "Shows when a mob is targeting you (in combat). Drag it into place in edit\nmode (/cdm edit) - it sits over your character by default.", 10, W.colors.inkDim)
+
   -- Stack bar options
   c.stackHeader = W.CreateSection(parent, "TRACKED RESOURCE (aura stacks)")
   c.stackIdLabel = W.CreateLabel(parent, "Aura (name/ID)", 12, W.colors.inkDim)
@@ -1376,13 +1411,35 @@ function Config:Render()
     y2 = y2 - 24
     c2.genStrataHint:SetPoint("TOPLEFT", 0, y2); c2.genStrataHint:Show()
     y2 = y2 - 34
+    -- Aggro alert
+    local aggro = ns.DB.db.global.aggro or {}
+    c2.aggroHeader:SetPoint("TOPLEFT", 0, y2); c2.aggroHeader:Show()
+    y2 = y2 - 24
+    c2.aggroEnable:SetPoint("TOPLEFT", 0, y2); c2.aggroEnable:SetChecked(aggro.enabled ~= false); c2.aggroEnable:Show()
+    y2 = y2 - 26
+    c2.aggroSizeLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.aggroSizeLabel:Show()
+    c2.aggroSize:SetPoint("TOPLEFT", 80, y2); c2.aggroSize:SetText(tostring(aggro.size or 256)); c2.aggroSize:Show()
+    c2.aggroColorLabel:SetPoint("TOPLEFT", 175, y2 - 4); c2.aggroColorLabel:Show()
+    c2.aggroColor:SetPoint("TOPLEFT", 225, y2); c2.aggroColor:SetColor(aggro.color or { 1, 0.1, 0.1 }); c2.aggroColor:Show()
+    c2.aggroColorReset:SetPoint("TOPLEFT", 251, y2); c2.aggroColorReset:Show()
+    c2.aggroPulse:SetPoint("TOPLEFT", 320, y2); c2.aggroPulse:SetChecked(aggro.pulse ~= false); c2.aggroPulse:Show()
+    y2 = y2 - 28
+    c2.aggroSoundLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.aggroSoundLabel:Show()
+    local soundOpts = { { text = "None", value = "" } }
+    for _, opt in ipairs(ns.GetSoundOptions()) do soundOpts[#soundOpts + 1] = opt end
+    c2.aggroSound:SetOptions(soundOpts)
+    c2.aggroSound:SetPoint("TOPLEFT", 80, y2); c2.aggroSound:SetValue(aggro.sound or ""); c2.aggroSound:Show()
+    c2.aggroSoundPlay:SetPoint("TOPLEFT", 236, y2); c2.aggroSoundPlay:Show()
+    y2 = y2 - 24
+    c2.aggroHint:SetPoint("TOPLEFT", 0, y2); c2.aggroHint:Show()
+    y2 = y2 - 40
     c2.shareHeader:SetPoint("TOPLEFT", 0, y2); c2.shareHeader:Show()
     y2 = y2 - 22
     c2.exportBtn:SetPoint("TOPLEFT", 0, y2); c2.exportBtn:Show()
     c2.importBtn:SetPoint("TOPLEFT", 120, y2); c2.importBtn:Show()
     y2 = y2 - 28
     c2.shareHint:SetPoint("TOPLEFT", 0, y2); c2.shareHint:Show()
-    win.content:SetHeight(590)
+    win.content:SetHeight(760)
     return
   end
 

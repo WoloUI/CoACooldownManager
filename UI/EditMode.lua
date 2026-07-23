@@ -140,6 +140,7 @@ function EditMode:Toggle()
   self.active = not self.active
   ns.Viewer:UpdateVisibility()
   self:RefreshOverlays()
+  if ns.AggroAlert then ns.AggroAlert:Apply() end -- grabbable while editing
   if self.active then
     ns:Print("edit mode ON - drag bars to move them; drag the Power bar to move everything. /cdm edit to finish.")
   else

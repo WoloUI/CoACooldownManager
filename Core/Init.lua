@@ -662,6 +662,128 @@ end
 ns:On("READY", CreateMinimapButton)
 
 --------------------------------------------------------------------------------
+-- Aggro alert: a screen-space PowerAuras-style texture (arrows pointing at the
+-- player) that appears when a mob is targeting you (threat status 3). Lives
+-- here (not a new file) so /reload picks it up; the texture is bundled in
+-- Textures/AggroArrows.tga so it doesn't depend on WeakAuras being loaded.
+--------------------------------------------------------------------------------
+local AggroAlert = {}
+ns.AggroAlert = AggroAlert
+
+-- Pure decision (test seam): show only while enabled, in combat, and holding
+-- aggro (threat status 3 = a mob is actively targeting you).
+function AggroAlert.ShouldShow(threatStatus, inCombat, cfg)
+  if not cfg or cfg.enabled == false then return false end
+  if not inCombat then return false end
+  return threatStatus == 3
+end
+
+local aggroFrame
+local aggroSoundArmed = false -- edge state (false->true plays the sound once)
+
+local function AggroCfg()
+  return ns.DB and ns.DB.db and ns.DB.db.global and ns.DB.db.global.aggro
+end
+
+local function CreateAggroFrame()
+  if aggroFrame then return aggroFrame end
+  local f = CreateFrame("Frame", "CoACDMAggroAlert", UIParent)
+  f:SetFrameStrata("HIGH")
+  f:SetSize(256, 256)
+
+  f.tex = f:CreateTexture(nil, "ARTWORK")
+  f.tex:SetAllPoints()
+  f.tex:SetTexture("Interface\\AddOns\\CoACooldownManager\\Textures\\AggroArrows")
+
+  f.label = f:CreateFontString(nil, "OVERLAY")
+  f.label:SetFont(STANDARD_TEXT_FONT, 22, "THICKOUTLINE")
+  f.label:SetPoint("BOTTOM", f, "TOP", 0, 4)
+  f.label:SetText("AGGRO ON YOU")
+
+  -- Draggable in edit mode; position saved into the shared aggro config
+  f:SetMovable(true)
+  f:EnableMouse(false)
+  f:RegisterForDrag("LeftButton")
+  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  f:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local cfg = AggroCfg()
+    if cfg then
+      local cx, cy = self:GetCenter()
+      local sx, sy = UIParent:GetCenter()
+      cfg.x = cx - sx
+      cfg.y = cy - sy
+    end
+    AggroAlert:Apply()
+  end)
+
+  aggroFrame = f
+  return f
+end
+
+-- Rebuilds the frame from config (size, color, position, edit-mode grabbability)
+function AggroAlert:Apply()
+  local cfg = AggroCfg()
+  local f = CreateAggroFrame()
+  if not cfg then f:Hide(); return end
+  local size = cfg.size or 256
+  f:SetSize(size, size)
+  f:ClearAllPoints()
+  f:SetPoint("CENTER", UIParent, "CENTER", cfg.x or 0, cfg.y or 40)
+  local color = cfg.color or { 1, 0.1, 0.1 }
+  f.tex:SetVertexColor(color[1], color[2], color[3])
+  f.label:SetTextColor(color[1], color[2], color[3])
+
+  local editing = ns.EditMode and ns.EditMode.active
+  f:EnableMouse(editing and true or false)
+  if editing then
+    f.tex:SetVertexColor(color[1], color[2], color[3], 0.6)
+    f:Show()
+  else
+    self:Update() -- back to threat-driven visibility
+  end
+end
+
+-- Threat-driven show/hide + pulse + edge-triggered sound. Called on a tick.
+function AggroAlert:Update()
+  local cfg = AggroCfg()
+  local f = aggroFrame
+  if not f or not cfg then return end
+  if ns.EditMode and ns.EditMode.active then return end -- Apply() owns it then
+
+  local show
+  if ns.TestMode and ns.TestMode.active then
+    show = cfg.enabled ~= false -- preview even out of combat
+  else
+    local status = UnitThreatSituation and UnitThreatSituation("player")
+    local inCombat = UnitAffectingCombat("player") and true or false
+    show = AggroAlert.ShouldShow(status, inCombat, cfg)
+  end
+
+  if show then
+    if not aggroSoundArmed then
+      aggroSoundArmed = true
+      if cfg.sound and cfg.sound ~= "" then ns.PlayAlertSound(cfg.sound) end
+    end
+    local color = cfg.color or { 1, 0.1, 0.1 }
+    local a = 1
+    if cfg.pulse ~= false then
+      a = 0.45 + 0.55 * math.abs(math.sin(GetTime() * 3.2)) -- ~0.45..1.0 pulse
+    end
+    f.tex:SetVertexColor(color[1], color[2], color[3], a)
+    f:Show()
+  else
+    aggroSoundArmed = false
+    f:Hide()
+  end
+end
+
+ns:On("READY", function()
+  AggroAlert:Apply()
+  ns:OnTick(function() AggroAlert:Update() end)
+end)
+
+--------------------------------------------------------------------------------
 -- Login sequence
 --------------------------------------------------------------------------------
 ns:RegisterEvent("PLAYER_LOGIN", function()
