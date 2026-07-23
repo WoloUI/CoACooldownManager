@@ -807,6 +807,10 @@ SlashCmdList["COACDM"] = function(msg)
     ns.Scanner:Scan(true)
   elseif msg == "reset" then
     ns.DB:ResetProfile()
+  elseif msg == "resetextra" then
+    ns.DB:ResetExtraAction()
+    if ns.ExtraActionBar then ns.ExtraActionBar:Apply() end
+    ns:Print("ExtraActionBar position reset to default.")
   elseif msg == "debug" then
     if ns.Tracking then ns.Tracking:Debug() end
   elseif msg == "trinket" then

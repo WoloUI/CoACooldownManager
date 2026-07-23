@@ -410,6 +410,29 @@ function DB:SetAnchor(viewer, anchor)
   layout[viewer.name] = anchor
 end
 
+-- ExtraActionBar mover positions live in the active layout under a reserved key
+-- (cannot collide with a viewer name, and export/import only touch viewer keys).
+-- Shape: { bar = {x,y} or nil, buttons = { [frameName] = {x,y} } }.
+function DB:GetExtraAction()
+  local layout = self:GetLayout()
+  local ea = layout.__extraAction or {}
+  ea.buttons = ea.buttons or {}
+  layout.__extraAction = ea
+  return ea
+end
+
+function DB:SetExtraBarPos(x, y)
+  self:GetExtraAction().bar = { x = x, y = y }
+end
+
+function DB:SetExtraButtonPos(name, x, y)
+  self:GetExtraAction().buttons[name] = { x = x, y = y }
+end
+
+function DB:ResetExtraAction()
+  self:GetLayout().__extraAction = nil
+end
+
 --------------------------------------------------------------------------------
 -- Profile import/export (share strings with other players)
 -- Own token serializer + base64: imported data is PARSED, never executed.

@@ -134,6 +134,7 @@ function EditMode:RefreshOverlays()
   for name, overlay in pairs(overlays) do
     if not ns.DB:GetViewer(name) then overlay:Hide() end
   end
+  if self.active and ns.ExtraActionBar then ns.ExtraActionBar:LayoutOverlays() end
 end
 
 function EditMode:Toggle()
@@ -141,6 +142,7 @@ function EditMode:Toggle()
   ns.Viewer:UpdateVisibility()
   self:RefreshOverlays()
   if ns.AggroAlert then ns.AggroAlert:Apply() end -- grabbable while editing
+  if ns.ExtraActionBar then ns.ExtraActionBar:SetEditing(self.active) end
   if self.active then
     ns:Print("edit mode ON - drag bars to move them; drag the Power bar to move everything. /cdm edit to finish.")
   else

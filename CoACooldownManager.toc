@@ -27,6 +27,7 @@ UI\PowerBar.lua
 UI\StackBar.lua
 UI\ReminderRow.lua
 UI\EditMode.lua
+UI\ExtraActionBar.lua
 UI\Config\Widgets.lua
 UI\Config\TriggerBuilder.lua
 UI\Config\Suggestions.lua
