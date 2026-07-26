@@ -1064,6 +1064,18 @@ function Config:BuildControls()
     ind.blinkThreshold = math.max(tonumber(text) or 3, 0.5)
     TouchTracking()
   end, "3")
+  -- Off = only your own casts count (how ElvUI's buff indicator behaves).
+  -- On = show the aura whoever cast it, for the odd CoA spell that reports no
+  -- caster at all -- at the cost of lighting up for other healers' buffs too.
+  c.trackAnyCaster = W.CreateCheckbox(parent, "Any caster", function(_, checked)
+    local ind = SelectedIndicator()
+    if not ind then return end
+    ind.anyCaster = checked
+    TouchTracking()
+  end)
+  c.trackAnyCasterHint = W.CreateLabel(parent,
+    "Off: only auras you cast (like ElvUI). On: also auras from others or with\nno caster reported.",
+    10, W.colors.inkDim)
 
   -- Class HUD view (hide CoA per-class HUD frames via the on-screen picker)
   c.hudHint = W.CreateLabel(parent,

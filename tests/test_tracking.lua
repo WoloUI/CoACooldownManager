@@ -46,11 +46,22 @@ end
 check("9 unique anchor points", #ns.Tracking.ANCHORS == 9 and unique == 9)
 check("CENTER is a valid anchor", seen.CENTER == true)
 
--- Ownership: only the player's HoTs, caster-less auras shown as fallback
+-- Ownership, ported from ElvUI's oUF_AuraWatch: an icon only lights up for the
+-- player's own aura. A caster-less aura is NOT treated as ours (that fallback
+-- lit indicators up on every raid member for buffs cast by other healers);
+-- "Any caster" is the opt-in equivalent of AuraWatch's per-icon anyUnit flag.
+check("indicator defaults to own auras only", ind.anyCaster == false)
 check("nil aura hidden", ns.Tracking.AuraPasses(nil) == false)
 check("own aura shown", ns.Tracking.AuraPasses({ mine = true, hasCaster = true }) == true)
 check("other player's aura hidden", ns.Tracking.AuraPasses({ mine = false, hasCaster = true }) == false)
-check("caster-less aura shown (Ascension fallback)", ns.Tracking.AuraPasses({ mine = false, hasCaster = false }) == true)
+check("caster-less aura hidden by default",
+  ns.Tracking.AuraPasses({ mine = false, hasCaster = false }) == false)
+check("caster-less aura shown with Any caster",
+  ns.Tracking.AuraPasses({ mine = false, hasCaster = false }, { anyCaster = true }) == true)
+check("other player's aura shown with Any caster",
+  ns.Tracking.AuraPasses({ mine = false, hasCaster = true }, { anyCaster = true }) == true)
+check("Any caster still hides a missing aura",
+  ns.Tracking.AuraPasses(nil, { anyCaster = true }) == false)
 
 -- Display evaluation
 local now = 1000
@@ -96,7 +107,9 @@ check("scan stores hasCaster=true", renew ~= nil and renew.hasCaster == true)
 check("own Renew passes", ns.Tracking.AuraPasses(renew) == true)
 local rejuv = ns.Auras:GetAura("party1", "Rejuvenation", false)
 check("scan stores hasCaster=false", rejuv ~= nil and rejuv.hasCaster == false)
-check("caster-less Rejuvenation passes", ns.Tracking.AuraPasses(rejuv) == true)
+check("caster-less Rejuvenation filtered", ns.Tracking.AuraPasses(rejuv) == false)
+check("caster-less Rejuvenation passes with Any caster",
+  ns.Tracking.AuraPasses(rejuv, { anyCaster = true }) == true)
 local lifebloom = ns.Auras:GetAura("party1", "Lifebloom", false)
 check("someone else's Lifebloom filtered", ns.Tracking.AuraPasses(lifebloom) == false)
 
@@ -105,38 +118,60 @@ local soothing = ns.Auras:GetAura("party1", "renew", false)
 check("lowercase name still matches the aura", soothing ~= nil and soothing.name == "Renew")
 check("padded name still matches the aura", ns.Auras:GetAura("party1", " Renew ", false) ~= nil)
 
--- Frame priority: addon group headers (primary) beat standalone frames
--- (fallback) for every unit, so the player's own HoTs land on the party-frame
--- button (ElvUF_Party, "Show Player") and party HoTs land on ElvUI instead of
--- the off-screen-but-still-"shown" Blizzard PartyMemberFrames.
+-- Frame priority. VISIBILITY comes first: ElvUI hides the raid header it is not
+-- using (ElvUF_Raid vs ElvUF_Raid40) but never hides the unit buttons inside it,
+-- so those buttons still report IsShown() == true while IsVisible() is false.
+-- Judging by IsShown let the hidden 25-man header claim half the raid and the
+-- indicators were drawn where nobody could see them. Tier (addon header beats
+-- standalone frame) only breaks ties between equally visible candidates.
 local P = ns.Tracking.ShouldReplace
-check("nothing mapped yet: candidate wins", P(nil, { primary = true, shown = true }) == true)
-check("primary header beats a shown fallback (party HoT bug)",
-  P({ primary = false, shown = true }, { primary = true, shown = true }) == true)
-check("fallback never replaces a primary header (player-on-party-button bug)",
-  P({ primary = true, shown = true }, { primary = false, shown = true }) == false)
+check("nothing mapped yet: candidate wins", P(nil, { primary = true, visible = true }) == true)
+check("primary header beats a visible fallback (party HoT bug)",
+  P({ primary = false, visible = true }, { primary = true, visible = true }) == true)
+check("fallback never replaces a visible primary header (player-on-party-button bug)",
+  P({ primary = true, visible = true }, { primary = false, visible = true }) == false)
 check("fallback does not replace an existing fallback (keeps first, e.g. ElvUF_Player over PlayerFrame)",
-  P({ primary = false, shown = true }, { primary = false, shown = true }) == false)
-check("same tier: a visible frame replaces a hidden one",
-  P({ primary = true, shown = false }, { primary = true, shown = true }) == true)
-check("same tier: a hidden frame never replaces a visible one",
-  P({ primary = true, shown = true }, { primary = true, shown = false }) == false)
+  P({ primary = false, visible = true }, { primary = false, visible = true }) == false)
+check("same tier: a visible frame replaces an invisible one (Raid vs Raid40 bug)",
+  P({ primary = true, visible = false }, { primary = true, visible = true }) == true)
+check("same tier: an invisible frame never replaces a visible one",
+  P({ primary = true, visible = true }, { primary = true, visible = false }) == false)
+check("a visible fallback beats an invisible header (hidden ElvUF_Raid)",
+  P({ primary = true, visible = false }, { primary = false, visible = true }) == true)
+check("an invisible header does not replace an invisible fallback either way",
+  P({ primary = false, visible = false }, { primary = true, visible = false }) == true)
+
+-- Which unit tokens the tracker maps. Anything else (raid11target off a
+-- CompactRaidFrame, focus, boss1) never receives aura updates, so its overlay
+-- freezes, and it inflates the mapped count that drives the self-heal.
+local UT = ns.Tracking.UnitTracked
+check("player is tracked", UT("player") == true)
+check("raid tokens are tracked", UT("raid34") == true)
+-- kept even in a raid: ElvUI draws a raid of <=5 with ElvUF_Party, whose
+-- buttons carry party1..4
+check("party tokens are tracked", UT("party1") == true)
+check("party4 is tracked", UT("party4") == true)
+check("derived raid tokens are never tracked (raid11target)", UT("raid11target") == false)
+check("derived party tokens are never tracked", UT("party1pet") == false)
+check("party5 is not a real token", UT("party5") == false)
+check("target is not a group unit", UT("target") == false)
+check("nil unit is not tracked", UT(nil) == false)
 
 -- Stale-but-complete map upgrade: right after a group forms the ElvUI header
 -- buttons may not exist yet, so units land on the off-screen Blizzard fallback.
 -- The map is complete (mapped == expected) so the count-based self-heal never
 -- fires; without this the party HoTs stay invisible until /reload or a zone
--- change re-scans. When an addon header is present, any fallback-mapped unit
--- must trigger a re-scan so the header can claim it.
+-- change re-scans. The trigger is a CHANGE in which addon headers are visible
+-- since the last scan -- the old "any unit on a fallback frame" rule re-scanned
+-- every 3s forever in a raid, where player/ElvUF_Player is a legitimate
+-- fallback that no header will ever claim.
 local U = ns.Tracking.ShouldUpgradeMap
-check("no addon header present: never churns (Blizzard-only user)",
-  U({ false, false }, false) == false)
-check("header present but all units already on it: no re-scan",
-  U({ true, true }, true) == false)
-check("header present and a unit still on fallback: re-scan to upgrade",
-  U({ true, false }, true) == true)
-check("header present but nothing mapped yet: no re-scan",
-  U({}, true) == false)
+check("headers unchanged since the last scan: no re-scan", U("00001", "00001") == false)
+check("no header at all, unchanged: no re-scan (Blizzard-only user)",
+  U("00000", "00000") == false)
+check("a header became visible after the scan: re-scan", U("10000", "00000") == true)
+check("the raid header swapped (Raid -> Raid40): re-scan", U("00001", "01000") == true)
+check("a header disappeared after the scan: re-scan", U("00000", "10000") == true)
 
 -- Class HUD hider: picker candidates, smallest-under-cursor pick, hidden set
 local function FakeHudFrame(name, w, h, over, visible)

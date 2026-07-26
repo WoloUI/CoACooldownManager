@@ -21,14 +21,21 @@ function Tracking.NewIndicator(spell)
     showTime = false, timeFontSize = 9,
     sweep = false, showStacks = false,
     blink = false, blinkThreshold = 3,
+    anyCaster = false,
   }
 end
 
--- Only the player's own HoTs count; auras that report no caster (common on
--- Ascension) are shown as a fallback rather than hidden.
-function Tracking.AuraPasses(aura)
+-- Ownership filter, ported from ElvUI's oUF_AuraWatch (Update(): an icon only
+-- lights up for `caster and icon.fromUnits[caster]`, i.e. player/pet/vehicle).
+-- We used to also accept auras that report no caster, on the theory that
+-- Ascension hides it -- but that lit every indicator up on the whole raid for
+-- buffs cast by other healers. `anyCaster` is the per-indicator port of
+-- AuraWatch's `anyUnit` flag for the cases where the server really does drop
+-- the caster on one of your own spells.
+function Tracking.AuraPasses(aura, cfg)
   if not aura then return false end
-  return aura.mine or not aura.hasCaster
+  if cfg and cfg.anyCaster then return true end
+  return aura.mine == true
 end
 
 local function BuildDisplay(cfg, icon, duration, expiration, stacks, now)
@@ -48,7 +55,7 @@ end
 
 -- Pure display evaluation (test seam).
 function Tracking.Evaluate(cfg, aura, now)
-  if not Tracking.AuraPasses(aura) then return { shown = false } end
+  if not Tracking.AuraPasses(aura, cfg) then return { shown = false } end
   return BuildDisplay(cfg, aura.icon, aura.duration or 0, aura.expirationTime or 0,
     aura.count or 0, now)
 end
@@ -74,6 +81,18 @@ local SINGLE_CANDIDATES = { "ElvUF_Player", "PlayerFrame",
 -- unit as a field (CompactUnitFrame), which FrameUnit already reads.
 local BLIZZARD_HEADER_ROOTS = { "CompactRaidFrameContainer" }
 
+-- Frames inside a hidden header still report IsShown() == true (ElvUI hides the
+-- header it is not using, never the buttons in it), so every visibility test
+-- here must walk the parent chain. That is the whole point of IsVisible.
+local function FrameVisible(frame)
+  if not frame then return false end
+  if frame.IsVisible then
+    local ok, visible = pcall(frame.IsVisible, frame)
+    if ok then return visible and true or false end
+  end
+  return frame.IsShown and frame:IsShown() and true or false
+end
+
 local function FrameUnit(frame, name)
   local unit = frame.unit -- oUF (ElvUI) stores it on the button
   if not unit and frame.GetAttribute then
@@ -96,32 +115,55 @@ local frameNames = {}   -- [frame] = global name (for unit re-checks)
 local framePrimary = {} -- [frame] = true when it came from an addon header
 local overlays = {}     -- [frame] = overlay container with pooled widgets
 local rescanNeeded = false
+local lastHeaderSig = ""-- which addon headers were visible at the last rescan
 local UpdateFrame       -- forward decl: Tracking:Debug() calls it above its definition
 
 -- Pure priority decision (test seam): given the frame currently mapped to a
--- unit and a candidate for it, should the candidate replace it? Addon group
--- headers (primary) always beat standalone frames (fallback); same-tier ties
--- keep whatever is visible.
+-- unit and a candidate for it, should the candidate replace it?
+-- VISIBILITY first: a frame the user cannot see is useless no matter which tier
+-- it belongs to. ElvUI keeps exactly one raid header shown (ElvUF_Raid for <26,
+-- ElvUF_Raid40 above) and hides the other one wholesale, leaving its unit
+-- buttons individually "shown"; judging by IsShown let the hidden header claim
+-- roughly half the raid and those indicators were drawn out of sight.
+-- Tier (addon group header beats standalone frame) only breaks ties between
+-- equally visible candidates, which is what keeps the player's HoTs on the
+-- party/raid button instead of the off-screen Blizzard PartyMemberFrames.
 function Tracking.ShouldReplace(current, cand)
   if not current then return true end
-  if cand.primary ~= current.primary then return cand.primary end
-  return (not current.shown) and cand.shown or false
+  if cand.visible ~= current.visible then return cand.visible and true or false end
+  if cand.primary ~= current.primary then return cand.primary and true or false end
+  return false
 end
 
--- Pure upgrade decision (test seam): given the tier of every currently mapped
--- frame (true = addon header / primary, false = standalone fallback) and
--- whether an addon header is currently visible, should we queue a re-scan?
--- A complete-but-fallback map happens when a header's buttons weren't built yet
--- at the last rescan (common right after a group forms). The count-based
--- self-heal can't catch it (the map IS complete), so the party HoTs stay on the
--- off-screen Blizzard frames until a zone change or /reload. Only churns when a
--- header is actually present, so pure-Blizzard users never re-scan needlessly.
-function Tracking.ShouldUpgradeMap(frameTiers, headerPresent)
-  if not headerPresent then return false end
-  for _, isPrimary in ipairs(frameTiers) do
-    if not isPrimary then return true end
-  end
-  return false
+-- Pure decision (test seam): which unit tokens the tracker maps at all.
+-- Walking Blizzard's raid container turns up frames whose unit is a derived
+-- token (raid11target, and the pet/target variants); those are never in
+-- Auras:WatchGroup, so they receive no UNIT_AURA and their overlay freezes on
+-- whatever the last forced scan saw, while still counting towards the
+-- "mapped < expected" self-heal.
+-- party tokens stay in: a raid of 5 or fewer is drawn by ElvUF_Party (its
+-- visibility is "[@raid6,exists][nogroup] hide;show"), whose buttons carry
+-- party1..4 -- dropping them there would blank every indicator in a 5-man raid.
+function Tracking.UnitTracked(unit)
+  if type(unit) ~= "string" then return false end
+  return unit == "player"
+    or unit:match("^raid%d+$") ~= nil
+    or unit:match("^party[1-4]$") ~= nil
+end
+
+-- Pure upgrade decision (test seam): `sig` describes which addon headers are
+-- visible right now, `lastSig` the same thing at the last re-scan.
+-- A complete-but-wrong map happens when a header's buttons weren't built or
+-- shown yet at the last rescan (right after a group forms, or when ElvUI swaps
+-- ElvUF_Raid for ElvUF_Raid40 as the raid grows past 25). The count-based
+-- self-heal can't catch it -- the map IS complete -- so the HoTs stay on the
+-- wrong frames until a zone change or /reload.
+-- Keying on a CHANGE (rather than "some unit sits on a fallback frame") is what
+-- stops the churn: in a raid, player -> ElvUF_Player is a perfectly good
+-- fallback that no header will ever claim, and the old rule re-scanned the
+-- whole roster every 3 seconds because of it.
+function Tracking.ShouldUpgradeMap(sig, lastSig)
+  return sig ~= lastSig
 end
 
 local function Enabled()
@@ -129,13 +171,25 @@ local function Enabled()
   return tracking and tracking.enabled and #tracking.indicators > 0
 end
 
+-- Which of HEADER_ROOTS are visible, as a stable string. Recorded at every
+-- rescan so the verify tick can tell "ElvUI just swapped headers on us" apart
+-- from "the map is fine".
+local function HeaderSignature()
+  local parts = {}
+  for i, rootName in ipairs(HEADER_ROOTS) do
+    parts[i] = FrameVisible(_G[rootName]) and "1" or "0"
+  end
+  return table.concat(parts)
+end
+
 local function TryMap(frame, name, primary)
   if not frame or not frame.IsShown then return end
   local unit = FrameUnit(frame, name or "")
-  if not unit or not UnitExists(unit) then return end
+  if not Tracking.UnitTracked(unit) then return end
+  if not UnitExists(unit) then return end
   local current = unitFrames[unit]
-  local curInfo = current and { primary = framePrimary[current], shown = current:IsShown() }
-  if Tracking.ShouldReplace(curInfo, { primary = primary or false, shown = frame:IsShown() }) then
+  local curInfo = current and { primary = framePrimary[current], visible = FrameVisible(current) }
+  if Tracking.ShouldReplace(curInfo, { primary = primary or false, visible = FrameVisible(frame) }) then
     unitFrames[unit] = frame
     frameNames[frame] = name or (frame.GetName and frame:GetName()) or "?"
     framePrimary[frame] = primary or false
@@ -154,6 +208,7 @@ end
 
 function Tracking:Rescan()
   rescanNeeded = false
+  lastHeaderSig = HeaderSignature()
   for unit in pairs(unitFrames) do unitFrames[unit] = nil end
   for frame in pairs(framePrimary) do framePrimary[frame] = nil end
   -- Addon headers first (primary): they claim every unit they draw, including
@@ -193,23 +248,24 @@ function Tracking:Debug()
     end
   end
   self:Rescan()
+  -- Which group headers the user is actually looking at. Exactly one raid
+  -- header should be visible; anything mapped onto a different one is invisible.
+  local headerLine = {}
+  for _, rootName in ipairs(HEADER_ROOTS) do
+    local root = _G[rootName]
+    headerLine[#headerLine + 1] = rootName .. "="
+      .. (not root and "absent" or (FrameVisible(root) and "VISIBLE" or "hidden"))
+  end
+  ns:Print("headers: " .. table.concat(headerLine, ", "))
   local count = 0
   for unit, frame in pairs(unitFrames) do
     count = count + 1
+    -- IsShown() is a lie for buttons inside a hidden ElvUI header: report the
+    -- parent-chain answer, which is what decides whether the user sees anything
     local line = unit .. " -> " .. (frameNames[frame] or "?")
       .. (framePrimary[frame] and " [header]" or " [fallback]")
-      .. (frame:IsShown() and "" or " (frame hidden)")
-    local first = tracking and tracking.indicators[1]
-    if first then
-      ns.Auras:ForceScan(unit)
-      local aura = ns.Auras:GetAura(unit, first.spell, false)
-      if aura then
-        line = line .. " | '" .. tostring(first.spell) .. "' FOUND (mine="
-          .. tostring(aura.mine) .. ", caster known=" .. tostring(aura.hasCaster) .. ")"
-      else
-        line = line .. " | '" .. tostring(first.spell) .. "' not on this unit"
-      end
-    end
+      .. (FrameVisible(frame) and "" or " (NOT VISIBLE)")
+    if tracking and #tracking.indicators > 0 then ns.Auras:ForceScan(unit) end
     ns:Print(line)
     -- What the unit actually carries, so misnamed HoTs are easy to spot
     local names = ns.Auras:CachedNames(unit)
@@ -228,10 +284,19 @@ function Tracking:Debug()
       local overlay = overlays[frame]
       local now = GetTime()
       for i, cfg in ipairs(tracking.indicators) do
-        local disp = Tracking.Evaluate(cfg, ns.Auras:GetAura(unit, cfg.spell, false), now)
+        local aura = ns.Auras:GetAura(unit, cfg.spell, false)
+        local disp = Tracking.Evaluate(cfg, aura, now)
         local w = overlay and overlay.widgets[i]
-        ns:Print(string.format("    [%s] eval=%s widget=%s alpha=%.1f",
-          tostring(cfg.spell), disp.shown and "SHOWN" or "hidden",
+        -- aura= tells detection apart from ownership: "none" means the name
+        -- never matched, "mine=false" means it is someone else's cast and only
+        -- the per-indicator "Any caster" option would show it
+        local auraInfo = aura
+          and string.format("found mine=%s caster=%s",
+            tostring(aura.mine), tostring(aura.hasCaster))
+          or "none"
+        ns:Print(string.format("    [%s] aura=%s%s eval=%s widget=%s alpha=%.1f",
+          tostring(cfg.spell), auraInfo, cfg.anyCaster and " anyCaster" or "",
+          disp.shown and "SHOWN" or "hidden",
           w and (w:IsShown() and "visible" or "hidden") or "none",
           w and w:GetAlpha() or 0))
       end
@@ -517,26 +582,12 @@ ns:On("READY", function()
       if mapped < expected then
         QueueMapRescan()
       elseif not rescanNeeded then
-        -- Complete map, but a unit may still be on the Blizzard fallback because
-        -- the ElvUI header buttons appeared after the last rescan. Upgrade once
-        -- the header is visible (the "party HoTs invisible until /reload or
-        -- dungeon entry" bug).
-        local headerPresent = false
-        for _, rootName in ipairs(HEADER_ROOTS) do
-          local root = _G[rootName]
-          if root and root.IsShown and root:IsShown() then
-            headerPresent = true
-            break
-          end
-        end
-        if headerPresent then
-          local tiers = {}
-          for _, frame in pairs(unitFrames) do
-            tiers[#tiers + 1] = framePrimary[frame] or false
-          end
-          if Tracking.ShouldUpgradeMap(tiers, headerPresent) then
-            QueueMapRescan()
-          end
+        -- Complete map, but possibly on the wrong frames: the ElvUI header
+        -- appeared after the last rescan ("party HoTs invisible until /reload
+        -- or dungeon entry"), or ElvUI swapped ElvUF_Raid for ElvUF_Raid40 as
+        -- the raid grew past 25 and half the indicators went out of sight.
+        if Tracking.ShouldUpgradeMap(HeaderSignature(), lastHeaderSig) then
+          QueueMapRescan()
         end
       end
     end
