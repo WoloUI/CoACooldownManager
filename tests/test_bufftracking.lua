@@ -131,4 +131,35 @@ check("disabled overlay never shows",
   MB.ShouldShow({ enabled = false, hideInCombat = false }, false, 5) == false)
 check("a missing cfg never shows", MB.ShouldShow(nil, false, 5) == false)
 
+--------------------------------------------------------------------------------
+-- Context: where the overlay is allowed to appear
+--------------------------------------------------------------------------------
+check("a battleground is its own context", MB.Context("pvp", 40, 0) == "bg")
+check("an arena counts as a battleground", MB.Context("arena", 0, 4) == "bg")
+check("a raid group outside pvp is a raid", MB.Context("raid", 25, 0) == "raid")
+check("a raid group without an instance still counts",
+  MB.Context("none", 10, 0) == "raid")
+check("a party is a party", MB.Context("party", 0, 4) == "party")
+check("solo is the open world", MB.Context("none", 0, 0) == "world")
+check("no instance info still resolves", MB.Context(nil, 0, 0) == "world")
+check("raid wins over party when both are reported",
+  MB.Context("none", 25, 4) == "raid")
+
+local everywhere = { enabled = true, contexts = { world = true, party = true, raid = true, bg = true } }
+check("a ticked context shows", MB.ShouldShow(everywhere, false, 1, "raid") == true)
+local noBG = { enabled = true, contexts = { world = true, party = true, raid = true, bg = false } }
+check("an unticked context hides", MB.ShouldShow(noBG, false, 1, "bg") == false)
+check("the other contexts are unaffected",
+  MB.ShouldShow(noBG, false, 1, "world") == true)
+check("unticking everything is the same as switching it off",
+  MB.ShouldShow({ enabled = true, contexts = { world = false, party = false, raid = false, bg = false } },
+    false, 1, "world") == false)
+check("a config without a checklist shows everywhere",
+  MB.ContextEnabled({ enabled = true }, "bg") == true
+    and MB.ShouldShow({ enabled = true }, false, 1, "bg") == true)
+check("combat still wins over a ticked context",
+  MB.ShouldShow(everywhere, true, 1, "raid") == false)
+check("no context passed means no context gate",
+  MB.ShouldShow(noBG, false, 1) == true)
+
 return T

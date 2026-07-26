@@ -3,7 +3,7 @@ local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local DB = {}
 ns.DB = DB
 
-local DB_VERSION = 3
+local DB_VERSION = 4
 
 --------------------------------------------------------------------------------
 -- Defaults
@@ -200,13 +200,17 @@ function DB:Init()
   -- Missing raid buffs overlay (GENERAL > Buff Tracking). `categories` holds
   -- only the keys the player toggled; anything absent falls back to the
   -- category's shipped default. `buffs` holds per-category name-list overrides.
+  -- perRow 0 = never wrap (one row); `contexts` is the where-to-show checklist.
   db.global.buffTracking = db.global.buffTracking or {
     enabled = true, hideInCombat = true, iconSize = 36, spacing = 6,
-    perRow = 8, showLabels = true, color = { 1, 0.35, 0.35 },
+    perRow = 0, showLabels = true, color = { 1, 0.35, 0.35 },
     x = 0, y = 160, categories = {}, buffs = {},
+    contexts = { world = true, party = true, raid = true, bg = true },
   }
   db.global.buffTracking.categories = db.global.buffTracking.categories or {}
   db.global.buffTracking.buffs = db.global.buffTracking.buffs or {}
+  db.global.buffTracking.contexts = db.global.buffTracking.contexts
+    or { world = true, party = true, raid = true, bg = true }
   db.chars = db.chars or {}
 
   -- v3: config becomes per-character. Layouts (positions) move from the
@@ -226,6 +230,12 @@ function DB:Init()
       end
     end
     db.global.layouts = nil
+  end
+
+  -- v4: the first Buff Tracking build wrapped the overlay at 8 icons, which
+  -- split it into two rows. One row reads better, so retire that saved value.
+  if db.version < 4 and db.global.buffTracking.perRow == 8 then
+    db.global.buffTracking.perRow = 0
   end
   db.version = DB_VERSION
 

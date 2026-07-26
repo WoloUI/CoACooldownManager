@@ -41,7 +41,7 @@ do
   }
   ns.DB:Init()
   check("v2 migration adds Alerts to old profiles", ns.DB:GetViewer("Alerts") ~= nil)
-  check("migration bumps version", CoACDM_DB.version == 3)
+  check("migration bumps version", CoACDM_DB.version == 4)
   CoACDM_DB = old
   ns.DB:Init()
 end
@@ -81,6 +81,38 @@ do
   CoACDM_DB = old
   ns.DB:Init()
 end
+
+-- v3 -> v4: the overlay's first build wrapped at 8 icons; one row reads better
+do
+  local old = CoACDM_DB
+  CoACDM_DB = {
+    version = 3,
+    global = { profiles = {}, buffTracking = { perRow = 8, categories = {}, buffs = {} } },
+    chars = {},
+  }
+  ns.DB:Init()
+  check("v4 retires the 8-per-row wrap", CoACDM_DB.global.buffTracking.perRow == 0)
+  check("v4 fills in the show-in checklist",
+    CoACDM_DB.global.buffTracking.contexts.raid == true)
+
+  -- A perRow the player picked themselves is not someone else's default
+  CoACDM_DB = {
+    version = 3,
+    global = { profiles = {}, buffTracking = { perRow = 5, categories = {}, buffs = {} } },
+    chars = {},
+  }
+  ns.DB:Init()
+  check("v4 leaves a hand-picked perRow alone", CoACDM_DB.global.buffTracking.perRow == 5)
+
+  CoACDM_DB = old
+  ns.DB:Init()
+end
+
+-- A fresh install never wraps and shows everywhere
+check("new configs default to one row", ns.DB.db.global.buffTracking.perRow == 0)
+check("new configs tick every context",
+  ns.DB.db.global.buffTracking.contexts.world == true
+    and ns.DB.db.global.buffTracking.contexts.bg == true)
 
 -- Add / delete viewers with re-parenting
 local viewer = ns.DB:AddViewer("Soul Shards", "stacks")

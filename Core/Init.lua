@@ -1064,12 +1064,42 @@ function MissingBuffs.Evaluate(held, cfg, categories)
   return missing
 end
 
--- Pure decision (test seam): nothing missing means nothing to draw, and combat
--- hides the frame unless the player opted out of that.
-function MissingBuffs.ShouldShow(cfg, inCombat, missingCount)
+-- Where you currently are, as one of the four keys the config checklist uses.
+-- Pure (test seam): the caller passes what the client reported. A battleground
+-- or arena wins over group size, otherwise the group you are in decides.
+function MissingBuffs.Context(instanceType, raidCount, partyCount)
+  if instanceType == "pvp" or instanceType == "arena" then return "bg" end
+  if (raidCount or 0) > 0 then return "raid" end
+  if (partyCount or 0) > 0 then return "party" end
+  return "world"
+end
+
+-- Contexts the player left ticked. Anything not stored counts as ticked, so a
+-- config written before this checklist existed keeps showing everywhere.
+function MissingBuffs.ContextEnabled(cfg, context)
+  local stored = cfg and cfg.contexts and cfg.contexts[context]
+  if stored == nil then return true end
+  return stored and true or false
+end
+
+-- Pure decision (test seam): nothing missing means nothing to draw, combat
+-- hides the frame unless the player opted out, and the checklist can switch
+-- the whole thing off per context.
+function MissingBuffs.ShouldShow(cfg, inCombat, missingCount, context)
   if not cfg or cfg.enabled == false then return false end
   if inCombat and cfg.hideInCombat ~= false then return false end
+  if context and not MissingBuffs.ContextEnabled(cfg, context) then return false end
   return (missingCount or 0) > 0
+end
+
+-- The context right now, straight from the client.
+function MissingBuffs.CurrentContext()
+  local instanceType
+  if GetInstanceInfo then
+    local ok, _, kind = pcall(GetInstanceInfo)
+    if ok then instanceType = kind end
+  end
+  return MissingBuffs.Context(instanceType, GetNumRaidMembers(), GetNumPartyMembers())
 end
 
 local missingFrame
@@ -1141,11 +1171,26 @@ local function AcquireMissingIcon(f, index, size, labelSize)
   return icon
 end
 
+-- A label wider than its icon runs into the next one ("MANA ARMOR" read as one
+-- word). 3.3.5 FontStrings do not auto-shrink, so step the size down until the
+-- text fits its slot.
+local function FitLabel(fontString, text, maxWidth, startSize)
+  local size = startSize
+  fontString:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+  fontString:SetText(text)
+  while size > 6 and (fontString:GetStringWidth() or 0) > maxWidth do
+    size = size - 1
+    fontString:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+  end
+end
+
 -- Draws one icon per missing category and resizes the frame around them.
 local function LayoutMissing(f, cfg, missing)
   local size = math.max(tonumber(cfg.iconSize) or 36, 8)
   local gap = math.max(tonumber(cfg.spacing) or 6, 0)
-  local perRow = math.max(math.floor(tonumber(cfg.perRow) or 8), 1)
+  -- perRow 0 (or unset) means "never wrap": one row however many are missing
+  local perRow = math.floor(tonumber(cfg.perRow) or 0)
+  if perRow < 1 then perRow = math.max(#missing, 1) end
   local showLabels = cfg.showLabels ~= false
   local labelSize = math.max(math.floor(size * 0.32), 7)
   local rowHeight = size + (showLabels and (labelSize + 3) or 0)
@@ -1173,7 +1218,7 @@ local function LayoutMissing(f, cfg, missing)
       or "Interface\\Icons\\INV_Misc_QuestionMark")
     icon.tex:SetVertexColor(1, 1, 1)
     if showLabels then
-      icon.label:SetText(category.label or category.name or "?")
+      FitLabel(icon.label, category.label or category.name or "?", size + gap, labelSize)
       icon.label:SetTextColor(color[1], color[2], color[3])
       icon.label:Show()
     else
@@ -1221,10 +1266,10 @@ function MissingBuffs:Update(elapsed, force)
   if editing then
     show = cfg.enabled ~= false -- always grabbable while arranging the UI
   elseif previewing then
-    show = MissingBuffs.ShouldShow(cfg, false, #missing)
+    show = MissingBuffs.ShouldShow(cfg, false, #missing) -- ignore the checklist
   else
     local inCombat = UnitAffectingCombat("player") and true or false
-    show = MissingBuffs.ShouldShow(cfg, inCombat, #missing)
+    show = MissingBuffs.ShouldShow(cfg, inCombat, #missing, MissingBuffs.CurrentContext())
   end
 
   if not show then

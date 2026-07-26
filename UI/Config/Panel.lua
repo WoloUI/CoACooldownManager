@@ -71,6 +71,13 @@ local SLOT_OPTIONS = {
   { text = "Main hand", value = "mainhand" },
   { text = "Off hand", value = "offhand" },
 }
+-- Where the MISSING BUFFS overlay may appear (ns.MissingBuffs.Context)
+local CONTEXT_OPTIONS = {
+  { text = "Open world", value = "world" },
+  { text = "Party", value = "party" },
+  { text = "Raid", value = "raid" },
+  { text = "Battleground", value = "bg" },
+}
 local STACK_COLORS = {
   { text = "Gold", value = "gold" }, { text = "Red", value = "red" },
   { text = "Green", value = "green" }, { text = "Blue", value = "blue" },
@@ -870,7 +877,7 @@ function Config:BuildControls()
     if ns.MissingBuffs then ns.MissingBuffs:Apply() end
   end
   c.btHint = W.CreateLabel(parent,
-    "Shows an icon for every raid buff you are missing. A category counts as\ncovered when ANY of its buffs is on you. It hides itself in combat, so use\nit as a pre-pull checklist; drag it into place in edit mode (/cdm edit).",
+    "Shows an icon for every raid buff you are missing. A category counts as\ncovered when ANY of its buffs is on you. It hides itself in combat, so use\nit as a pre-pull checklist; drag it into place in edit mode (/cdm edit).\nPer row 0 keeps every icon on one line.",
     10, W.colors.inkDim)
   c.btEnable = W.CreateCheckbox(parent, "Show MISSING BUFFS frame", function(_, ck)
     BuffCfg().enabled = ck
@@ -896,14 +903,29 @@ function Config:BuildControls()
   end, "6")
   c.btPerRowLabel = W.CreateLabel(parent, "Per row", 12, W.colors.inkDim)
   c.btPerRow = W.CreateEditBox(parent, 46, 20, function(_, text)
-    BuffCfg().perRow = math.max(math.floor(tonumber(text) or 8), 1)
+    -- 0 = never wrap, which is the default: one row however many are missing
+    BuffCfg().perRow = math.max(math.floor(tonumber(text) or 0), 0)
     ApplyBuffs()
-  end, "8")
+  end, "0")
   c.btColorLabel = W.CreateLabel(parent, "Label color", 12, W.colors.inkDim)
   c.btColor = W.CreateColorSwatch(parent, function(_, color)
     BuffCfg().color = color
     ApplyBuffs()
   end)
+
+  -- Where the overlay is allowed to appear. Unticking every box is the same as
+  -- switching it off, which is fine - the enable checkbox is right above.
+  c.btWhereHeader = W.CreateSection(parent, "SHOW IN")
+  c.btWhere = {}
+  for _, entry in ipairs(CONTEXT_OPTIONS) do
+    local box = W.CreateCheckbox(parent, entry.text, function(self, checked)
+      BuffCfg().contexts[self.contextKey] = checked and true or false
+      ApplyBuffs()
+    end)
+    box.contextKey = entry.value
+    c["btWhere_" .. entry.value] = box -- so HideAllControls picks it up
+    c.btWhere[#c.btWhere + 1] = box
+  end
 
   c.btCatHeader = W.CreateSection(parent, "RAID BUFF CATEGORIES")
   c.btCatHint = W.CreateLabel(parent,
@@ -1922,7 +1944,7 @@ function Config:Render()
     c2.title:Show()
     y2 = y2 - 26
     c2.btHint:SetPoint("TOPLEFT", 0, y2); c2.btHint:Show()
-    y2 = y2 - 46
+    y2 = y2 - 58
 
     c2.btEnable:SetChecked(cfg.enabled ~= false)
     c2.btEnable:SetPoint("TOPLEFT", 0, y2); c2.btEnable:Show()
@@ -1940,12 +1962,21 @@ function Config:Render()
     c2.btSpacing:SetText(tostring(cfg.spacing or 6))
     c2.btSpacing:SetPoint("TOPLEFT", 178, y2); c2.btSpacing:Show()
     c2.btPerRowLabel:SetPoint("TOPLEFT", 240, y2 - 4); c2.btPerRowLabel:Show()
-    c2.btPerRow:SetText(tostring(cfg.perRow or 8))
+    c2.btPerRow:SetText(tostring(cfg.perRow or 0))
     c2.btPerRow:SetPoint("TOPLEFT", 292, y2); c2.btPerRow:Show()
     c2.btColorLabel:SetPoint("TOPLEFT", 354, y2 - 4); c2.btColorLabel:Show()
     c2.btColor:SetColor(cfg.color or { 1, 0.35, 0.35 })
     c2.btColor:SetPoint("TOPLEFT", 430, y2); c2.btColor:Show()
     y2 = y2 - 34
+
+    c2.btWhereHeader:SetPoint("TOPLEFT", 0, y2); c2.btWhereHeader:Show()
+    y2 = y2 - 20
+    for i, box in ipairs(c2.btWhere) do
+      box:SetChecked(ns.MissingBuffs.ContextEnabled(cfg, box.contextKey))
+      box:SetPoint("TOPLEFT", (i - 1) * 130, y2)
+      box:Show()
+    end
+    y2 = y2 - 30
 
     c2.btCatHeader:SetPoint("TOPLEFT", 0, y2); c2.btCatHeader:Show()
     y2 = y2 - 18
