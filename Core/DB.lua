@@ -88,12 +88,26 @@ end
 -- would sit in the element list forever doing nothing. Idempotent, and applied
 -- to imported strings too since older exports can still carry them.
 function DB.StripRangeReminders(profile)
+  return DB.StripReminderType(profile, "range")
+end
+
+-- The "buff group" reminder type was replaced by the MISSING BUFFS overlay
+-- (db.global.buffTracking): the manual equivalence-group editor is gone, so
+-- these rows have neither an evaluator nor a group to point at.
+function DB.StripGroupReminders(profile)
+  return DB.StripReminderType(profile, "group")
+end
+
+-- Drops every reminder row of a retired type. Without an evaluator such a row
+-- would sit in the element list forever doing nothing, so the sweep runs over
+-- stored profiles, templates and imported strings alike. Idempotent.
+function DB.StripReminderType(profile, rtype)
   local removed = 0
   if type(profile) ~= "table" then return removed end
   for _, viewer in ipairs(profile.viewers or {}) do
     if viewer.style == "reminders" and type(viewer.elements) == "table" then
       for i = #viewer.elements, 1, -1 do
-        if viewer.elements[i].rtype == "range" then
+        if viewer.elements[i].rtype == rtype then
           table.remove(viewer.elements, i)
           removed = removed + 1
         end
@@ -169,7 +183,7 @@ function DB:Init()
     end
   end
   db.global = db.global or {}
-  db.global.equivGroups = db.global.equivGroups or {}
+  db.global.equivGroups = nil -- retired with the buff-group reminder type
   db.global.appearance = db.global.appearance or {} -- font/texture/fontScale
   db.global.profiles = db.global.profiles or {}     -- named profile templates (account-wide library)
   -- Aggro alert overlay (screen-space, shared by every character like the minimap)
@@ -183,6 +197,16 @@ function DB:Init()
     enabled = true, text = "OUT OF RANGE", size = 28, color = { 1, 0.35, 0.35 },
     pulse = true, sound = nil, spell = nil, x = 0, y = -80,
   }
+  -- Missing raid buffs overlay (GENERAL > Buff Tracking). `categories` holds
+  -- only the keys the player toggled; anything absent falls back to the
+  -- category's shipped default. `buffs` holds per-category name-list overrides.
+  db.global.buffTracking = db.global.buffTracking or {
+    enabled = true, hideInCombat = true, iconSize = 36, spacing = 6,
+    perRow = 8, showLabels = true, color = { 1, 0.35, 0.35 },
+    x = 0, y = 160, categories = {}, buffs = {},
+  }
+  db.global.buffTracking.categories = db.global.buffTracking.categories or {}
+  db.global.buffTracking.buffs = db.global.buffTracking.buffs or {}
   db.chars = db.chars or {}
 
   -- v3: config becomes per-character. Layouts (positions) move from the
@@ -205,11 +229,18 @@ function DB:Init()
   end
   db.version = DB_VERSION
 
-  -- Sweep the retired "out of range" reminder rows out of every stored profile
+  -- Sweep retired reminder rows ("out of range", "buff group") out of every
+  -- stored profile and template
   for _, char in pairs(db.chars) do
-    for _, profile in pairs(char.specs or {}) do DB.StripRangeReminders(profile) end
+    for _, profile in pairs(char.specs or {}) do
+      DB.StripRangeReminders(profile)
+      DB.StripGroupReminders(profile)
+    end
   end
-  for _, template in pairs(db.global.profiles) do DB.StripRangeReminders(template) end
+  for _, template in pairs(db.global.profiles) do
+    DB.StripRangeReminders(template)
+    DB.StripGroupReminders(template)
+  end
 
   local char = db.chars[CharKey()] or {}
   db.chars[CharKey()] = char
@@ -576,20 +607,13 @@ function DB:ExportProfile()
     spec = self:GetSpecName(),
     profile = self.profile,
     layout = {},
-    groups = {},
+    -- `groups` is gone with the buff-group reminder type; older strings may
+    -- still carry it and are simply ignored on import.
   }
   local layout = self:GetLayout()
-  local allGroups = ns.GetEquivGroups()
   for _, viewer in ipairs(self.profile.viewers) do
     if layout[viewer.name] then
       payload.layout[viewer.name] = layout[viewer.name]
-    end
-    if viewer.style == "reminders" then
-      for _, reminder in ipairs(viewer.elements) do
-        if reminder.rtype == "group" and reminder.group and allGroups[reminder.group] then
-          payload.groups[reminder.group] = allGroups[reminder.group]
-        end
-      end
     end
   end
   return PREFIX .. B64Encode(Serialize(payload))
@@ -609,7 +633,9 @@ function DB:ImportProfile(text)
 
   data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {} }
   data.profile.tracking = data.profile.tracking or DefaultTracking()
-  DB.StripRangeReminders(data.profile) -- older exports may still carry them
+  -- Older exports can still carry rows of both retired reminder types
+  DB.StripRangeReminders(data.profile)
+  DB.StripGroupReminders(data.profile)
   -- Import replaces the spec's profile: the "loaded from" label no longer applies
   self.char.assignments[self:GetSpecKey()] = nil
   self.char.specs[self:GetSpecKey()] = data.profile
@@ -619,11 +645,6 @@ function DB:ImportProfile(text)
   local layout = self:GetLayout()
   for name, anchor in pairs(data.layout or {}) do
     layout[name] = anchor
-  end
-  for key, group in pairs(data.groups or {}) do
-    if not self.db.global.equivGroups[key] then
-      self.db.global.equivGroups[key] = group
-    end
   end
 
   ns:Fire("PROFILE_CHANGED")

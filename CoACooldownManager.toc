@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: CoA Cooldown Manager
-## Notes: Retail-style cooldown manager: anchored viewers, simple triggers, dual power bars, party/raid buff reminders
+## Notes: Retail-style cooldown manager: anchored viewers, simple triggers, dual power bars, missing raid buff tracking
 ## Author: WoloUI
 ## Version: 0.1
 ## SavedVariables: CoACDM_DB

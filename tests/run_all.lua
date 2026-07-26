@@ -2,6 +2,7 @@
 local files = {
   "tests/test_triggers.lua",
   "tests/test_reminders.lua",
+  "tests/test_bufftracking.lua",
   "tests/test_db.lua",
   "tests/test_scanner.lua",
   "tests/test_tracking.lua",

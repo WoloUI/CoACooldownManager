@@ -61,14 +61,11 @@ local POWER_TYPE_OPTIONS = {
   { text = "None", value = "none" },
 }
 local REMINDER_TYPE_OPTIONS = {
-  { text = "Group buff", value = "group" },
   { text = "My aura (ID)", value = "aura" },
   { text = "Weapon enchant", value = "weapon" },
   -- No "out of range" here: it is a standalone screen overlay (Tracking > Alerts)
-}
-local SCOPE_OPTIONS = {
-  { text = "Myself", value = "self" },
-  { text = "Party/Raid", value = "group" },
+  -- No "group buff" either: raid buffs are the MISSING BUFFS overlay
+  -- (GENERAL > Buff Tracking)
 }
 local SLOT_OPTIONS = {
   { text = "Main hand", value = "mainhand" },
@@ -145,8 +142,8 @@ local function BuildWindow()
   end)
   win.generalBtn:SetPoint("TOPLEFT", PAD, -26)
 
-  win.groupsBtn = W.CreateButton(win.sidebar, "Buff groups", SIDEBAR_W - 2 * PAD, 21, function()
-    state.selected = "__groups"
+  win.groupsBtn = W.CreateButton(win.sidebar, "Buff Tracking", SIDEBAR_W - 2 * PAD, 21, function()
+    state.selected = "__bufftracking"
     state.selectedElement = nil
     Config:Render()
   end)
@@ -835,11 +832,7 @@ function Config:BuildControls()
   -- Reminder elements
   c.remType = W.CreateDropdown(parent, 130, function() Config:Render() end)
   c.remType:SetOptions(REMINDER_TYPE_OPTIONS)
-  c.remType:SetValue("group")
-  c.remGroup = W.CreateDropdown(parent, 150, nil)
-  c.remScope = W.CreateDropdown(parent, 100, nil)
-  c.remScope:SetOptions(SCOPE_OPTIONS)
-  c.remScope:SetValue("self")
+  c.remType:SetValue("aura")
   c.remAura = W.CreateEditBox(parent, 90, 20, nil, "aura name / id")
   c.remSlot = W.CreateDropdown(parent, 100, nil)
   c.remSlot:SetOptions(SLOT_OPTIONS)
@@ -852,10 +845,7 @@ function Config:BuildControls()
     local customText = c.remText:GetText()
     if customText == "" then customText = nil end
     local reminder
-    if rtype == "group" then
-      if not c.remGroup.value then return end
-      reminder = { rtype = "group", group = c.remGroup.value, scope = c.remScope.value }
-    elseif rtype == "aura" then
+    if rtype == "aura" then
       local input = c.remAura:GetText()
       if not input or input == "" then return end
       local id, name = ns.ResolveSpell(input)
@@ -871,41 +861,95 @@ function Config:BuildControls()
     Config:Render()
   end)
 
-  -- Buff group editor (GENERAL > Buff groups)
-  local function UserGroups()
-    return ns.DB.db.global.equivGroups
+  -- Buff Tracking: the MISSING BUFFS overlay (GENERAL > Buff Tracking).
+  -- Config is account-wide, in db.global.buffTracking.
+  local function BuffCfg()
+    return ns.DB.db.global.buffTracking
   end
-  c.grpHint = W.CreateLabel(parent,
-    "Groups bundle buffs that share an effect. Ranks are detected automatically\nfrom the version you have learned; reminders stay quiet when the unit\nalready has an equal or stronger group buff.", 10, W.colors.inkDim)
-  c.grpNewName = W.CreateEditBox(parent, 170, 20, nil, "group name")
-  c.grpNewBtn = W.CreateButton(parent, "Create group", 90, 20, function()
-    local name = c.grpNewName:GetText()
-    if not name or name == "" then return end
-    if UserGroups()[name] then
-      ns:Print("a group with that name already exists.")
-      return
+  local function ApplyBuffs()
+    if ns.MissingBuffs then ns.MissingBuffs:Apply() end
+  end
+  c.btHint = W.CreateLabel(parent,
+    "Shows an icon for every raid buff you are missing. A category counts as\ncovered when ANY of its buffs is on you. It hides itself in combat, so use\nit as a pre-pull checklist; drag it into place in edit mode (/cdm edit).",
+    10, W.colors.inkDim)
+  c.btEnable = W.CreateCheckbox(parent, "Show MISSING BUFFS frame", function(_, ck)
+    BuffCfg().enabled = ck
+    ApplyBuffs()
+  end)
+  c.btHideCombat = W.CreateCheckbox(parent, "Hide in combat", function(_, ck)
+    BuffCfg().hideInCombat = ck
+    ApplyBuffs()
+  end)
+  c.btShowLabels = W.CreateCheckbox(parent, "Show labels under icons", function(_, ck)
+    BuffCfg().showLabels = ck
+    ApplyBuffs()
+  end)
+  c.btSizeLabel = W.CreateLabel(parent, "Icon size", 12, W.colors.inkDim)
+  c.btSize = W.CreateEditBox(parent, 46, 20, function(_, text)
+    BuffCfg().iconSize = math.max(tonumber(text) or 36, 8)
+    ApplyBuffs()
+  end, "36")
+  c.btSpacingLabel = W.CreateLabel(parent, "Spacing", 12, W.colors.inkDim)
+  c.btSpacing = W.CreateEditBox(parent, 46, 20, function(_, text)
+    BuffCfg().spacing = math.max(tonumber(text) or 6, 0)
+    ApplyBuffs()
+  end, "6")
+  c.btPerRowLabel = W.CreateLabel(parent, "Per row", 12, W.colors.inkDim)
+  c.btPerRow = W.CreateEditBox(parent, 46, 20, function(_, text)
+    BuffCfg().perRow = math.max(math.floor(tonumber(text) or 8), 1)
+    ApplyBuffs()
+  end, "8")
+  c.btColorLabel = W.CreateLabel(parent, "Label color", 12, W.colors.inkDim)
+  c.btColor = W.CreateColorSwatch(parent, function(_, color)
+    BuffCfg().color = color
+    ApplyBuffs()
+  end)
+
+  c.btCatHeader = W.CreateSection(parent, "RAID BUFF CATEGORIES")
+  c.btCatHint = W.CreateLabel(parent,
+    "Resistance categories start off: with nobody in the group able to cast them\nthey would just shout forever. Click a category to edit its buff names.",
+    10, W.colors.inkDim)
+  c.btCatRows = {}
+
+  -- Per-category buff-name editor. Edits are stored as an override list in
+  -- db.global.buffTracking.buffs[key]; Reset drops the override so the
+  -- category goes back to the names that ship with the addon.
+  local function CategoryBuffs(key)
+    local cfg = BuffCfg()
+    local category = ns.RaidBuffByKey[key]
+    if not category then return nil end
+    if type(cfg.buffs[key]) ~= "table" then
+      cfg.buffs[key] = ns.CopyTable(category.buffs)
     end
-    UserGroups()[name] = { name = name, spells = {} }
-    state.selectedGroup = name
-    c.grpNewName:SetText("")
-    Config:Render()
-  end)
-  c.groupRows = {}
-  c.grpSpellHeader = W.CreateSection(parent, "SPELLS IN GROUP")
-  c.grpSpellRows = {}
-  c.grpSpellInput = W.CreateEditBox(parent, 140, 20, nil, "spell name / id")
-  c.grpAddSpell = W.CreateButton(parent, "Add", 50, 20, function()
-    local group = state.selectedGroup and UserGroups()[state.selectedGroup]
-    if not group then return end
-    local input = c.grpSpellInput:GetText()
+    return cfg.buffs[key]
+  end
+  c.btBuffHeader = W.CreateSection(parent, "BUFFS IN CATEGORY")
+  c.btBuffRows = {}
+  c.btBuffInput = W.CreateEditBox(parent, 190, 20, nil, "buff name")
+  c.btAddBuff = W.CreateButton(parent, "Add", 50, 20, function()
+    local list = state.selectedCategory and CategoryBuffs(state.selectedCategory)
+    if not list then return end
+    local input = c.btBuffInput:GetText()
     if not input or input == "" then return end
-    local id, name = ns.ResolveSpell(input)
-    -- Store by ID when resolvable, otherwise by NAME (matches the aura's
-    -- name at runtime and survives spell-ID changes)
-    table.insert(group.spells, { id = id or name or input })
-    c.grpSpellInput:SetText("")
+    -- Buffs are matched by NAME: an ID would not survive an Ascension patch,
+    -- and the aura's own name is what the overlay compares against.
+    table.insert(list, input)
+    c.btBuffInput:SetText("")
+    ApplyBuffs()
     Config:Render()
   end)
+  c.btResetBuffs = W.CreateButton(parent, "Reset to default", 110, 20, function()
+    if not state.selectedCategory then return end
+    BuffCfg().buffs[state.selectedCategory] = nil
+    ApplyBuffs()
+    Config:Render()
+  end)
+  c.btRemoveBuff = function(key, index)
+    local list = CategoryBuffs(key)
+    if list then table.remove(list, index) end
+    ApplyBuffs()
+    Config:Render()
+  end
 
   -- Profiles view
   c.profHint = W.CreateLabel(parent,
@@ -946,7 +990,7 @@ function Config:BuildControls()
   c.importBtn = W.CreateButton(parent, "Import profile", 110, 22, function()
     Config:ShowIO("import")
   end)
-  c.shareHint = W.CreateLabel(parent, "Export copies your current spec's bars, triggers, positions and buff groups\ninto a string you can share; import replaces the current spec's profile.", 10, W.colors.inkDim)
+  c.shareHint = W.CreateLabel(parent, "Export copies your current spec's bars, triggers and positions into a string\nyou can share; import replaces the current spec's profile. Buff Tracking is\naccount-wide, so it is not part of the string.", 10, W.colors.inkDim)
 
   -- Tracking view (party/raid HoT indicators)
   c.trackRestartHint = W.CreateLabel(parent,
@@ -1173,8 +1217,8 @@ local function HideAllControls()
   end
   -- Pooled row frames live in plain tables, not covered by ALL_CONTROL_KEYS
   for _, row in ipairs(controls.elementRows) do row:Hide() end
-  for _, row in ipairs(controls.groupRows) do row:Hide() end
-  for _, row in ipairs(controls.grpSpellRows) do row:Hide() end
+  for _, row in ipairs(controls.btCatRows) do row:Hide() end
+  for _, row in ipairs(controls.btBuffRows) do row:Hide() end
   for _, row in ipairs(controls.profRows) do row:Hide() end
   for _, row in ipairs(controls.specRows) do row:Hide() end
   for _, row in ipairs(controls.trackRows) do row:Hide() end
@@ -1183,7 +1227,7 @@ end
 
 local function RenderSidebar()
   -- General entry highlights
-  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__groups", [win.profilesBtn] = "__profiles", [win.trackingBtn] = "__tracking", [win.hudBtn] = "__hud" }) do
+  for btn, key in pairs({ [win.generalBtn] = "__general", [win.groupsBtn] = "__bufftracking", [win.profilesBtn] = "__profiles", [win.trackingBtn] = "__tracking", [win.hudBtn] = "__hud" }) do
     if state.selected == key then
       btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       btn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
@@ -1247,12 +1291,7 @@ end
 
 local function ElementLabel(el)
   if el.rtype then -- reminder
-    if el.rtype == "group" then
-      local groups = ns.GetEquivGroups()
-      local group = groups[el.group]
-      local scope = el.scope == "group" and "party/raid" or "self"
-      return (group and group.name or el.group) .. "  |cff9aa3b5(" .. scope .. ")|r"
-    elseif el.rtype == "aura" then
+    if el.rtype == "aura" then
       return (el.name or el.spellID or "?") .. "  |cff9aa3b5(my aura)|r"
     end
     return "Weapon enchant  |cff9aa3b5(" .. (el.slot or "mainhand") .. ")|r"
@@ -1873,108 +1912,131 @@ function Config:Render()
     return
   end
 
-  -- Buff groups editor
-  if state.selected == "__groups" then
+  -- Buff Tracking: the MISSING BUFFS overlay and its raid buff categories
+  if state.selected == "__bufftracking" then
     local c2 = controls
-    local groups = ns.DB.db.global.equivGroups
+    local cfg = ns.DB.db.global.buffTracking
     local y2 = -10
     c2.title:SetPoint("TOPLEFT", 0, y2)
-    c2.title:SetText("Buff groups")
+    c2.title:SetText("Buff Tracking")
     c2.title:Show()
     y2 = y2 - 26
-    c2.grpHint:SetPoint("TOPLEFT", 0, y2); c2.grpHint:Show()
+    c2.btHint:SetPoint("TOPLEFT", 0, y2); c2.btHint:Show()
+    y2 = y2 - 46
+
+    c2.btEnable:SetChecked(cfg.enabled ~= false)
+    c2.btEnable:SetPoint("TOPLEFT", 0, y2); c2.btEnable:Show()
+    c2.btHideCombat:SetChecked(cfg.hideInCombat ~= false)
+    c2.btHideCombat:SetPoint("TOPLEFT", 260, y2); c2.btHideCombat:Show()
+    y2 = y2 - 24
+    c2.btShowLabels:SetChecked(cfg.showLabels ~= false)
+    c2.btShowLabels:SetPoint("TOPLEFT", 0, y2); c2.btShowLabels:Show()
+    y2 = y2 - 28
+
+    c2.btSizeLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.btSizeLabel:Show()
+    c2.btSize:SetText(tostring(cfg.iconSize or 36))
+    c2.btSize:SetPoint("TOPLEFT", 62, y2); c2.btSize:Show()
+    c2.btSpacingLabel:SetPoint("TOPLEFT", 124, y2 - 4); c2.btSpacingLabel:Show()
+    c2.btSpacing:SetText(tostring(cfg.spacing or 6))
+    c2.btSpacing:SetPoint("TOPLEFT", 178, y2); c2.btSpacing:Show()
+    c2.btPerRowLabel:SetPoint("TOPLEFT", 240, y2 - 4); c2.btPerRowLabel:Show()
+    c2.btPerRow:SetText(tostring(cfg.perRow or 8))
+    c2.btPerRow:SetPoint("TOPLEFT", 292, y2); c2.btPerRow:Show()
+    c2.btColorLabel:SetPoint("TOPLEFT", 354, y2 - 4); c2.btColorLabel:Show()
+    c2.btColor:SetColor(cfg.color or { 1, 0.35, 0.35 })
+    c2.btColor:SetPoint("TOPLEFT", 430, y2); c2.btColor:Show()
     y2 = y2 - 34
-    c2.grpNewName:SetPoint("TOPLEFT", 0, y2); c2.grpNewName:Show()
-    c2.grpNewBtn:SetPoint("TOPLEFT", 176, y2); c2.grpNewBtn:Show()
-    y2 = y2 - 30
 
-    local names = {}
-    for key in pairs(groups) do names[#names + 1] = key end
-    table.sort(names)
-    if state.selectedGroup and not groups[state.selectedGroup] then
-      state.selectedGroup = nil
+    c2.btCatHeader:SetPoint("TOPLEFT", 0, y2); c2.btCatHeader:Show()
+    y2 = y2 - 18
+    c2.btCatHint:SetPoint("TOPLEFT", 0, y2); c2.btCatHint:Show()
+    y2 = y2 - 32
+
+    local categories = ns.RaidBuffCategories or {}
+    if state.selectedCategory and not ns.RaidBuffByKey[state.selectedCategory] then
+      state.selectedCategory = nil
     end
-    if not state.selectedGroup then state.selectedGroup = names[1] end
 
-    for i, key in ipairs(names) do
-      local row = c2.groupRows[i]
+    for i, category in ipairs(categories) do
+      local row = c2.btCatRows[i]
       if not row then
         row = CreateFrame("Frame", nil, win.content)
         row:SetHeight(22)
-        row.btn = W.CreateButton(row, "", 200, 20, function(self)
-          state.selectedGroup = self.groupKey
+        -- Pooled rows are reused across renders: resolve the category from the
+        -- widget at CLICK time, never from the loop that created the row.
+        row.check = W.CreateCheckbox(row, "", function(self, checked)
+          ns.DB.db.global.buffTracking.categories[self.catKey] = checked and true or false
+          if ns.MissingBuffs then ns.MissingBuffs:Apply() end
+        end)
+        row.check:SetPoint("LEFT")
+        row.btn = W.CreateButton(row, "", 260, 20, function(self)
+          state.selectedCategory = (state.selectedCategory == self.catKey) and nil or self.catKey
           Config:Render()
         end)
-        row.btn:SetPoint("LEFT")
+        row.btn:SetPoint("LEFT", row.check, "RIGHT", 6, 0)
         row.btn.text:ClearAllPoints()
         row.btn.text:SetPoint("LEFT", 6, 0)
-        row.remove = W.CreateButton(row, "X", 20, 20, function(self)
-          ns.DB.db.global.equivGroups[self.groupKey] = nil
-          if state.selectedGroup == self.groupKey then state.selectedGroup = nil end
-          Config:Render()
-        end)
-        row.remove:SetPoint("LEFT", row.btn, "RIGHT", 4, 0)
-        c2.groupRows[i] = row
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(16, 16)
+        row.icon:SetPoint("LEFT", row.btn, "RIGHT", 8, 0)
+        ns.CropIcon(row.icon)
+        c2.btCatRows[i] = row
       end
-      row.btn.groupKey = key
-      row.remove.groupKey = key
-      row.btn:SetLabel(groups[key].name .. "  |cff9aa3b5(" .. #groups[key].spells .. " spells)|r")
-      if state.selectedGroup == key then
+      row.check.catKey = category.key
+      row.btn.catKey = category.key
+      row.check:SetChecked(ns.MissingBuffs.CategoryEnabled(category, cfg))
+      local names = ns.RaidBuffNames(category, cfg)
+      local custom = type(cfg.buffs[category.key]) == "table" and "  |cffd9a441(edited)|r" or ""
+      row.btn:SetLabel(category.name .. "  |cff9aa3b5(" .. #names .. " buffs)|r" .. custom)
+      if state.selectedCategory == category.key then
         row.btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       else
         row.btn:SetBackdropColor(W.colors.panel2[1], W.colors.panel2[2], W.colors.panel2[3], 1)
       end
+      local _, _, texture = GetSpellInfo(category.icon)
+      row.icon:SetTexture(texture or category.iconTexture
+        or "Interface\\Icons\\INV_Misc_QuestionMark")
       row:ClearAllPoints()
       row:SetPoint("TOPLEFT", 0, y2)
       row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
       row:Show()
       y2 = y2 - 24
     end
-    for i = #names + 1, #c2.groupRows do c2.groupRows[i]:Hide() end
+    for i = #categories + 1, #c2.btCatRows do c2.btCatRows[i]:Hide() end
 
-    local group = state.selectedGroup and groups[state.selectedGroup]
-    if group then
+    local selected = state.selectedCategory and ns.RaidBuffByKey[state.selectedCategory]
+    if selected then
       y2 = y2 - 8
-      c2.grpSpellHeader:SetPoint("TOPLEFT", 0, y2); c2.grpSpellHeader:Show()
-      y2 = y2 - 20
-      for i, entry in ipairs(group.spells) do
-        local row = c2.grpSpellRows[i]
+      c2.btBuffHeader:SetPoint("TOPLEFT", 0, y2); c2.btBuffHeader:Show()
+      c2.btResetBuffs:SetPoint("TOPLEFT", 180, y2 - 4); c2.btResetBuffs:Show()
+      y2 = y2 - 22
+      local names = ns.RaidBuffNames(selected, cfg)
+      for i, buffName in ipairs(names) do
+        local row = c2.btBuffRows[i]
         if not row then
           row = CreateFrame("Frame", nil, win.content)
-          row:SetHeight(22)
-          row.icon = row:CreateTexture(nil, "ARTWORK")
-          row.icon:SetSize(16, 16)
-          row.icon:SetPoint("LEFT")
-          ns.CropIcon(row.icon)
+          row:SetHeight(20)
           row.label = W.CreateLabel(row, "", 12)
-          row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-          row.remove = W.CreateButton(row, "X", 20, 20, function(self)
-            local g = ns.DB.db.global.equivGroups[state.selectedGroup]
-            if g then table.remove(g.spells, self.spellIndex) end
-            Config:Render()
+          row.label:SetPoint("LEFT", 4, 0)
+          row.remove = W.CreateButton(row, "X", 20, 18, function(self)
+            controls.btRemoveBuff(self.catKey, self.buffIndex)
           end)
-          row.remove:SetPoint("LEFT", row.label, "RIGHT", 8, 0)
-          c2.grpSpellRows[i] = row
+          row.remove:SetPoint("LEFT", 290, 0)
+          c2.btBuffRows[i] = row
         end
-        row.remove.spellIndex = i
-        local name, rankStr, icon = GetSpellInfo(entry.id)
-        if not name and type(entry.id) == "string" then name = entry.id end
-        row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-        local rankText = entry.rank and ("rank " .. entry.rank)
-          or (rankStr and rankStr ~= "" and rankStr:lower())
-          or "rank auto"
-        local idText = type(entry.id) == "number" and ("#" .. entry.id) or "by name"
-        row.label:SetText((name or "?") .. "  |cff9aa3b5" .. idText .. "  " .. rankText .. "|r")
+        row.remove.catKey = selected.key
+        row.remove.buffIndex = i
+        row.label:SetText(buffName)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 16, y2)
         row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
         row:Show()
-        y2 = y2 - 24
+        y2 = y2 - 20
       end
-      for i = #group.spells + 1, #c2.grpSpellRows do c2.grpSpellRows[i]:Hide() end
+      for i = #names + 1, #c2.btBuffRows do c2.btBuffRows[i]:Hide() end
       y2 = y2 - 4
-      c2.grpSpellInput:SetPoint("TOPLEFT", 16, y2); c2.grpSpellInput:Show()
-      c2.grpAddSpell:SetPoint("TOPLEFT", 164, y2); c2.grpAddSpell:Show()
+      c2.btBuffInput:SetPoint("TOPLEFT", 16, y2); c2.btBuffInput:Show()
+      c2.btAddBuff:SetPoint("TOPLEFT", 214, y2); c2.btAddBuff:Show()
       y2 = y2 - 30
     end
 
@@ -2330,23 +2392,7 @@ function Config:Render()
     c.remType:SetPoint("TOPLEFT", C1, y); c.remType:Show()
     local rtype = c.remType.value
     local PARAM_X = C1 + 136
-    if rtype == "group" then
-      local groupOptions = {}
-      for key, group in pairs(ns.GetEquivGroups()) do
-        groupOptions[#groupOptions + 1] = { text = group.name, value = key }
-      end
-      table.sort(groupOptions, function(a, b) return a.text < b.text end)
-      if #groupOptions == 0 then
-        c.addHint:SetText("No buff groups yet - create them in GENERAL > Buff groups.")
-        c.addHint:SetPoint("TOPLEFT", PARAM_X, y - 4)
-        c.addHint:Show()
-      else
-        c.remGroup:SetOptions(groupOptions)
-        if not c.remGroup.value and groupOptions[1] then c.remGroup:SetValue(groupOptions[1].value) end
-        c.remGroup:SetPoint("TOPLEFT", PARAM_X, y); c.remGroup:Show()
-        c.remScope:SetPoint("TOPLEFT", PARAM_X + 156, y); c.remScope:Show()
-      end
-    elseif rtype == "aura" then
+    if rtype == "aura" then
       c.remAura:SetPoint("TOPLEFT", PARAM_X, y); c.remAura:Show()
     else
       c.remSlot:SetPoint("TOPLEFT", PARAM_X, y); c.remSlot:Show()

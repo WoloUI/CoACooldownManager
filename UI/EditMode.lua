@@ -143,6 +143,7 @@ function EditMode:Toggle()
   self:RefreshOverlays()
   if ns.AggroAlert then ns.AggroAlert:Apply() end -- grabbable while editing
   if ns.RangeAlert then ns.RangeAlert:Apply() end
+  if ns.MissingBuffs then ns.MissingBuffs:Apply() end
   if ns.ExtraActionBar then ns.ExtraActionBar:SetEditing(self.active) end
   if self.active then
     ns:Print("edit mode ON - drag bars to move them; drag the Power bar to move everything. /cdm edit to finish.")

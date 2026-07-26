@@ -212,20 +212,31 @@ do
   check("non-reminder bars untouched", #profile.viewers[2].elements == 1)
   check("sweep is idempotent", ns.DB.StripRangeReminders(profile) == 0)
   check("sweep tolerates junk", ns.DB.StripRangeReminders(nil) == 0)
+
+  -- "buff group" went the same way, replaced by the MISSING BUFFS overlay
+  check("group reminders swept out", ns.DB.StripGroupReminders(profile) == 1)
+  check("only the weapon row is left",
+    #left == 1 and left[1].rtype == "weapon")
+  check("group sweep is idempotent", ns.DB.StripGroupReminders(profile) == 0)
+  check("group sweep tolerates junk", ns.DB.StripGroupReminders(nil) == 0)
 end
 
--- Reminders bar in a live profile: importing an old string drops range rows
+-- Reminders bar in a live profile: importing an old string drops rows of both
+-- retired types
 do
   local reminders = ns.DB:GetViewer("Reminders")
   table.insert(reminders.elements, { rtype = "range", spellName = "Mortal Strike" })
+  table.insert(reminders.elements, { rtype = "group", group = "fort", scope = "self" })
   local old = ns.DB:ExportProfile()
   ns.DB:ImportProfile(old)
   local imported = ns.DB:GetViewer("Reminders")
-  local found = false
+  local foundRange, foundGroup = false, false
   for _, el in ipairs(imported.elements) do
-    if el.rtype == "range" then found = true end
+    if el.rtype == "range" then foundRange = true end
+    if el.rtype == "group" then foundGroup = true end
   end
-  check("import drops legacy range reminders", found == false)
+  check("import drops legacy range reminders", foundRange == false)
+  check("import drops legacy group reminders", foundGroup == false)
 end
 
 return T

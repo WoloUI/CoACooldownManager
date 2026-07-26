@@ -1025,6 +1025,231 @@ ns:On("READY", function()
 end)
 
 --------------------------------------------------------------------------------
+-- Missing raid buffs: a screen-space row of icons, one per raid buff category
+-- you are NOT carrying (categories and their buff names live in
+-- Data/EquivGroups.lua, config in GENERAL > Buff Tracking).
+--
+-- It is a pre-pull checklist, so by default it hides itself the moment you
+-- enter combat: once the fight starts there is nothing you can do about a
+-- missing buff and the icons would just sit on top of the fight.
+--------------------------------------------------------------------------------
+local MissingBuffs = {}
+ns.MissingBuffs = MissingBuffs
+
+-- Categories default to their shipped `default` flag until the user toggles one.
+function MissingBuffs.CategoryEnabled(category, cfg)
+  local stored = cfg and cfg.categories and cfg.categories[category.key]
+  if stored == nil then return category.default ~= false end
+  return stored and true or false
+end
+
+-- Pure decision (test seam): which enabled categories have none of their buffs
+-- on you. `held` is a set of aura names currently on the player. Matching is
+-- case-insensitive because these names are hand-editable in the config panel.
+function MissingBuffs.Evaluate(held, cfg, categories)
+  categories = categories or ns.RaidBuffCategories or {}
+  local lower = {}
+  for name in pairs(held or {}) do lower[tostring(name):lower()] = true end
+
+  local missing = {}
+  for _, category in ipairs(categories) do
+    if MissingBuffs.CategoryEnabled(category, cfg) then
+      local covered = false
+      for _, buff in ipairs(ns.RaidBuffNames(category, cfg)) do
+        if lower[buff:lower()] then covered = true break end
+      end
+      if not covered then missing[#missing + 1] = category end
+    end
+  end
+  return missing
+end
+
+-- Pure decision (test seam): nothing missing means nothing to draw, and combat
+-- hides the frame unless the player opted out of that.
+function MissingBuffs.ShouldShow(cfg, inCombat, missingCount)
+  if not cfg or cfg.enabled == false then return false end
+  if inCombat and cfg.hideInCombat ~= false then return false end
+  return (missingCount or 0) > 0
+end
+
+local missingFrame
+local missingElapsed = 0
+local MISSING_THROTTLE = 0.25 -- s; a full 40-slot aura scan every frame is waste
+
+local function MissingCfg()
+  return ns.DB and ns.DB.db and ns.DB.db.global and ns.DB.db.global.buffTracking
+end
+
+-- Buffs currently on the player, as a name set. Scanned straight from UnitAura
+-- rather than the Auras cache: this frame must be right the instant you log in,
+-- and UNIT_AURA never fires for auras that were already up (see Core/Auras.lua).
+local function HeldBuffNames()
+  local held = {}
+  for index = 1, 40 do
+    local name = UnitAura("player", index, "HELPFUL")
+    if not name then break end
+    held[name] = true
+  end
+  return held
+end
+
+local function CreateMissingFrame()
+  if missingFrame then return missingFrame end
+  local f = CreateFrame("Frame", "CoACDMMissingBuffs", UIParent)
+  f:SetFrameStrata("MEDIUM")
+  f:SetSize(120, 48)
+  f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+  f:SetBackdropColor(0, 0, 0, 0) -- only tinted while dragging in edit mode
+  f.icons = {}
+
+  -- Draggable in edit mode; position saved into the shared config
+  f:SetMovable(true)
+  f:EnableMouse(false)
+  f:RegisterForDrag("LeftButton")
+  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  f:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local cfg = MissingCfg()
+    if cfg then
+      local cx, cy = self:GetCenter()
+      local sx, sy = UIParent:GetCenter()
+      cfg.x = cx - sx
+      cfg.y = cy - sy
+    end
+    MissingBuffs:Apply()
+  end)
+
+  missingFrame = f
+  return f
+end
+
+local function AcquireMissingIcon(f, index, size, labelSize)
+  local icon = f.icons[index]
+  if not icon then
+    icon = CreateFrame("Frame", nil, f)
+    icon.tex = icon:CreateTexture(nil, "ARTWORK")
+    icon.tex:SetAllPoints()
+    ns.CropIcon(icon.tex)
+    -- SetText errors on a FontString that never got a font: set one at creation
+    icon.label = icon:CreateFontString(nil, "OVERLAY")
+    icon.label:SetFont(STANDARD_TEXT_FONT, labelSize, "OUTLINE")
+    icon.label:SetPoint("TOP", icon, "BOTTOM", 0, -1)
+    f.icons[index] = icon
+  end
+  icon:SetSize(size, size)
+  icon.label:SetFont(STANDARD_TEXT_FONT, labelSize, "OUTLINE")
+  return icon
+end
+
+-- Draws one icon per missing category and resizes the frame around them.
+local function LayoutMissing(f, cfg, missing)
+  local size = math.max(tonumber(cfg.iconSize) or 36, 8)
+  local gap = math.max(tonumber(cfg.spacing) or 6, 0)
+  local perRow = math.max(math.floor(tonumber(cfg.perRow) or 8), 1)
+  local showLabels = cfg.showLabels ~= false
+  local labelSize = math.max(math.floor(size * 0.32), 7)
+  local rowHeight = size + (showLabels and (labelSize + 3) or 0)
+  local color = cfg.color or { 1, 0.35, 0.35 }
+
+  local count = #missing
+  local columns = math.min(count, perRow)
+  local rows = math.max(math.ceil(count / perRow), 1)
+  local width = math.max(columns * size + math.max(columns - 1, 0) * gap, size)
+  local height = rows * rowHeight + math.max(rows - 1, 0) * gap
+
+  for index, category in ipairs(missing) do
+    local icon = AcquireMissingIcon(f, index, size, labelSize)
+    local column = (index - 1) % perRow
+    local row = math.floor((index - 1) / perRow)
+    -- Rows are centered on the frame, so a short last row does not hang left
+    local inRow = math.min(count - row * perRow, perRow)
+    local rowWidth = inRow * size + math.max(inRow - 1, 0) * gap
+    icon:ClearAllPoints()
+    icon:SetPoint("TOPLEFT", f, "TOPLEFT",
+      (width - rowWidth) / 2 + column * (size + gap), -row * (rowHeight + gap))
+
+    local _, _, texture = GetSpellInfo(category.icon)
+    icon.tex:SetTexture(texture or category.iconTexture
+      or "Interface\\Icons\\INV_Misc_QuestionMark")
+    icon.tex:SetVertexColor(1, 1, 1)
+    if showLabels then
+      icon.label:SetText(category.label or category.name or "?")
+      icon.label:SetTextColor(color[1], color[2], color[3])
+      icon.label:Show()
+    else
+      icon.label:Hide()
+    end
+    icon:Show()
+  end
+  for index = count + 1, #f.icons do f.icons[index]:Hide() end
+
+  f:SetSize(width, height)
+end
+
+-- Rebuilds the frame from config (position, edit-mode grabbability) and
+-- immediately refreshes what it shows.
+function MissingBuffs:Apply()
+  local cfg = MissingCfg()
+  local f = CreateMissingFrame()
+  if not cfg then f:Hide(); return end
+  f:ClearAllPoints()
+  f:SetPoint("CENTER", UIParent, "CENTER", cfg.x or 0, cfg.y or 160)
+  self:Update(0, true)
+end
+
+-- Aura-driven show/hide. Called on the tick; `force` skips the throttle.
+function MissingBuffs:Update(elapsed, force)
+  local cfg = MissingCfg()
+  local f = missingFrame
+  if not f or not cfg then return end
+
+  missingElapsed = missingElapsed + (elapsed or 0)
+  if not force and missingElapsed < MISSING_THROTTLE then return end
+  missingElapsed = 0
+
+  local editing = ns.EditMode and ns.EditMode.active
+  local previewing = ns.TestMode and ns.TestMode.active
+  local missing
+  if editing or previewing then
+    -- Show every enabled category so the frame can be seen and positioned
+    missing = MissingBuffs.Evaluate({}, cfg)
+  else
+    missing = MissingBuffs.Evaluate(HeldBuffNames(), cfg)
+  end
+
+  local show
+  if editing then
+    show = cfg.enabled ~= false -- always grabbable while arranging the UI
+  elseif previewing then
+    show = MissingBuffs.ShouldShow(cfg, false, #missing)
+  else
+    local inCombat = UnitAffectingCombat("player") and true or false
+    show = MissingBuffs.ShouldShow(cfg, inCombat, #missing)
+  end
+
+  if not show then
+    f:SetBackdropColor(0, 0, 0, 0)
+    f:EnableMouse(false)
+    f:Hide()
+    return
+  end
+
+  if #missing == 0 then missing = { ns.RaidBuffCategories[1] } end -- edit-mode handle
+  LayoutMissing(f, cfg, missing)
+  f:EnableMouse(editing and true or false)
+  f:SetBackdropColor(0, 0, 0, editing and 0.45 or 0)
+  f:Show()
+end
+
+ns:On("READY", function()
+  MissingBuffs:Apply()
+  ns:OnTick(function(dt) MissingBuffs:Update(dt) end)
+  -- Combat edges flip visibility without waiting out the throttle
+  ns:RegisterEvent("PLAYER_REGEN_DISABLED", function() MissingBuffs:Update(0, true) end)
+  ns:RegisterEvent("PLAYER_REGEN_ENABLED", function() MissingBuffs:Update(0, true) end)
+end)
+
+--------------------------------------------------------------------------------
 -- Login sequence
 --------------------------------------------------------------------------------
 ns:RegisterEvent("PLAYER_LOGIN", function()
