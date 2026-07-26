@@ -159,3 +159,16 @@ Optional but recommended: ElvUI (unit-frame tracking + skinning) and LibSharedMe
 | `/cdm resetextra` | Reset the ExtraActionBar position |
 
 Minimap button: **left-click** config, **right-click** edit mode, **drag** around the rim.
+
+---
+
+## Support
+
+This addon is free, and it stays free. It was built raid night by raid night, on feedback
+from people who kept telling me what was still annoying — and it's better for it.
+
+If it saved you a weekend of writing WeakAuras, or just made your healing feel good, you can
+buy me a coffee at **[ko-fi.com/woloui](https://ko-fi.com/woloui)**. Completely optional and
+genuinely appreciated. ☕
+
+Either way, thanks for playing with it. Bug reports and ideas are worth just as much.
