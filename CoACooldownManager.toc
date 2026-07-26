@@ -2,7 +2,7 @@
 ## Title: CoA Cooldown Manager
 ## Notes: Retail-style cooldown manager: anchored viewers, simple triggers, dual power bars, missing raid buff tracking
 ## Author: WoloUI
-## Version: 0.1
+## Version: 1.0
 ## SavedVariables: CoACDM_DB
 ## OptionalDeps: SharedMedia, ElvUI, WeakAuras, Details
 
