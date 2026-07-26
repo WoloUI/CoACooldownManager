@@ -8,8 +8,6 @@ a weekend of writing custom Lua for every aura you wanted. CoA Cooldown Manager 
 you the same result with **dropdown menus only: never a line of code**, and it is built
 from the ground up for Ascension's classless, re-ID'd, high-mutation spell system.
 
-Version **1.0** — 6,500+ lines of Lua, 346 automated tests, every feature validated in-game.
-
 ---
 
 ## Why it exists
@@ -145,19 +143,3 @@ Optional but recommended: ElvUI (unit-frame tracking + skinning) and LibSharedMe
 | `/cdm resetextra` | Reset the ExtraActionBar position |
 
 Minimap button: **left-click** config, **right-click** edit mode, **drag** around the rim.
-
-## Development
-
-```
-lua5.1 tests/run_all.lua     # 346 checks, headless, no game needed
-```
-
-Pure logic is factored into testable seams (`ns.MoveElement`, `Tracking.ShouldReplace`,
-`MissingBuffs.Evaluate`, `DB.StripReminderType`, …) and covered by the suite in `tests/`.
-Design specs live in `docs/specs/`.
-
-## Credits
-
-Made by **WoloUI**.
-Raid buff categories derived from the "CoA Buff Reminders" WeakAura (wago `snru8yjNr`).
-Glow flipbook texture from WeakAuras' `UIActionBarFX`.
