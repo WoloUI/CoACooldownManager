@@ -64,7 +64,7 @@ local REMINDER_TYPE_OPTIONS = {
   { text = "Group buff", value = "group" },
   { text = "My aura (ID)", value = "aura" },
   { text = "Weapon enchant", value = "weapon" },
-  { text = "Out of range", value = "range" },
+  -- No "out of range" here: it is a standalone screen overlay (Tracking > Alerts)
 }
 local SCOPE_OPTIONS = {
   { text = "Myself", value = "self" },
@@ -486,6 +486,9 @@ function Config:BuildControls()
   c.genStrataHint = W.CreateLabel(parent, "Lower this so game windows (map, character, bags) appear above the bars.", 10, W.colors.inkDim)
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
 
+  -- Screen-space alert overlays, rendered at the bottom of the Tracking page
+  c.alertsHeader = W.CreateSection(parent, "ALERTS (screen overlays)")
+
   -- Aggro alert overlay (global, in db.global.aggro)
   local function AggroCfg()
     return ns.DB.db.global.aggro
@@ -520,6 +523,57 @@ function Config:BuildControls()
   end)
   c.aggroHint = W.CreateLabel(parent,
     "Shows when a mob is targeting you (in combat). Drag it into place in edit\nmode (/cdm edit) - it sits over your character by default.", 10, W.colors.inkDim)
+
+  -- Out-of-range alert overlay (global, in db.global.range)
+  local function RangeCfg()
+    return ns.DB.db.global.range
+  end
+  local function ApplyRange()
+    if ns.RangeAlert then ns.RangeAlert:Apply() end
+  end
+  c.rangeHeader = W.CreateSection(parent, "OUT OF RANGE ALERT")
+  c.rangeEnable = W.CreateCheckbox(parent, "Show OUT OF RANGE overlay", function(_, ck)
+    RangeCfg().enabled = ck
+    ApplyRange()
+  end)
+  c.rangeTextLabel = W.CreateLabel(parent, "Text", 12, W.colors.inkDim)
+  c.rangeText = W.CreateEditBox(parent, 150, 20, function(_, text)
+    RangeCfg().text = text ~= "" and text or nil
+    ApplyRange()
+  end, "OUT OF RANGE")
+  c.rangeSizeLabel = W.CreateLabel(parent, "Font size", 12, W.colors.inkDim)
+  c.rangeSize = W.CreateEditBox(parent, 46, 20, function(_, text)
+    RangeCfg().size = math.max(tonumber(text) or 28, 8)
+    ApplyRange()
+  end, "28")
+  c.rangeColorLabel = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
+  c.rangeColor = W.CreateColorSwatch(parent, function(_, color)
+    RangeCfg().color = color
+    ApplyRange()
+  end)
+  c.rangeColorReset = W.CreateButton(parent, "Red", 40, 20, function()
+    RangeCfg().color = { 1, 0.35, 0.35 }
+    ApplyRange()
+    Config:Render()
+  end)
+  c.rangePulse = W.CreateCheckbox(parent, "Pulse", function(_, ck) RangeCfg().pulse = ck end)
+  c.rangeSoundLabel = W.CreateLabel(parent, "Sound", 12, W.colors.inkDim)
+  c.rangeSound = W.CreateDropdown(parent, 150, function(_, value)
+    RangeCfg().sound = value ~= "" and value or nil
+  end)
+  c.rangeSoundPlay = W.CreateButton(parent, "Play", 40, 20, function()
+    ns.PlayAlertSound(RangeCfg().sound)
+  end)
+  c.rangeSpellLabel = W.CreateLabel(parent, "Probe spell", 12, W.colors.inkDim)
+  c.rangeSpell = W.CreateEditBox(parent, 150, 20, function(_, text)
+    RangeCfg().spell = text ~= "" and text or nil
+    ApplyRange()
+  end, "auto (Auto Attack)")
+  c.rangeHint = W.CreateLabel(parent,
+    "Shows in combat when your target is outside melee reach. Range is measured\n"
+    .. "with Auto Attack; name another spell to measure its range instead.\n"
+    .. "Drag it into place in edit mode (/cdm edit); /cdm range prints what the\n"
+    .. "client answers for your current target.", 10, W.colors.inkDim)
 
   -- Stack bar options
   c.stackHeader = W.CreateSection(parent, "TRACKED RESOURCE (aura stacks)")
@@ -790,7 +844,6 @@ function Config:BuildControls()
   c.remSlot = W.CreateDropdown(parent, 100, nil)
   c.remSlot:SetOptions(SLOT_OPTIONS)
   c.remSlot:SetValue("mainhand")
-  c.remRangeSpell = W.CreateEditBox(parent, 120, 20, nil, "spell name / id")
   c.remTextLabel = W.CreateLabel(parent, "Custom text", 12, W.colors.inkDim)
   c.remText = W.CreateEditBox(parent, 200, 20, nil, "custom reminder text")
   c.remAdd = W.CreateButton(parent, "Add", 50, 20, function()
@@ -808,15 +861,6 @@ function Config:BuildControls()
       local id, name = ns.ResolveSpell(input)
       reminder = { rtype = "aura", spellID = id or name or input, name = name or input, scope = "self" }
       c.remAura:SetText("")
-    elseif rtype == "range" then
-      -- Reference spell defines the range being checked (e.g. a melee strike)
-      local id, name = ns.ResolveSpell(c.remRangeSpell:GetText())
-      if not (id or name) then
-        ns:Print("unknown spell: " .. tostring(c.remRangeSpell:GetText()) .. " (type the spell that defines the range)")
-        return
-      end
-      reminder = { rtype = "range", spellID = id, spellName = name, combatOnly = true }
-      c.remRangeSpell:SetText("")
     else
       reminder = { rtype = "weapon", slot = c.remSlot.value }
     end
@@ -1210,8 +1254,6 @@ local function ElementLabel(el)
       return (group and group.name or el.group) .. "  |cff9aa3b5(" .. scope .. ")|r"
     elseif el.rtype == "aura" then
       return (el.name or el.spellID or "?") .. "  |cff9aa3b5(my aura)|r"
-    elseif el.rtype == "range" then
-      return (el.text or "Out of range!") .. "  |cff9aa3b5(range: " .. (el.spellName or el.spellID or "?") .. ")|r"
     end
     return "Weapon enchant  |cff9aa3b5(" .. (el.slot or "mainhand") .. ")|r"
   end
@@ -1226,6 +1268,17 @@ local function ElementLabel(el)
     or el.kind == "summon" and ("Summon " .. (el.duration or 60) .. "s") or "Debuff"
   local idText = el.spellID and (" #" .. el.spellID) or ""
   return (el.name or "?") .. "  |cff9aa3b5(" .. kindText .. idText .. ")|r"
+end
+
+-- Greys out (and click-blocks) a reorder arrow at the end of the list
+local function SetArrowEnabled(btn, enabled)
+  if enabled then
+    btn:Enable()
+    btn.text:SetTextColor(W.colors.ink[1], W.colors.ink[2], W.colors.ink[3])
+  else
+    btn:Disable()
+    btn.text:SetTextColor(0.34, 0.37, 0.44)
+  end
 end
 
 local function RenderElementList(c, viewer, y, isReminders)
@@ -1251,6 +1304,27 @@ local function RenderElementList(c, viewer, y, isReminders)
       row.btn.text:SetPoint("LEFT", 6, 0)
       -- Rows are pooled and reused across bars: always resolve the CURRENT
       -- selected viewer here, never capture `viewer` from an old render.
+      -- Element order IS display order, so these reorder the bar itself.
+      local function Move(self, delta)
+        local current = SelectedViewer()
+        if not current then return end
+        local from = self.elementIndex
+        local moved = ns.MoveElement(current.elements, from, delta)
+        if not moved then return end
+        -- Selection follows the element it was on, whether that is the one you
+        -- moved or the one it swapped with, so the open trigger builder stays put
+        if state.selectedElement == from then
+          state.selectedElement = moved
+        elseif state.selectedElement == moved then
+          state.selectedElement = from
+        end
+        Touch()
+        Config:Render()
+      end
+      row.up = W.CreateButton(row, "^", 20, 20, function(self) Move(self, -1) end)
+      row.up:SetPoint("LEFT", row.btn, "RIGHT", 4, 0)
+      row.down = W.CreateButton(row, "v", 20, 20, function(self) Move(self, 1) end)
+      row.down:SetPoint("LEFT", row.up, "RIGHT", 2, 0)
       row.remove = W.CreateButton(row, "X", 20, 20, function(self)
         local current = SelectedViewer()
         if not current then return end
@@ -1259,11 +1333,15 @@ local function RenderElementList(c, viewer, y, isReminders)
         Touch()
         Config:Render()
       end)
-      row.remove:SetPoint("LEFT", row.btn, "RIGHT", 4, 0)
+      row.remove:SetPoint("LEFT", row.down, "RIGHT", 4, 0)
       c.elementRows[i] = row
     end
     row.btn.elementIndex = i
+    row.up.elementIndex = i
+    row.down.elementIndex = i
     row.remove.elementIndex = i
+    SetArrowEnabled(row.up, i > 1)
+    SetArrowEnabled(row.down, i < #viewer.elements)
     row.icon:SetTexture(el.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.btn:SetLabel(ElementLabel(el))
     if state.selectedElement == i then
@@ -1299,6 +1377,64 @@ local function RenderElementList(c, viewer, y, isReminders)
   if not state.selectedElement or isReminders then
     ns.TriggerBuilder:Load(nil)
   end
+  return y
+end
+
+-- Screen-space alert overlays (aggro + out of range). They are not HoT
+-- indicators, but they belong with them: everything on this page reacts to the
+-- fight instead of to a bar. Global config, shared by every character.
+local function RenderAlertSections(c, y)
+  local soundOpts = { { text = "None", value = "" } }
+  for _, opt in ipairs(ns.GetSoundOptions()) do soundOpts[#soundOpts + 1] = opt end
+
+  c.alertsHeader:SetPoint("TOPLEFT", 0, y); c.alertsHeader:Show()
+  y = y - 26
+
+  local aggro = ns.DB.db.global.aggro or {}
+  c.aggroHeader:SetPoint("TOPLEFT", 0, y); c.aggroHeader:Show()
+  y = y - 24
+  c.aggroEnable:SetPoint("TOPLEFT", 0, y); c.aggroEnable:SetChecked(aggro.enabled ~= false); c.aggroEnable:Show()
+  y = y - 26
+  c.aggroSizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.aggroSizeLabel:Show()
+  c.aggroSize:SetPoint("TOPLEFT", 80, y); c.aggroSize:SetText(tostring(aggro.size or 256)); c.aggroSize:Show()
+  c.aggroColorLabel:SetPoint("TOPLEFT", 175, y - 4); c.aggroColorLabel:Show()
+  c.aggroColor:SetPoint("TOPLEFT", 225, y); c.aggroColor:SetColor(aggro.color or { 1, 0.1, 0.1 }); c.aggroColor:Show()
+  c.aggroColorReset:SetPoint("TOPLEFT", 251, y); c.aggroColorReset:Show()
+  c.aggroPulse:SetPoint("TOPLEFT", 320, y); c.aggroPulse:SetChecked(aggro.pulse ~= false); c.aggroPulse:Show()
+  y = y - 28
+  c.aggroSoundLabel:SetPoint("TOPLEFT", 0, y - 4); c.aggroSoundLabel:Show()
+  c.aggroSound:SetOptions(soundOpts)
+  c.aggroSound:SetPoint("TOPLEFT", 80, y); c.aggroSound:SetValue(aggro.sound or ""); c.aggroSound:Show()
+  c.aggroSoundPlay:SetPoint("TOPLEFT", 236, y); c.aggroSoundPlay:Show()
+  y = y - 24
+  c.aggroHint:SetPoint("TOPLEFT", 0, y); c.aggroHint:Show()
+  y = y - 44
+
+  local range = ns.DB.db.global.range or {}
+  c.rangeHeader:SetPoint("TOPLEFT", 0, y); c.rangeHeader:Show()
+  y = y - 24
+  c.rangeEnable:SetPoint("TOPLEFT", 0, y); c.rangeEnable:SetChecked(range.enabled ~= false); c.rangeEnable:Show()
+  y = y - 26
+  c.rangeTextLabel:SetPoint("TOPLEFT", 0, y - 4); c.rangeTextLabel:Show()
+  c.rangeText:SetPoint("TOPLEFT", 80, y); c.rangeText:SetText(range.text or ""); c.rangeText:Show()
+  c.rangeSizeLabel:SetPoint("TOPLEFT", 245, y - 4); c.rangeSizeLabel:Show()
+  c.rangeSize:SetPoint("TOPLEFT", 310, y); c.rangeSize:SetText(tostring(range.size or 28)); c.rangeSize:Show()
+  y = y - 28
+  c.rangeColorLabel:SetPoint("TOPLEFT", 0, y - 4); c.rangeColorLabel:Show()
+  c.rangeColor:SetPoint("TOPLEFT", 80, y); c.rangeColor:SetColor(range.color or { 1, 0.35, 0.35 }); c.rangeColor:Show()
+  c.rangeColorReset:SetPoint("TOPLEFT", 106, y); c.rangeColorReset:Show()
+  c.rangePulse:SetPoint("TOPLEFT", 175, y); c.rangePulse:SetChecked(range.pulse ~= false); c.rangePulse:Show()
+  y = y - 28
+  c.rangeSoundLabel:SetPoint("TOPLEFT", 0, y - 4); c.rangeSoundLabel:Show()
+  c.rangeSound:SetOptions(soundOpts)
+  c.rangeSound:SetPoint("TOPLEFT", 80, y); c.rangeSound:SetValue(range.sound or ""); c.rangeSound:Show()
+  c.rangeSoundPlay:SetPoint("TOPLEFT", 236, y); c.rangeSoundPlay:Show()
+  y = y - 28
+  c.rangeSpellLabel:SetPoint("TOPLEFT", 0, y - 4); c.rangeSpellLabel:Show()
+  c.rangeSpell:SetPoint("TOPLEFT", 80, y); c.rangeSpell:SetText(range.spell or ""); c.rangeSpell:Show()
+  y = y - 26
+  c.rangeHint:SetPoint("TOPLEFT", 0, y); c.rangeHint:Show()
+  y = y - 60
   return y
 end
 
@@ -1423,35 +1559,8 @@ function Config:Render()
     y2 = y2 - 24
     c2.genStrataHint:SetPoint("TOPLEFT", 0, y2); c2.genStrataHint:Show()
     y2 = y2 - 34
-    -- Aggro alert
-    local aggro = ns.DB.db.global.aggro or {}
-    c2.aggroHeader:SetPoint("TOPLEFT", 0, y2); c2.aggroHeader:Show()
-    y2 = y2 - 24
-    c2.aggroEnable:SetPoint("TOPLEFT", 0, y2); c2.aggroEnable:SetChecked(aggro.enabled ~= false); c2.aggroEnable:Show()
-    y2 = y2 - 26
-    c2.aggroSizeLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.aggroSizeLabel:Show()
-    c2.aggroSize:SetPoint("TOPLEFT", 80, y2); c2.aggroSize:SetText(tostring(aggro.size or 256)); c2.aggroSize:Show()
-    c2.aggroColorLabel:SetPoint("TOPLEFT", 175, y2 - 4); c2.aggroColorLabel:Show()
-    c2.aggroColor:SetPoint("TOPLEFT", 225, y2); c2.aggroColor:SetColor(aggro.color or { 1, 0.1, 0.1 }); c2.aggroColor:Show()
-    c2.aggroColorReset:SetPoint("TOPLEFT", 251, y2); c2.aggroColorReset:Show()
-    c2.aggroPulse:SetPoint("TOPLEFT", 320, y2); c2.aggroPulse:SetChecked(aggro.pulse ~= false); c2.aggroPulse:Show()
-    y2 = y2 - 28
-    c2.aggroSoundLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.aggroSoundLabel:Show()
-    local soundOpts = { { text = "None", value = "" } }
-    for _, opt in ipairs(ns.GetSoundOptions()) do soundOpts[#soundOpts + 1] = opt end
-    c2.aggroSound:SetOptions(soundOpts)
-    c2.aggroSound:SetPoint("TOPLEFT", 80, y2); c2.aggroSound:SetValue(aggro.sound or ""); c2.aggroSound:Show()
-    c2.aggroSoundPlay:SetPoint("TOPLEFT", 236, y2); c2.aggroSoundPlay:Show()
-    y2 = y2 - 24
-    c2.aggroHint:SetPoint("TOPLEFT", 0, y2); c2.aggroHint:Show()
-    y2 = y2 - 40
-    c2.shareHeader:SetPoint("TOPLEFT", 0, y2); c2.shareHeader:Show()
-    y2 = y2 - 22
-    c2.exportBtn:SetPoint("TOPLEFT", 0, y2); c2.exportBtn:Show()
-    c2.importBtn:SetPoint("TOPLEFT", 120, y2); c2.importBtn:Show()
-    y2 = y2 - 28
-    c2.shareHint:SetPoint("TOPLEFT", 0, y2); c2.shareHint:Show()
-    win.content:SetHeight(760)
+    -- Aggro / out-of-range overlays now live in Tracking; profile sharing in Profiles
+    win.content:SetHeight(math.max(-y2 + 40, 400))
     return
   end
 
@@ -1551,6 +1660,16 @@ function Config:Render()
     end
     for i = #specs + 1, #c2.specRows do c2.specRows[i]:Hide() end
 
+    -- Profile sharing (import/export strings)
+    y2 = y2 - 28
+    c2.shareHeader:SetPoint("TOPLEFT", 0, y2); c2.shareHeader:Show()
+    y2 = y2 - 22
+    c2.exportBtn:SetPoint("TOPLEFT", 0, y2); c2.exportBtn:Show()
+    c2.importBtn:SetPoint("TOPLEFT", 120, y2); c2.importBtn:Show()
+    y2 = y2 - 28
+    c2.shareHint:SetPoint("TOPLEFT", 0, y2); c2.shareHint:Show()
+    y2 = y2 - 30
+
     win.content:SetHeight(math.max(-y2 + 40, 400))
     return
   end
@@ -1560,12 +1679,15 @@ function Config:Render()
     local c2 = controls
     local y2 = -10
     c2.title:SetPoint("TOPLEFT", 0, y2)
-    c2.title:SetText("HoT Tracking")
+    c2.title:SetText("Tracking")
     c2.title:Show()
     if not ns.Tracking then
+      -- Tracking needs a client restart (new .toc file), but the alert
+      -- overlays live in this page too and work right away
       c2.trackRestartHint:SetPoint("TOPLEFT", 0, y2 - 34)
       c2.trackRestartHint:Show()
-      win.content:SetHeight(400)
+      y2 = RenderAlertSections(c2, y2 - 90)
+      win.content:SetHeight(math.max(-y2 + 40, 400))
       return
     end
     local tracking = TrackingCfg()
@@ -1685,9 +1807,16 @@ function Config:Render()
       if ind.sweep then
         c2.trackSweepRev:SetPoint("TOPLEFT", 210, y2); c2.trackSweepRev:SetChecked(ind.reverseSweep); c2.trackSweepRev:Show()
       end
-      y2 = y2 - 30
+      y2 = y2 - 26
+      c2.trackAnyCaster:SetPoint("TOPLEFT", 0, y2)
+      c2.trackAnyCaster:SetChecked(ind.anyCaster)
+      c2.trackAnyCaster:Show()
+      c2.trackAnyCasterHint:SetPoint("TOPLEFT", 130, y2 - 2)
+      c2.trackAnyCasterHint:Show()
+      y2 = y2 - 34
     end
 
+    y2 = RenderAlertSections(c2, y2 - 10)
     win.content:SetHeight(math.max(-y2 + 40, 400))
     return
   end
@@ -2219,10 +2348,6 @@ function Config:Render()
       end
     elseif rtype == "aura" then
       c.remAura:SetPoint("TOPLEFT", PARAM_X, y); c.remAura:Show()
-    elseif rtype == "range" then
-      c.remRangeSpell:SetPoint("TOPLEFT", PARAM_X, y); c.remRangeSpell:Show()
-      c.addHint:SetText("Range is measured with this spell (e.g. your melee strike). Alert shows in combat with an attackable target.")
-      c.addHint:SetPoint("TOPLEFT", C1, y - 52); c.addHint:Show()
     else
       c.remSlot:SetPoint("TOPLEFT", PARAM_X, y); c.remSlot:Show()
     end
@@ -2230,7 +2355,7 @@ function Config:Render()
     c.remTextLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTextLabel:Show()
     c.remText:SetPoint("TOPLEFT", C1, y); c.remText:Show()
     c.remAdd:SetPoint("TOPLEFT", C1 + 208, y); c.remAdd:Show()
-    y = y - (rtype == "range" and 46 or 30)
+    y = y - 30
   end
 
   win.content:SetHeight(math.max(-y + 40, 400))
@@ -2287,7 +2412,7 @@ function Config:ShowIO(mode)
   w.mode = mode
   w:Raise()
   if mode == "export" then
-    w.hint:SetText("Copy this string (Ctrl+C) and share it. Others import it from Appearance > Import profile.")
+    w.hint:SetText("Copy this string (Ctrl+C) and share it. Others import it from Profiles > Import profile.")
     w.action:SetLabel("Select all")
     w.edit:SetText(ns.DB:ExportProfile())
     w:Show()

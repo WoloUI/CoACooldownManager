@@ -100,6 +100,10 @@ UnitAura = function(unit, index, filter)
   if not a then return nil end
   return a.name, a.rank, a.icon, a.count, nil, 10, 100, a.caster, nil, nil, a.spellId
 end
+-- "range" is no longer a reminder type: it lives in the standalone overlay
+check("no range evaluator left", ns.Reminders._EVALUATORS.range == nil)
+check("weapon evaluator still there", ns.Reminders._EVALUATORS.weapon ~= nil)
+
 ns2.Auras:ForceScan("player")
 check("auto rank: rank 2 aura covers minRank 2", ns2.Auras:HasAnyOf("player", { { id = 200 } }, 2) == true)
 check("auto rank: rank 2 aura fails minRank 3", ns2.Auras:HasAnyOf("player", { { id = 200 } }, 3) == false)

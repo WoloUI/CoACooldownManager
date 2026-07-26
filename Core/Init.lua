@@ -350,6 +350,18 @@ function ns.CopyTable(src)
   return dst
 end
 
+-- Moves list[index] `delta` slots up (-1) or down (+1). A bar's element order IS
+-- its display order (icon rows, status bars and reminder rows all walk
+-- viewer.elements with ipairs), so swapping here reorders what you see.
+-- Returns the moved item's new index, or nil when the move falls off the list.
+function ns.MoveElement(list, index, delta)
+  if type(list) ~= "table" or type(index) ~= "number" then return nil end
+  local target = index + (tonumber(delta) or 0)
+  if not list[index] or target == index or target < 1 or target > #list then return nil end
+  list[index], list[target] = list[target], list[index]
+  return target
+end
+
 -- Resolves a spell reference (numeric ID or exact name) to id, name, icon.
 function ns.ResolveSpell(input)
   local id = tonumber(input)
@@ -784,6 +796,235 @@ ns:On("READY", function()
 end)
 
 --------------------------------------------------------------------------------
+-- Out-of-range alert: screen-space "OUT OF RANGE" text shown while you are in
+-- combat with an attackable target that sits outside your melee reach.
+--
+-- 3.3.5 has no UnitInMeleeRange, so reach is probed with IsSpellInRange. The
+-- default probe is Auto Attack (every character has it, and the name is read
+-- from its spell ID so it works on any locale). If the client refuses to
+-- range-check the auto attack (IsSpellInRange returns nil) the next candidate is
+-- any spellbook spell whose max range is melee - Ascension is classless, so a
+-- spellbook scan beats a hardcoded per-class list. The config can also name a
+-- probe spell explicitly, which wins over both.
+--------------------------------------------------------------------------------
+local RangeAlert = {}
+ns.RangeAlert = RangeAlert
+
+local AUTO_ATTACK_ID = 6603
+local MELEE_MAX_RANGE = 5 -- yards; melee spells report 0 or 5 as their maxRange
+
+-- Pure decision (test seam). rangeResult is IsSpellInRange's raw return:
+-- 0 = out of range, 1 = in range, nil = the client cannot tell. nil never
+-- alerts, so a probe this client dislikes stays silent instead of crying wolf.
+function RangeAlert.ShouldShow(rangeResult, targetOk, inCombat, cfg)
+  if not cfg or cfg.enabled == false then return false end
+  if not inCombat then return false end
+  if not targetOk then return false end
+  return rangeResult == 0
+end
+
+-- A living, attackable target: nothing else can be "out of range".
+function RangeAlert.TargetOk(unit)
+  unit = unit or "target"
+  return UnitExists(unit) and not UnitIsDeadOrGhost(unit)
+    and UnitCanAttack("player", unit) and true or false
+end
+
+-- First learned spell whose max range is melee. GetSpellInfo on 3.3.5 returns
+-- minRange/maxRange as its 8th/9th values.
+local function ScanMeleeSpell()
+  if not (GetNumSpellTabs and GetSpellTabInfo and GetSpellName) then return nil end
+  for tab = 1, (GetNumSpellTabs() or 0) do
+    local _, _, offset, numSpells = GetSpellTabInfo(tab)
+    offset = offset or 0
+    for i = offset + 1, offset + (numSpells or 0) do
+      local spellName = GetSpellName(i, "spell")
+      if spellName then
+        local _, _, _, _, _, _, _, _, maxRange = GetSpellInfo(spellName)
+        if maxRange and maxRange > 0 and maxRange <= MELEE_MAX_RANGE then
+          return spellName
+        end
+      end
+    end
+  end
+  return nil
+end
+
+-- Probe spells to try, best first (test seam).
+function RangeAlert.ProbeCandidates(cfg)
+  local out = {}
+  local override = cfg and cfg.spell
+  if override and override ~= "" then
+    local _, name = ns.ResolveSpell(override)
+    out[#out + 1] = name or override
+  end
+  local autoAttack = GetSpellInfo(AUTO_ATTACK_ID)
+  if autoAttack then out[#out + 1] = autoAttack end
+  local melee = ScanMeleeSpell()
+  if melee then out[#out + 1] = melee end
+  return out
+end
+
+local probeCandidates -- cached list; dropped when the spellbook or config changes
+local activeProbe     -- the candidate that actually answered last
+
+function RangeAlert.InvalidateProbe()
+  probeCandidates = nil
+  activeProbe = nil
+end
+
+-- Range check against `unit`, walking the candidates until one answers.
+-- Returns the raw IsSpellInRange result and the probe that produced it.
+function RangeAlert.ProbeRange(cfg, unit)
+  if not IsSpellInRange then return nil, nil end
+  probeCandidates = probeCandidates or RangeAlert.ProbeCandidates(cfg)
+  for _, name in ipairs(probeCandidates) do
+    local result = IsSpellInRange(name, unit or "target")
+    if result ~= nil then
+      activeProbe = name
+      return result, name
+    end
+  end
+  activeProbe = nil
+  return nil, nil
+end
+
+local rangeFrame
+local rangeSoundArmed = false -- edge state (false->true plays the sound once)
+
+local function RangeCfg()
+  return ns.DB and ns.DB.db and ns.DB.db.global and ns.DB.db.global.range
+end
+
+local function CreateRangeFrame()
+  if rangeFrame then return rangeFrame end
+  local f = CreateFrame("Frame", "CoACDMRangeAlert", UIParent)
+  f:SetFrameStrata("HIGH")
+  f:SetSize(200, 40)
+  f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+  f:SetBackdropColor(0, 0, 0, 0) -- only tinted while dragging in edit mode
+
+  -- SetText errors on a FontString that never got a font: set one at creation.
+  f.label = f:CreateFontString(nil, "OVERLAY")
+  f.label:SetFont(STANDARD_TEXT_FONT, 28, "THICKOUTLINE")
+  f.label:SetPoint("CENTER")
+  f.label:SetText("OUT OF RANGE")
+
+  -- Draggable in edit mode; position saved into the shared range config
+  f:SetMovable(true)
+  f:EnableMouse(false)
+  f:RegisterForDrag("LeftButton")
+  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  f:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local cfg = RangeCfg()
+    if cfg then
+      local cx, cy = self:GetCenter()
+      local sx, sy = UIParent:GetCenter()
+      cfg.x = cx - sx
+      cfg.y = cy - sy
+    end
+    RangeAlert:Apply()
+  end)
+
+  rangeFrame = f
+  return f
+end
+
+-- Rebuilds the frame from config (text, font size, color, position, edit grab)
+function RangeAlert:Apply()
+  RangeAlert.InvalidateProbe() -- the probe override may have just changed
+  local cfg = RangeCfg()
+  local f = CreateRangeFrame()
+  if not cfg then f:Hide(); return end
+  local size = math.max(tonumber(cfg.size) or 28, 8)
+  local text = (cfg.text and cfg.text ~= "" and cfg.text) or "OUT OF RANGE"
+  f.label:SetFont(STANDARD_TEXT_FONT, size, "THICKOUTLINE")
+  f.label:SetText(text)
+  local color = cfg.color or { 1, 0.35, 0.35 }
+  f.label:SetTextColor(color[1], color[2], color[3])
+  f:SetSize(math.max((f.label:GetStringWidth() or 160) + 24, 60),
+    math.max((f.label:GetStringHeight() or size) + 12, 20))
+  f:ClearAllPoints()
+  f:SetPoint("CENTER", UIParent, "CENTER", cfg.x or 0, cfg.y or -80)
+
+  local editing = ns.EditMode and ns.EditMode.active
+  f:EnableMouse(editing and true or false)
+  if editing then
+    f:SetBackdropColor(0, 0, 0, 0.45)
+    f.label:SetAlpha(0.85)
+    f:Show()
+  else
+    f:SetBackdropColor(0, 0, 0, 0)
+    f.label:SetAlpha(1)
+    self:Update() -- back to range-driven visibility
+  end
+end
+
+-- Range-driven show/hide + pulse + edge-triggered sound. Called on the tick.
+function RangeAlert:Update()
+  local cfg = RangeCfg()
+  local f = rangeFrame
+  if not f or not cfg then return end
+  if ns.EditMode and ns.EditMode.active then return end -- Apply() owns it then
+
+  local show
+  if ns.TestMode and ns.TestMode.active then
+    show = cfg.enabled ~= false -- preview without a target
+  else
+    local result = RangeAlert.ProbeRange(cfg, "target")
+    local inCombat = UnitAffectingCombat("player") and true or false
+    show = RangeAlert.ShouldShow(result, RangeAlert.TargetOk("target"), inCombat, cfg)
+  end
+
+  if show then
+    if not rangeSoundArmed then
+      rangeSoundArmed = true
+      if cfg.sound and cfg.sound ~= "" then ns.PlayAlertSound(cfg.sound) end
+    end
+    local a = 1
+    if cfg.pulse ~= false then
+      a = 0.45 + 0.55 * math.abs(math.sin(GetTime() * 3.2)) -- ~0.45..1.0 pulse
+    end
+    f.label:SetAlpha(a)
+    f:Show()
+  else
+    rangeSoundArmed = false
+    f:Hide()
+  end
+end
+
+-- /cdm range: the probe is the one API here that cannot be verified offline,
+-- so print exactly what the client answers.
+function RangeAlert:Diagnose()
+  local cfg = RangeCfg() or {}
+  local candidates = RangeAlert.ProbeCandidates(cfg)
+  ns:Print("out-of-range probe candidates: "
+    .. (#candidates > 0 and table.concat(candidates, ", ") or "|cffff5555none|r"))
+  for _, name in ipairs(candidates) do
+    local _, _, _, _, _, _, _, minRange, maxRange = GetSpellInfo(name)
+    ns:Print(("  %s: range %s-%s yd, IsSpellInRange = %s"):format(
+      name, tostring(minRange or "?"), tostring(maxRange or "?"),
+      tostring(IsSpellInRange and IsSpellInRange(name, "target"))))
+  end
+  local result, probe = RangeAlert.ProbeRange(cfg, "target")
+  ns:Print(("target: %s | attackable = %s | probe used = %s | result = %s"):format(
+    UnitExists("target") and (UnitName("target") or "?") or "none",
+    tostring(RangeAlert.TargetOk("target")), tostring(probe), tostring(result)))
+  ns:Print("alert would show: " .. tostring(RangeAlert.ShouldShow(
+    result, RangeAlert.TargetOk("target"),
+    UnitAffectingCombat("player") and true or false, cfg)))
+end
+
+ns:On("READY", function()
+  RangeAlert:Apply()
+  ns:OnTick(function() RangeAlert:Update() end)
+  -- A new rank (or a respec) can change which spells are learned
+  ns:RegisterEvent("SPELLS_CHANGED", RangeAlert.InvalidateProbe)
+  ns:RegisterEvent("ASCENSION_KNOWN_ENTRIES_UPDATED", RangeAlert.InvalidateProbe)
+end)
+
+--------------------------------------------------------------------------------
 -- Login sequence
 --------------------------------------------------------------------------------
 ns:RegisterEvent("PLAYER_LOGIN", function()
@@ -813,6 +1054,8 @@ SlashCmdList["COACDM"] = function(msg)
     ns:Print("ExtraActionBar position reset to default.")
   elseif msg == "debug" then
     if ns.Tracking then ns.Tracking:Debug() end
+  elseif msg == "range" then
+    ns.RangeAlert:Diagnose()
   elseif msg == "trinket" then
     -- Helps configure trinket proc glow/ICD: shows the auto-detected proc
     -- spell and every buff currently on you, so you can copy the exact name

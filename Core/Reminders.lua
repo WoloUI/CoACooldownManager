@@ -113,23 +113,6 @@ local function EvalAuraReminder(reminder)
   }
 end
 
--- Special alert: out of range of the target, measured with a reference spell
--- (e.g. your melee strike). Fires only with an attackable living target.
-local function EvalRangeReminder(reminder)
-  if reminder.combatOnly ~= false and not UnitAffectingCombat("player") then return nil end
-  if not UnitExists("target") or UnitIsDeadOrGhost("target")
-    or not UnitCanAttack("player", "target") then return nil end
-  local name = reminder.spellName or (reminder.spellID and GetSpellInfo(reminder.spellID))
-  if not name then return nil end
-  if IsSpellInRange(name, "target") ~= 0 then return nil end -- 1 = in range, nil = can't tell
-  local _, _, icon = GetSpellInfo(reminder.spellID or name)
-  return {
-    icon = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
-    text = reminder.text or "Out of range!",
-    color = { 1, 0.35, 0.35 },
-  }
-end
-
 local function EvalWeaponReminder(reminder)
   local hasMH, _, _, hasOH = GetWeaponEnchantInfo()
   local slot = reminder.slot or "mainhand"
@@ -157,11 +140,12 @@ local function NeedsGroupWatch(elements)
   return false
 end
 
+-- No "range" evaluator: out-of-range lives in the standalone OUT OF RANGE
+-- overlay (ns.RangeAlert) instead of inside a reminder bar.
 local EVALUATORS = {
   group = EvalGroupReminder,
   aura = EvalAuraReminder,
   weapon = EvalWeaponReminder,
-  range = EvalRangeReminder,
 }
 
 -- Every reminder-style viewer (Reminders, Alerts, user-made) gets its own list
@@ -217,8 +201,8 @@ ns:On("READY", function()
   ns:On("PROFILE_CHANGED", UpdateGroupWatch)
   ns:On("VIEWERS_CHANGED", UpdateGroupWatch)
 
-  -- Range/weapon/group checks have no reliable single event; recompute on a
-  -- 0.3 s tick (range alerts need to feel instant) - signature gates redraws.
+  -- Weapon/group checks have no reliable single event; recompute on a
+  -- 0.3 s tick - the signature gates redraws.
   local elapsedAcc = 0
   ns:OnTick(function(dt)
     elapsedAcc = elapsedAcc + dt
@@ -229,5 +213,6 @@ ns:On("READY", function()
   UpdateGroupWatch()
 end)
 
--- Test seam
+-- Test seams
 Reminders._EvalGroupReminder = EvalGroupReminder
+Reminders._EVALUATORS = EVALUATORS

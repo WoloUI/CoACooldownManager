@@ -191,4 +191,41 @@ check("import restored elements", #ns.DB:GetViewer("Essential").elements == 1
 check("import rejects garbage", (select(2, ns.DB:ImportProfile("hola"))) ~= nil)
 check("import rejects damaged payload", (select(2, ns.DB:ImportProfile("!CDM1!AAAA"))) ~= nil)
 
+-- The "out of range" reminder type became a standalone overlay: leftover rows
+-- are swept out of stored profiles (and out of older imported strings)
+do
+  local profile = {
+    viewers = {
+      { name = "Reminders", style = "reminders", elements = {
+        { rtype = "group", group = "fort" },
+        { rtype = "range", spellName = "Mortal Strike" },
+        { rtype = "weapon", slot = "mainhand" },
+        { rtype = "range", spellName = "Sinister Strike" },
+      } },
+      { name = "Essential", style = "icons", elements = { { rtype = "range" } } },
+    },
+  }
+  local removed = ns.DB.StripRangeReminders(profile)
+  local left = profile.viewers[1].elements
+  check("range reminders swept out", removed == 2 and #left == 2)
+  check("other reminder types survive", left[1].rtype == "group" and left[2].rtype == "weapon")
+  check("non-reminder bars untouched", #profile.viewers[2].elements == 1)
+  check("sweep is idempotent", ns.DB.StripRangeReminders(profile) == 0)
+  check("sweep tolerates junk", ns.DB.StripRangeReminders(nil) == 0)
+end
+
+-- Reminders bar in a live profile: importing an old string drops range rows
+do
+  local reminders = ns.DB:GetViewer("Reminders")
+  table.insert(reminders.elements, { rtype = "range", spellName = "Mortal Strike" })
+  local old = ns.DB:ExportProfile()
+  ns.DB:ImportProfile(old)
+  local imported = ns.DB:GetViewer("Reminders")
+  local found = false
+  for _, el in ipairs(imported.elements) do
+    if el.rtype == "range" then found = true end
+  end
+  check("import drops legacy range reminders", found == false)
+end
+
 return T

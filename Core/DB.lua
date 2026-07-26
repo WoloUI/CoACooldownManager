@@ -83,6 +83,26 @@ local function DefaultProfile()
   }
 end
 
+-- The "out of range" reminder type was replaced by the standalone OUT OF RANGE
+-- overlay (db.global.range), so drop leftover rows: without an evaluator they
+-- would sit in the element list forever doing nothing. Idempotent, and applied
+-- to imported strings too since older exports can still carry them.
+function DB.StripRangeReminders(profile)
+  local removed = 0
+  if type(profile) ~= "table" then return removed end
+  for _, viewer in ipairs(profile.viewers or {}) do
+    if viewer.style == "reminders" and type(viewer.elements) == "table" then
+      for i = #viewer.elements, 1, -1 do
+        if viewer.elements[i].rtype == "range" then
+          table.remove(viewer.elements, i)
+          removed = removed + 1
+        end
+      end
+    end
+  end
+  return removed
+end
+
 --------------------------------------------------------------------------------
 -- Keys
 --------------------------------------------------------------------------------
@@ -157,6 +177,12 @@ function DB:Init()
     enabled = true, size = 256, color = { 1, 0.1, 0.1 }, pulse = true,
     sound = nil, x = 0, y = 40,
   }
+  -- Out-of-range alert overlay (same deal: screen-space, account-wide).
+  -- Sits below screen center so it never lands on top of the aggro arrows.
+  db.global.range = db.global.range or {
+    enabled = true, text = "OUT OF RANGE", size = 28, color = { 1, 0.35, 0.35 },
+    pulse = true, sound = nil, spell = nil, x = 0, y = -80,
+  }
   db.chars = db.chars or {}
 
   -- v3: config becomes per-character. Layouts (positions) move from the
@@ -178,6 +204,12 @@ function DB:Init()
     db.global.layouts = nil
   end
   db.version = DB_VERSION
+
+  -- Sweep the retired "out of range" reminder rows out of every stored profile
+  for _, char in pairs(db.chars) do
+    for _, profile in pairs(char.specs or {}) do DB.StripRangeReminders(profile) end
+  end
+  for _, template in pairs(db.global.profiles) do DB.StripRangeReminders(template) end
 
   local char = db.chars[CharKey()] or {}
   db.chars[CharKey()] = char
@@ -577,6 +609,7 @@ function DB:ImportProfile(text)
 
   data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {} }
   data.profile.tracking = data.profile.tracking or DefaultTracking()
+  DB.StripRangeReminders(data.profile) -- older exports may still carry them
   -- Import replaces the spec's profile: the "loaded from" label no longer applies
   self.char.assignments[self:GetSpecKey()] = nil
   self.char.specs[self:GetSpecKey()] = data.profile

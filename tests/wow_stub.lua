@@ -54,17 +54,34 @@ function M.install(env)
   env.GetComboPoints = function() return 0 end
 
   env.__spells = env.__spells or {}
+  -- 3.3.5 signature: name, rank, icon, cost, isFunnel, powerType, castTime,
+  -- minRange, maxRange
   env.GetSpellInfo = function(idOrName)
     local spell = env.__spells[idOrName]
-    if spell then return spell.name, spell.rank, spell.icon end
+    if spell then
+      return spell.name, spell.rank, spell.icon, 0, false, 0, 0,
+        spell.minRange, spell.maxRange
+    end
     if type(idOrName) == "string" then
       -- Like the real client: by-name lookup resolves only LEARNED spells
       local known = env.__knownNames and env.__knownNames[idOrName]
-      if known then return idOrName, known.rank, known.icon end
+      if known then
+        return idOrName, known.rank, known.icon, 0, false, 0, 0,
+          known.minRange, known.maxRange
+      end
       return nil
     end
     return nil
   end
+  env.UnitCanAttack = function() return env.__canAttack ~= false end
+  -- 0 = out of range, 1 = in range, nil = the client cannot range-check it
+  env.IsSpellInRange = function(name)
+    local ranges = env.__spellRanges or {}
+    return ranges[name]
+  end
+  env.GetNumSpellTabs = function() return env.__spellbook and 1 or 0 end
+  env.GetSpellTabInfo = function() return "General", "icon", 0, #(env.__spellbook or {}) end
+  env.GetSpellName = function(index) return (env.__spellbook or {})[index] end
   env.GetSpellCooldown = function() return 0, 0, 1 end
   env.IsUsableSpell = function() return true, false end
   env.IsSpellKnown = function(id) return env.__known and env.__known[id] and true or false end

@@ -74,4 +74,74 @@ check("aggro hidden out of combat", AA.ShouldShow(3, false, on) == false)
 check("aggro hidden when disabled", AA.ShouldShow(3, true, { enabled = false }) == false)
 check("aggro hidden with nil status", AA.ShouldShow(nil, true, on) == false)
 
+--------------------------------------------------------------------------------
+-- Out-of-range alert
+--------------------------------------------------------------------------------
+local RA = ns.RangeAlert
+local rangeOn = { enabled = true }
+-- 0 = out of range, 1 = in range, nil = client cannot tell (never alert)
+check("range shows when out of range", RA.ShouldShow(0, true, true, rangeOn) == true)
+check("range hidden when in range", RA.ShouldShow(1, true, true, rangeOn) == false)
+check("range hidden when unknowable", RA.ShouldShow(nil, true, true, rangeOn) == false)
+check("range hidden out of combat", RA.ShouldShow(0, true, false, rangeOn) == false)
+check("range hidden without a target", RA.ShouldShow(0, false, true, rangeOn) == false)
+check("range hidden when disabled", RA.ShouldShow(0, true, true, { enabled = false }) == false)
+
+-- Target must exist, be alive and be attackable
+_G.__units = { target = true }
+check("attackable living target is ok", RA.TargetOk("target") == true)
+_G.__canAttack = false
+check("friendly target is not ok", RA.TargetOk("target") == false)
+_G.__canAttack = true
+_G.__units = {}
+check("no target is not ok", RA.TargetOk("target") == false)
+
+-- Probe candidates: override first, then Auto Attack, then a melee spellbook
+-- spell (Ascension is classless, so the spellbook beats a per-class list)
+_G.__spells = {
+  [6603] = { name = "Auto Attack", maxRange = 0 },
+  ["Mortal Strike"] = { name = "Mortal Strike", maxRange = 5 },
+}
+_G.__knownNames = { ["Mortal Strike"] = { maxRange = 5 }, Fireball = { maxRange = 35 } }
+_G.__spellbook = { "Fireball", "Mortal Strike" }
+
+RA.InvalidateProbe()
+local candidates = RA.ProbeCandidates({})
+check("auto attack is the default probe", candidates[1] == "Auto Attack")
+check("melee spellbook spell is the fallback", candidates[2] == "Mortal Strike")
+
+candidates = RA.ProbeCandidates({ spell = "Mortal Strike" })
+check("config override probes first", candidates[1] == "Mortal Strike")
+
+-- A client that cannot range-check the auto attack falls through to the melee
+-- spell instead of going silent
+_G.__spellRanges = { ["Mortal Strike"] = 0 }
+RA.InvalidateProbe()
+local result, probe = RA.ProbeRange({}, "target")
+check("falls through to a probe the client answers", result == 0 and probe == "Mortal Strike")
+
+_G.__spellRanges = { ["Auto Attack"] = 1, ["Mortal Strike"] = 0 }
+RA.InvalidateProbe()
+result, probe = RA.ProbeRange({}, "target")
+check("auto attack answers first when it can", result == 1 and probe == "Auto Attack")
+
+_G.__spellRanges = {}
+RA.InvalidateProbe()
+check("no answer at all reports nil", RA.ProbeRange({}, "target") == nil)
+
+--------------------------------------------------------------------------------
+-- Element reordering (bar element order = display order)
+--------------------------------------------------------------------------------
+local list = { "a", "b", "c" }
+check("move down swaps with the next", ns.MoveElement(list, 1, 1) == 2
+  and list[1] == "b" and list[2] == "a")
+check("move up swaps with the previous", ns.MoveElement(list, 2, -1) == 1
+  and list[1] == "a" and list[2] == "b")
+check("first cannot move up", ns.MoveElement(list, 1, -1) == nil)
+check("last cannot move down", ns.MoveElement(list, 3, 1) == nil)
+check("list stayed intact after refused moves",
+  list[1] == "a" and list[2] == "b" and list[3] == "c")
+check("single-element list cannot move", ns.MoveElement({ "only" }, 1, 1) == nil)
+check("missing index is refused", ns.MoveElement(list, 9, -1) == nil)
+
 return T
