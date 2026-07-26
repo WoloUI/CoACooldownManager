@@ -8,6 +8,22 @@ a weekend of writing custom Lua for every aura you wanted. CoA Cooldown Manager 
 you the same result with **dropdown menus only: never a line of code**, and it is built
 from the ground up for Ascension's classless, re-ID'd, high-mutation spell system.
 
+![Bars and the configuration panel](.github/screenshots/config-panel.png)
+
+---
+
+## Screenshots
+
+**Edit mode** — every bar labelled and draggable, with the Missing Raid Buffs checklist,
+the AGGRO ON YOU arrows and the OUT OF RANGE warning all live on screen:
+
+![Edit mode with the screen overlays](.github/screenshots/edit-mode.png)
+
+**HoT tracking** — pick a spell, then place its indicator on the party/raid frame with the
+preview grid. Test mode shows fake indicators so you can position them without a group:
+
+![The Tracking tab and HoT indicator placement](.github/screenshots/hot-tracking.png)
+
 ---
 
 ## Why it exists
