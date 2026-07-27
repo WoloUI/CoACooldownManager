@@ -23,10 +23,51 @@ local function MakeFrame()
 end
 M.MakeFrame = MakeFrame
 
+-- Scriptable EditBox: the config widgets drive commits from OnEnterPressed /
+-- OnEditFocusLost / OnEditFocusGained, so tests need real script storage and a
+-- real text buffer. Unknown methods still fall through to MakeFrame's no-ops.
+local function MakeEditBox()
+  local box = MakeFrame()
+  local scripts = {}
+  box.SetScript = function(_, name, fn) scripts[name] = fn end
+  box.GetScript = function(_, name) return scripts[name] end
+  box.HookScript = function(self, name, fn)
+    local prev = scripts[name]
+    scripts[name] = function(...)
+      if prev then prev(...) end
+      fn(...)
+    end
+  end
+  box.Fire = function(self, name, ...)
+    if scripts[name] then return scripts[name](self, ...) end
+  end
+  box.SetText = function(self, text)
+    self._text = text or ""
+    self:Fire("OnTextChanged")
+  end
+  box.GetText = function(self) return self._text or "" end
+  box.SetFocus = function(self)
+    self._focus = true
+    self:Fire("OnEditFocusGained")
+  end
+  box.ClearFocus = function(self)
+    if self._focus then
+      self._focus = false
+      self:Fire("OnEditFocusLost")
+    end
+  end
+  box.HasFocus = function(self) return self._focus and true or false end
+  return box
+end
+M.MakeEditBox = MakeEditBox
+
 function M.install(env)
   env = env or _G
 
-  env.CreateFrame = function() return MakeFrame() end
+  env.CreateFrame = function(frameType)
+    if frameType == "EditBox" then return MakeEditBox() end
+    return MakeFrame()
+  end
   env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) print("[chat] " .. tostring(msg)) end }
   env.GetTime = function() return env.__now or 1000 end
   env.GetAddOnMetadata = function() return "test" end

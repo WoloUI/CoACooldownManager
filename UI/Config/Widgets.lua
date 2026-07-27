@@ -67,12 +67,19 @@ function W.CreateEditBox(parent, width, height, onEnter, placeholder)
   -- away without pressing Enter, which used to silently drop the edit (e.g. the
   -- trinket ICD never saved, so the icon never grayed). A committed-text guard
   -- keeps the click-away and the Enter->ClearFocus path from firing twice.
+  --
+  -- The guard's baseline is taken when the box GAINS FOCUS, never kept across
+  -- renders: these boxes are shared controls that Render() repaints per bar, so
+  -- a persistent baseline used to swallow a real edit that happened to repeat
+  -- the last value committed on another bar (the "gap/font/icon size reverts to
+  -- default" report).
   local function commit(self)
     local text = self:GetText()
     if text == self._committed then return end
     self._committed = text
     if onEnter then onEnter(self, text) end
   end
+  box:SetScript("OnEditFocusGained", function(self) self._committed = self:GetText() end)
   box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   box:SetScript("OnEnterPressed", function(self)
     commit(self)
