@@ -67,6 +67,11 @@ Each bar tracks four kinds of element: **spells**, **items** (consumables),
 (pet/guardian duration timers). Element order in the config *is* display order, with
 `^` / `v` buttons to reorder.
 
+- Add spells three ways: drag from the spellbook onto the config panel, drop them on a
+  bar in edit mode, or shift+click them in the spellbook with a bar selected.
+- Power bars: per-bar text mode — current/max, current only, percent, or hidden.
+- Per-bar `Timer` toggle, so target debuffs can show just their stack count.
+
 ### Triggers — conditional logic, no scripting
 
 A base trigger plus chained conditions, all from dropdowns. Conditions can be
@@ -130,6 +135,12 @@ strings, parsed by a hand-written token parser (never `loadstring`).
 
 Run it when you want (`/cdm scan` or the panel button). Parses tooltip cooldowns, uses a
 spell-hint table and keyword heuristics, and hands you a suggestions window.
+
+One suggestion per spell rather than one per rank, and it skips racials and Ascension
+vanity items — those carry no Character Advancement entry, while real abilities do. When
+the client can't tell, nothing is filtered. Spells you dismiss with `X` stay dismissed,
+even across a manual scan, and the General page lists them so you can put one back.
+`/cdm scan debug` prints the verdict for every spellbook entry.
 
 ---
 
