@@ -95,10 +95,12 @@ end
 
 -- One entry per spellbook slot, in book order. `rank` and `tab` exist for the
 -- /cdm scan debug printout.
-local function CollectSpellbook()
+local function CollectSpellbook(skip)
   local entries = {}
   for tab = 1, GetNumSpellTabs() do
-    local _, _, offset, numSpells = GetSpellTabInfo(tab)
+    local tabName, _, offset, numSpells = GetSpellTabInfo(tab)
+    tabName = tabName or ("Tab " .. tab)
+    if not (skip and skip[tabName]) then
     for i = offset + 1, offset + numSpells do
       if not IsPassiveSpell(i, BOOKTYPE_SPELL) then
         local link = GetSpellLink(i, BOOKTYPE_SPELL)
@@ -111,14 +113,34 @@ local function CollectSpellbook()
           if name then
             entries[#entries + 1] = {
               id = spellID, name = name, icon = icon,
-              rank = rank or "", tab = tab, index = i,
+              rank = rank or "", tab = tab, tabName = tabName, index = i,
             }
           end
         end
       end
     end
+    end
   end
   return entries
+end
+
+-- The spellbook tabs, for the config checkboxes. On Ascension the racials and
+-- vanity toys ("For the Alliance!", "Stone of Retreat") live in the general
+-- tab while real abilities live in the specialization tabs, so the TAB is the
+-- signal that actually separates them -- Character Advancement does not.
+function Scanner:TabList()
+  local tabs = {}
+  for tab = 1, GetNumSpellTabs() do
+    local name, _, _, numSpells = GetSpellTabInfo(tab)
+    tabs[#tabs + 1] = {
+      index = tab, name = name or ("Tab " .. tab), count = numSpells or 0,
+    }
+  end
+  return tabs
+end
+
+local function SkippedTabs()
+  return ns.profile.scanner.skipTabs or {}
 end
 
 -- The spellbook lists every learned rank as its own slot, so an ID-keyed
@@ -201,11 +223,20 @@ local function FilteredOut(scanner, entry)
   return Scanner.AdvancementVerdict(entry) == false
 end
 
+-- Tooltip -> category. Shared by Scan and Debug so the diagnostic reports what
+-- the scan actually decides: "scanned" used to mean "reached the tooltip step",
+-- which read as "suggested" and made a 20-result scan look like 29.
+local function Inspect(spellID)
+  local text = TooltipText(spellID)
+  local cooldown = ParseCooldown(text)
+  return Classify(spellID, text, cooldown), cooldown
+end
+
 -- force=true rescans everything not already on a bar (manual /cdm scan).
 function Scanner:Scan(force)
   local scanner = ns.profile.scanner
   local results = {}
-  for _, entry in ipairs(DedupeByName(CollectSpellbook())) do
+  for _, entry in ipairs(DedupeByName(CollectSpellbook(SkippedTabs()))) do
     local spellID = entry.id
     local skip = ElementExists(spellID)
       or Excluded(scanner, entry.name)
@@ -214,9 +245,7 @@ function Scanner:Scan(force)
     if not skip then
       local name, icon = entry.name, entry.icon
       if name then
-        local text = TooltipText(spellID)
-        local cooldown = ParseCooldown(text)
-        local category = Classify(spellID, text, cooldown)
+        local category, cooldown = Inspect(spellID)
         if category then
           results[#results + 1] = {
             spellID = spellID, name = name, icon = icon,
@@ -245,15 +274,26 @@ end
 -- here before being trusted.
 function Scanner:Debug()
   local scanner = ns.profile.scanner
-  local entries = CollectSpellbook()
+  local skip = SkippedTabs()
+  local entries = CollectSpellbook(skip)
   local kept = {}
   for _, entry in ipairs(DedupeByName(entries)) do
     kept[entry.name] = entry
   end
-  local CA = _G.C_CharacterAdvancement
-  ns:Print(("spellbook: %d active entries, classOnly=%s, %d excluded, CA API %s"):format(
-    #entries, tostring(scanner.classOnly == true), #self:ExcludedNames(),
-    CA and "present" or "|cffff5555missing|r"))
+
+  -- Per-tab summary first: the full per-spell dump overflows the chat buffer,
+  -- and the tab is the setting that matters. Skipped tabs are listed too.
+  ns:Print(("spellbook tabs (classOnly=%s, %d excluded):"):format(
+    tostring(scanner.classOnly == true), #self:ExcludedNames()))
+  for _, tab in ipairs(self:TabList()) do
+    ns:Print(("  tab %d  %-18s %3d spells  %s"):format(
+      tab.index, tab.name, tab.count,
+      skip[tab.name] and "|cffff5555SKIPPED|r" or "scanned"))
+  end
+
+  local counts = { suggested = 0, ["no-cooldown"] = 0, ["dup-rank"] = 0,
+    ["on-bar"] = 0, excluded = 0, ["not-CA"] = 0 }
+  local lines = {}
   for _, entry in ipairs(entries) do
     local keeper = kept[entry.name]
     local verdict
@@ -266,30 +306,35 @@ function Scanner:Debug()
     elseif FilteredOut(scanner, keeper) then
       verdict = "not-CA"
     else
-      verdict = "scanned"
+      -- Run the real classification: anything without a long enough cooldown
+      -- is dropped by Classify, which is why more spells reach this point than
+      -- ever reach the suggestions window.
+      verdict = Inspect(entry.id) and "suggested" or "no-cooldown"
     end
-    -- ca = this slot's own answer; any = the verdict across every rank, which
-    -- is what actually decides. known = the other CA signal, printed so a bad
-    -- filter can be re-aimed from real data instead of guesswork.
-    local ca = Scanner.IsAdvancementSpell(entry.id)
-    local any = Scanner.AdvancementVerdict(keeper)
-    local known = CA and CA.IsKnownSpellID and select(2, pcall(CA.IsKnownSpellID, entry.id))
-    ns:Print(("  tab %d #%-3d %s %s | id=%d ca=%s any=%s known=%s -> %s"):format(
-      entry.tab, entry.index, entry.name,
-      entry.rank ~= "" and ("(" .. entry.rank .. ")") or "",
-      entry.id, ca == nil and "unknown" or tostring(ca),
-      any == nil and "unknown" or tostring(any), tostring(known), verdict))
+    counts[verdict] = (counts[verdict] or 0) + 1
+    if verdict ~= "dup-rank" then
+      lines[#lines + 1] = ("  %-18s %-22s id=%-8d ca=%s -> %s"):format(
+        entry.tabName or ("tab " .. entry.tab), entry.name, entry.id,
+        tostring(Scanner.AdvancementVerdict(keeper)), verdict)
+    end
   end
+  ns:Print(("%d slots: %d suggested, %d no-cooldown, %d dup-rank, %d on-bar, %d excluded, %d not-CA"):format(
+    #entries, counts.suggested, counts["no-cooldown"], counts["dup-rank"],
+    counts["on-bar"], counts.excluded, counts["not-CA"]))
+  -- Rank duplicates are omitted from the per-spell list: they were 3/4 of the
+  -- output and pushed everything else out of the chat scrollback.
+  for _, line in ipairs(lines) do ns:Print(line) end
 end
 
+-- item.target is the bar picked in the suggestions dropdown; the classification
+-- only supplies the default. Goes through AddCapturedSpell so a suggestion
+-- accepted onto a duration bar becomes a buff/debuff element rather than a
+-- cooldown, exactly like a drag or a shift+click would.
 function Scanner:Accept(item)
-  local viewerName = CATEGORY_VIEWER[item.category] or "Essential"
+  local viewerName = item.target or CATEGORY_VIEWER[item.category] or "Essential"
   local viewer = ns.DB:GetViewer(viewerName)
   if not viewer then return end
-  table.insert(viewer.elements, {
-    spellID = item.spellID, name = item.name, icon = item.icon,
-    kind = "cooldown", showWhen = "always", conditions = {},
-  })
+  ns.AddCapturedSpell(viewer, item.spellID, item.name, item.icon)
   ns.profile.scanner.seen[item.spellID] = true
   ns:Fire("VIEWERS_CHANGED")
 end

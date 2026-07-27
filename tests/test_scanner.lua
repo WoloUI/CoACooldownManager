@@ -194,4 +194,54 @@ _G.C_CharacterAdvancement = nil
 check("unknown across every rank stays unknown",
   ns.Scanner.AdvancementVerdict(ranked[1]) == nil)
 
+-- Per-tab skipping. The TAB is what separates racials and vanity toys ("For the
+-- Alliance!", "Stone of Retreat") from real abilities on this server -- the
+-- Character Advancement lookup does not.
+local tabs = ns.Scanner:TabList()
+check("tab list reports the name and size",
+  #tabs == 1 and tabs[1].name == "General" and tabs[1].count == 4)
+check("entries carry their tab name",
+  ns.Scanner._CollectSpellbook()[1].tabName == "General")
+check("a skipped tab contributes nothing",
+  #ns.Scanner._CollectSpellbook({ General = true }) == 0)
+check("skipping an unrelated tab changes nothing",
+  #ns.Scanner._CollectSpellbook({ Draconic = true }) == 4)
+
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {}, skipTabs = { General = true } }
+results = ns.Scanner:Scan(true)
+check("Scan honours skipped tabs", #results == 0)
+
+-- Accepting a suggestion targets the bar chosen in the dropdown, not just the
+-- three stock category names.
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {} }
+ns.profile.viewers = {
+  { name = "Essential", style = "icons", elements = {} },
+  { name = "My Cooldowns", style = "icons", elements = {} },
+  { name = "Power", style = "power", elements = {} },
+  { name = "Off bar", style = "icons", enabled = false, elements = {} },
+}
+ns.DB = { GetViewer = function(_, name)
+  for _, v in ipairs(ns.profile.viewers) do
+    if v.name == name then return v end
+  end
+end }
+
+local options = ns.CaptureTargetOptions()
+check("target options list the user's own bars",
+  #options == 2 and options[1].value == "Essential"
+  and options[2].value == "My Cooldowns")
+
+ns.Scanner:Accept({ spellID = 803546, name = "Supernova", icon = "i2",
+  category = "essential", target = "My Cooldowns" })
+check("accept honours the chosen bar",
+  #ns.profile.viewers[2].elements == 1
+  and ns.profile.viewers[2].elements[1].name == "Supernova")
+check("accept leaves the default bar alone", #ns.profile.viewers[1].elements == 0)
+
+ns.Scanner:Accept({ spellID = 1003, name = "Inferno Barrier", icon = "i1",
+  category = "essential" })
+check("accept without a target falls back to the category's bar",
+  #ns.profile.viewers[1].elements == 1
+  and ns.profile.viewers[1].elements[1].name == "Inferno Barrier")
+
 return T

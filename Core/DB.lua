@@ -78,7 +78,7 @@ end
 local function DefaultProfile()
   return {
     viewers = DefaultViewers(),
-    scanner = { seen = {}, rejected = {}, excluded = {} },
+    scanner = { seen = {}, rejected = {}, excluded = {}, skipTabs = {} },
     tracking = DefaultTracking(),
   }
 end
@@ -282,6 +282,7 @@ function DB:ActivateProfile()
     profile = last and ns.CopyTable(last) or DefaultProfile()
     profile.scanner = profile.scanner or { seen = {}, rejected = {}, excluded = {} }
     profile.scanner.excluded = profile.scanner.excluded or {}
+    profile.scanner.skipTabs = profile.scanner.skipTabs or {}
     self.char.specs[specKey] = profile
   end
   -- Profiles created before the Tracking tab existed
@@ -352,6 +353,7 @@ function DB:AssignProfile(specKey, profileName)
     local copy = ns.CopyTable(named)
     copy.scanner = copy.scanner or { seen = {}, rejected = {}, excluded = {} }
     copy.scanner.excluded = copy.scanner.excluded or {}
+    copy.scanner.skipTabs = copy.scanner.skipTabs or {}
     copy.tracking = copy.tracking or DefaultTracking()
     self.char.specs[specKey] = copy
     if specKey == self:GetSpecKey() then
@@ -645,6 +647,7 @@ function DB:ImportProfile(text)
 
   data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {}, excluded = {} }
   data.profile.scanner.excluded = data.profile.scanner.excluded or {}
+  data.profile.scanner.skipTabs = data.profile.scanner.skipTabs or {}
   data.profile.tracking = data.profile.tracking or DefaultTracking()
   -- Older exports can still carry rows of both retired reminder types
   DB.StripRangeReminders(data.profile)

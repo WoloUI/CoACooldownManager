@@ -1229,6 +1229,10 @@ function Config:BuildControls()
     "Off by default: this server only registers a Character Advancement entry for some "
     .. "spells, so turning it on hides whole specialization tabs. Use the X button below "
     .. "to drop what you don't want instead.", 10, W.colors.inkDim)
+  c.scanTabsHint = W.CreateLabel(parent,
+    "Scan these spellbook tabs (racials and vanity toys live in the general tab):",
+    11, W.colors.inkDim)
+  c.scanTabRows = {}
   c.scanExcludedHeader = W.CreateSection(parent, "EXCLUDED SPELLS")
   c.scanEmpty = W.CreateLabel(parent, "Nothing excluded yet. The X button in the scan window adds spells here.",
     11, W.colors.inkDim)
@@ -1282,6 +1286,7 @@ local function HideAllControls()
   for _, row in ipairs(controls.trackRows) do row:Hide() end
   for _, row in ipairs(controls.hudRows) do row:Hide() end
   for _, row in ipairs(controls.scanRows) do row:Hide() end
+  for _, row in ipairs(controls.scanTabRows) do row:Hide() end
 end
 
 local function RenderSidebar()
@@ -1667,6 +1672,34 @@ function Config:Render()
     y2 = y2 - 22
     c2.scanHint:SetPoint("TOPLEFT", 0, y2); c2.scanHint:Show()
     y2 = y2 - 34
+    -- One checkbox per spellbook tab, built from the live spellbook so the
+    -- names always match what the client shows (Draconic, Flameweaving, ...).
+    c2.scanTabsHint:SetPoint("TOPLEFT", 0, y2); c2.scanTabsHint:Show()
+    y2 = y2 - 22
+    ns.profile.scanner.skipTabs = ns.profile.scanner.skipTabs or {}
+    local skipTabs = ns.profile.scanner.skipTabs
+    local tabList = ns.Scanner:TabList()
+    for i, tab in ipairs(tabList) do
+      local box = c2.scanTabRows[i]
+      if not box then
+        box = W.CreateCheckbox(win.content, "", function(self, checked)
+          -- resolved at CLICK time: these boxes are pooled and re-labelled
+          if self.tabName then
+            ns.profile.scanner.skipTabs[self.tabName] = (not checked) or nil
+          end
+        end)
+        c2.scanTabRows[i] = box
+      end
+      box.tabName = tab.name
+      box:SetLabel(("%s  |cff9aa3b5(%d)|r"):format(tab.name, tab.count))
+      box:ClearAllPoints()
+      box:SetPoint("TOPLEFT", (i % 2 == 1) and 0 or 220, y2)
+      box:SetChecked(not skipTabs[tab.name])
+      box:Show()
+      if i % 2 == 0 or i == #tabList then y2 = y2 - 24 end
+    end
+    if #tabList == 0 then y2 = y2 - 4 end
+    y2 = y2 - 12
     c2.scanExcludedHeader:SetPoint("TOPLEFT", 0, y2); c2.scanExcludedHeader:Show()
     y2 = y2 - 20
     local excluded = ns.Scanner:ExcludedNames()

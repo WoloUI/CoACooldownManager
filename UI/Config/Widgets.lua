@@ -116,6 +116,8 @@ function W.CreateCheckbox(parent, label, onToggle)
     if self.checked then self.mark:Show() else self.mark:Hide() end
   end
   function check:GetChecked() return self.checked end
+  -- Pooled checkboxes (the per-spellbook-tab row) get re-labelled per render
+  function check:SetLabel(text) self.label:SetText(text) end
   check:SetScript("OnClick", function(self)
     self:SetChecked(not self.checked)
     if onToggle then onToggle(self, self.checked) end

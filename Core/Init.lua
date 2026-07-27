@@ -433,6 +433,20 @@ function ns.CanCapture(viewer)
   return (viewer and CAPTURE_STYLES[viewer.style]) and true or false
 end
 
+-- Every bar a spell can be put on, as dropdown options. Built from the user's
+-- OWN viewers (including custom bars) instead of the three stock category
+-- names, which is what the suggestions window used to be stuck with. Disabled
+-- bars are left out: picking one would silently do nothing visible.
+function ns.CaptureTargetOptions()
+  local options = {}
+  for _, viewer in ipairs((ns.profile and ns.profile.viewers) or {}) do
+    if ns.CanCapture(viewer) and viewer.enabled ~= false then
+      options[#options + 1] = { text = viewer.name, value = viewer.name }
+    end
+  end
+  return options
+end
+
 -- Builds the element for a captured spell. Shared by the config-panel drop,
 -- edit-mode bar drops and spellbook shift+click so all three behave alike.
 function ns.AddCapturedSpell(viewer, id, name, icon)
