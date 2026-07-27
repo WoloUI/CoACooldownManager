@@ -92,6 +92,21 @@ local function CreateOverlay(viewerFrame, cfg)
     EditMode:RefreshOverlays()
   end)
 
+  -- Drop a spell from the spellbook straight onto a bar. The overlay only
+  -- exists in edit mode, which is why live bars can stay mouse-transparent.
+  local function ReceiveSpell(self)
+    local id, name, icon = ns.CursorSpell()
+    if not name then return end
+    if not ns.CanCapture(self.cfg) then
+      ns:Print(("%s does not take spells (style: %s)."):format(self.cfg.name, self.cfg.style))
+      return
+    end
+    ClearCursor()
+    ns.CaptureSpell(self.cfg, id, name, icon)
+  end
+  overlay:SetScript("OnReceiveDrag", ReceiveSpell)
+  overlay:SetScript("OnMouseUp", ReceiveSpell)
+
   return overlay
 end
 
@@ -146,7 +161,8 @@ function EditMode:Toggle()
   if ns.MissingBuffs then ns.MissingBuffs:Apply() end
   if ns.ExtraActionBar then ns.ExtraActionBar:SetEditing(self.active) end
   if self.active then
-    ns:Print("edit mode ON - drag bars to move them; drag the Power bar to move everything. /cdm edit to finish.")
+    ns:Print("edit mode ON - drag bars to move them; drag the Power bar to move everything. "
+      .. "Drop a spell from your spellbook on a bar to add it. /cdm edit to finish.")
   else
     ns:Print("edit mode off; layout saved.")
   end
