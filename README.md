@@ -67,8 +67,11 @@ Each bar tracks four kinds of element: **spells**, **items** (consumables),
 (pet/guardian duration timers). Element order in the config *is* display order, with
 `^` / `v` buttons to reorder.
 
-- Add spells three ways: drag from the spellbook onto the config panel, drop them on a
-  bar in edit mode, or shift+click them in the spellbook with a bar selected.
+- Add spells four ways: drag from the spellbook onto the config panel, drop them on a
+  bar in edit mode, shift+click them in the spellbook with a bar selected, or accept a
+  scan suggestion. All four build the element the same way, and the bar's style decides
+  what it becomes — the same spell is a cooldown on an icon row and a draining debuff on
+  a duration bar.
 - Power bars: per-bar text mode — current/max, current only, percent, or hidden.
 - Per-bar `Timer` toggle, so target debuffs can show just their stack count.
 
@@ -133,14 +136,36 @@ strings, parsed by a hand-written token parser (never `loadstring`).
 
 ### Spell scanner
 
-Run it when you want (`/cdm scan` or the panel button). Parses tooltip cooldowns, uses a
-spell-hint table and keyword heuristics, and hands you a suggestions window.
+Run it when you want (`/cdm scan` or the panel button). Reads the tooltip of every active
+spell and hands you a scrollable, searchable suggestions window: pick which of *your* bars
+each spell should go to, or dismiss it.
 
-One suggestion per spell rather than one per rank, and it skips racials and Ascension
-vanity items — those carry no Character Advancement entry, while real abilities do. When
-the client can't tell, nothing is filtered. Spells you dismiss with `X` stay dismissed,
-even across a manual scan, and the General page lists them so you can put one back.
-`/cdm scan debug` prints the verdict for every spellbook entry.
+**One suggestion per spell, not per rank.** The spellbook lists every learned rank as its
+own slot; the scan keeps one row per name and follows the highest rank. On a real Pyro
+spellbook that is 100 of 159 slots collapsed away.
+
+**Filtering is per spellbook tab**, because that is what actually separates junk from
+abilities on this server: racials, PvP toggles, mounts and hearthstones live in the general
+tab and Ascension's toys in its own *Ascension Vanity Items* tab, while real spells live in
+the specialization tabs. Both junk tabs are unticked by default and every tab gets a
+checkbox, read live from the client so the names always match your spec.
+
+> A note for anyone tempted by `C_CharacterAdvancement`: it is **not** a usable
+> "is this a class ability" signal here. It answers for only a fraction of spells — on a
+> live Pyro, Eruption and Spellburn read as non-CA while sitting on the player's own bars.
+> The optional `Only class/spec spells` toggle uses it, off by default, and asks every rank
+> because the CA entry is registered against the base rank only.
+
+**Cooldowns are not the only thing worth a bar.** Plenty of spec spells have no cooldown
+line at all, so the scan also reads aura durations (`for 19 sec`) and suggests those as
+target DoTs or self buffs on a duration bar. A spell with neither a cooldown nor a duration
+has nothing a bar could show, and is left alone.
+
+Spells you dismiss with `X` stay dismissed, even across a manual scan, and the General page
+lists them so you can put one back. Two diagnostics, because tooltip wording and the
+client's own spell data cannot be inspected outside the game: `/cdm scan debug` prints a
+per-tab summary and why each spell was kept or dropped, and `/cdm scan tip <spell>` dumps a
+raw tooltip line by line next to the cooldown it parsed.
 
 ---
 
