@@ -1,9 +1,30 @@
 -- Minimal WoW API stub for out-of-game tests (lua5.1).
 local M = {}
 
--- Universal frame stub: any method call is a no-op returning nil.
+-- Universal frame stub: any method call is a no-op returning nil, except for
+-- the handful of things UI tests have to drive. Scripts are recorded so a test
+-- can `frame:Fire("OnClick")`, and Show/Hide track state so a test can assert
+-- what ended up on screen. `_shown` starts FALSE so IsShown/IsVisible stay
+-- falsy by default, exactly like the old catch-all's nil.
 local function MakeFrame()
-  local frame = {}
+  local frame = { _shown = false }
+  local scripts = {}
+  frame.SetScript = function(_, name, fn) scripts[name] = fn end
+  frame.GetScript = function(_, name) return scripts[name] end
+  frame.HookScript = function(self, name, fn)
+    local prev = scripts[name]
+    scripts[name] = function(...)
+      if prev then prev(...) end
+      fn(...)
+    end
+  end
+  frame.Fire = function(self, name, ...)
+    if scripts[name] then return scripts[name](self, ...) end
+  end
+  frame.Show = function(self) self._shown = true end
+  frame.Hide = function(self) self._shown = false end
+  frame.IsShown = function(self) return self._shown end
+  frame.IsVisible = function(self) return self._shown end
   setmetatable(frame, {
     __index = function(_, key)
       if key == "GetFrameLevel" then return function() return 1 end end
