@@ -34,4 +34,31 @@ check("long offensive CD -> essential", Classify(555004, "deal 500 damage\n45 se
 check("short CD filler skipped", Classify(555005, "deal 100 damage\n6 sec cooldown", 6) == nil)
 check("no CD spell skipped", Classify(555006, "deal 100 damage", 0) == nil)
 
+-- Rank duplicates: the spellbook lists every learned rank, and the old
+-- ID-keyed dedupe let each one become its own suggestion (the report showed
+-- Inferno Barrier five times).
+_G.__spellbookEntries = {
+  { id = 1001, name = "Inferno Barrier", rank = "Rank 1" },
+  { id = 1002, name = "Inferno Barrier", rank = "Rank 2" },
+  { id = 1003, name = "Inferno Barrier", rank = "Rank 3" },
+  { id = 2001, name = "Volcanic Shell", rank = "Rank 1" },
+  { id = 2002, name = "Volcanic Shell", rank = "Rank 2" },
+  { id = 3001, name = "Cataclysm", rank = "" },
+  { id = 4001, name = "Inner Fire", rank = "Rank 1", passive = true },
+}
+
+local collected = ns.Scanner._CollectSpellbook()
+check("collect skips passives", #collected == 6)
+check("collect keeps book order", collected[1].id == 1001 and collected[6].id == 3001)
+check("collect reads the rank", collected[3].rank == "Rank 3")
+
+local deduped = ns.Scanner._DedupeByName(collected)
+check("dedupe leaves one row per name", #deduped == 3)
+check("dedupe keeps the highest rank", deduped[1].id == 1003 and deduped[2].id == 2002)
+check("dedupe preserves first-appearance order",
+  deduped[1].name == "Inferno Barrier" and deduped[3].name == "Cataclysm")
+
+local single = ns.Scanner._DedupeByName({ { id = 7, name = "Solo", rank = "" } })
+check("dedupe passes a single spell through", #single == 1 and single[1].id == 7)
+
 return T

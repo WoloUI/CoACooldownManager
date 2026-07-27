@@ -93,21 +93,52 @@ local function ElementExists(spellID)
   return false
 end
 
+-- One entry per spellbook slot, in book order. `rank` and `tab` exist for the
+-- /cdm scan debug printout.
 local function CollectSpellbook()
-  local spells = {}
+  local entries = {}
   for tab = 1, GetNumSpellTabs() do
     local _, _, offset, numSpells = GetSpellTabInfo(tab)
     for i = offset + 1, offset + numSpells do
       if not IsPassiveSpell(i, BOOKTYPE_SPELL) then
         local link = GetSpellLink(i, BOOKTYPE_SPELL)
         local spellID = link and tonumber(link:match("spell:(%d+)"))
-        if spellID and not spells[spellID] then
-          spells[spellID] = true
+        if spellID then
+          local name, rank, icon = GetSpellInfo(spellID)
+          if not name then
+            name, rank = GetSpellName(i, BOOKTYPE_SPELL)
+          end
+          if name then
+            entries[#entries + 1] = {
+              id = spellID, name = name, icon = icon,
+              rank = rank or "", tab = tab, index = i,
+            }
+          end
         end
       end
     end
   end
-  return spells
+  return entries
+end
+
+-- The spellbook lists every learned rank as its own slot, so an ID-keyed
+-- dedupe produced one suggestion per rank. Keep ONE row per name: book order
+-- is rank-ascending, so the last slot with a given name is the highest rank.
+-- Suggestions store the name anyway, so the icon and cooldown keep following
+-- the current rank at runtime.
+local function DedupeByName(entries)
+  local byName, order = {}, {}
+  for _, entry in ipairs(entries) do
+    if byName[entry.name] == nil then
+      order[#order + 1] = entry.name
+    end
+    byName[entry.name] = entry
+  end
+  local result = {}
+  for _, name in ipairs(order) do
+    result[#result + 1] = byName[name]
+  end
+  return result
 end
 
 --------------------------------------------------------------------------------
@@ -117,11 +148,12 @@ end
 function Scanner:Scan(force)
   local scanner = ns.profile.scanner
   local results = {}
-  for spellID in pairs(CollectSpellbook()) do
+  for _, entry in ipairs(DedupeByName(CollectSpellbook())) do
+    local spellID = entry.id
     local skip = ElementExists(spellID)
       or (not force and (scanner.seen[spellID] or scanner.rejected[spellID]))
     if not skip then
-      local name, _, icon = GetSpellInfo(spellID)
+      local name, icon = entry.name, entry.icon
       if name then
         local text = TooltipText(spellID)
         local cooldown = ParseCooldown(text)
@@ -180,3 +212,5 @@ end
 -- Test seams
 Scanner._ParseCooldown = ParseCooldown
 Scanner._Classify = Classify
+Scanner._CollectSpellbook = CollectSpellbook
+Scanner._DedupeByName = DedupeByName

@@ -120,9 +120,52 @@ function M.install(env)
     local ranges = env.__spellRanges or {}
     return ranges[name]
   end
-  env.GetNumSpellTabs = function() return env.__spellbook and 1 or 0 end
-  env.GetSpellTabInfo = function() return "General", "icon", 0, #(env.__spellbook or {}) end
-  env.GetSpellName = function(index) return (env.__spellbook or {})[index] end
+  -- Spellbook: `__spellbookEntries` is an array of
+  -- { id, name, rank, icon, passive } in book order (rank ascending, like the
+  -- real client). `__spellbook` (plain name list) is still honoured for the
+  -- older range-probe tests.
+  --
+  -- run_all.lua dofiles every test file into ONE _G, so the rich form is
+  -- cleared here: it takes precedence over `__spellbook`, and a file that set
+  -- it would otherwise hijack the spellbook of every file that runs after it.
+  env.__spellbookEntries = nil
+  local function BookEntries(env)
+    if env.__spellbookEntries then return env.__spellbookEntries end
+    local entries = {}
+    for i, name in ipairs(env.__spellbook or {}) do
+      entries[i] = { id = 900000 + i, name = name, rank = "" }
+    end
+    return entries
+  end
+  env.GetNumSpellTabs = function()
+    return #BookEntries(env) > 0 and 1 or 0
+  end
+  env.GetSpellTabInfo = function()
+    return "General", "icon", 0, #BookEntries(env)
+  end
+  env.GetSpellName = function(index)
+    local entry = BookEntries(env)[index]
+    if entry then return entry.name, entry.rank end
+  end
+  env.IsPassiveSpell = function(index)
+    local entry = BookEntries(env)[index]
+    return entry and entry.passive and true or false
+  end
+  env.GetSpellLink = function(indexOrName, bookType)
+    local entry
+    if type(indexOrName) == "number" and bookType then
+      entry = BookEntries(env)[indexOrName]
+    else
+      for _, candidate in ipairs(BookEntries(env)) do
+        if candidate.name == indexOrName or candidate.id == indexOrName then
+          entry = candidate
+        end
+      end
+    end
+    if not entry then return nil end
+    return ("|cff71d5ff|Hspell:%d|h[%s]|h|r"):format(entry.id, entry.name)
+  end
+  env.BOOKTYPE_SPELL = "spell"
   env.GetSpellCooldown = function() return 0, 0, 1 end
   env.IsUsableSpell = function() return true, false end
   env.IsSpellKnown = function(id) return env.__known and env.__known[id] and true or false end
