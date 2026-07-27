@@ -34,6 +34,48 @@ check("long offensive CD -> essential", Classify(555004, "deal 500 damage\n45 se
 check("short CD filler skipped", Classify(555005, "deal 100 damage\n6 sec cooldown", 6) == nil)
 check("no CD spell skipped", Classify(555006, "deal 100 damage", 0) == nil)
 
+-- Timed auras with NO cooldown. Real tooltip text from /cdm scan tip on live:
+-- these spells have no cooldown line at all, so the cooldown heuristic could
+-- never reach them, yet a 19s DoT is exactly what a Target DoTs bar is for.
+local BLAZE = [[blaze
+165 mana
+35 yd range
+instant cast
+requires ember
+consumes 1 ember
+burn an enemy for 336 fire damage every 3 sec and reduce their healing received by 40% for 19 sec.
+id 572160]]
+check("a no-cooldown DoT is suggested for the DoT bar",
+  Classify(572160, BLAZE, 0) == "dots")
+check("the aura duration is read past the 'every 3 sec' tick",
+  ns.Scanner._ParseDuration(BLAZE) == 19)
+
+local SELF_BUFF = "increases your fire damage by 15% for 30 sec."
+check("a self aura goes to the buff bar", Classify(555007, SELF_BUFF, 0) == "buffs")
+check("minutes are read too",
+  ns.Scanner._ParseDuration("grants you 200 haste for 2 min.") == 120)
+
+-- Real text again: a dispel with no cooldown and no duration has nothing to
+-- show on a bar, so it must stay unclassified rather than become noise.
+local BURN_IMPURITIES = [[burn impurities
+249 mana
+40 yd range
+instant cast
+burn away 1 harmful magic effect and 1 disease effect from an ally.
+id 520149
+characteradvancement id 31276]]
+check("a durationless, cooldownless dispel is still skipped",
+  Classify(520149, BURN_IMPURITIES, 0) == nil)
+check("no duration reads as zero", ns.Scanner._ParseDuration(BURN_IMPURITIES) == 0)
+
+-- A real cooldown still wins: this rule is the fallback, not a replacement.
+check("a cooldown still classifies ahead of the aura rule",
+  Classify(555008, "deal damage for 20 sec.\n45 sec cooldown", 45) == "essential")
+-- Below MIN_AURA_DURATION nothing is suggested. (Deliberately free of utility
+-- keywords: "snare"/"stun" would classify as utility before this rule runs.)
+check("very short auras are ignored",
+  Classify(555009, "increases your damage by 5% for 2 sec.", 0) == nil)
+
 -- Rank duplicates: the spellbook lists every learned rank, and the old
 -- ID-keyed dedupe let each one become its own suggestion (the report showed
 -- Inferno Barrier five times).

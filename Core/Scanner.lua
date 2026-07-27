@@ -1,12 +1,19 @@
--- Hybrid spellbook scanner: finds active spells, reads cooldowns from
--- tooltips, classifies into Essential/Defensives/Utility, and emits
--- suggestions the user confirms. Never touches bars without confirmation.
+-- Hybrid spellbook scanner: finds active spells, reads cooldowns and aura
+-- durations from tooltips, classifies them onto a bar, and emits suggestions
+-- the user confirms. Never touches bars without confirmation.
 local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local Scanner = {}
 ns.Scanner = Scanner
 
 local MIN_ESSENTIAL_CD = 10      -- seconds; shorter cooldowns are not suggested
 local MIN_DEFENSIVE_CD = 20
+local MIN_AURA_DURATION = 5      -- seconds; below this an aura is not worth a bar
+
+-- Whether a timed aura lands on the target or on you, which decides between the
+-- Target DoTs bar and the Buffs bar.
+local ENEMY_WORDS = {
+  "an enemy", "the enemy", "enemies", "your target", "target for",
+}
 
 local scanTip -- hidden tooltip for cooldown/keyword parsing
 
@@ -22,9 +29,10 @@ local UTILITY_WORDS = {
 --------------------------------------------------------------------------------
 -- Tooltip parsing
 --------------------------------------------------------------------------------
--- Raw tooltip lines, prefixed with where they came from. Kept separate from
--- TooltipText so /cdm scan tip can show the exact wording: the cooldown regexes
--- below are guesses about Ascension's phrasing until seen against real text.
+-- Raw tooltip lines, tagged with the side they came from. Kept separate from
+-- TooltipText so /cdm scan tip can show the exact wording -- that is how the
+-- phrasing the regexes below rely on was established, and how to re-check it
+-- if a patch changes it.
 local function TooltipLines(spellID)
   if not scanTip then
     scanTip = CreateFrame("GameTooltip", "CoACDMScanTooltip", nil, "GameTooltipTemplate")
@@ -64,6 +72,16 @@ local function ParseCooldown(tooltipText)
   return 0
 end
 
+-- Ascension states aura length as "for 19 sec" / "for 2 min". Anchored on the
+-- word "for" so a tick rate ("every 3 sec") is not mistaken for the duration.
+local function ParseDuration(tooltipText)
+  local min = tooltipText:match("for ([%d%.]+) min")
+  if min then return tonumber(min) * 60 end
+  local sec = tooltipText:match("for ([%d%.]+) sec")
+  if sec then return tonumber(sec) end
+  return 0
+end
+
 local function HasAny(text, words)
   for _, word in ipairs(words) do
     if text:find(word, 1, true) or text:match(word) then return true end
@@ -85,6 +103,13 @@ local function Classify(spellID, tooltipText, cooldown)
   if cooldown >= MIN_ESSENTIAL_CD then
     return "essential"
   end
+  -- Fallback for spells with no cooldown at all: a spec's DoTs and self-buffs
+  -- never had one, so the cooldown rules above could not see them even though a
+  -- 19s DoT is precisely what a duration bar exists to show. Verified against
+  -- live tooltips: Blaze has no cooldown line, only "... for 19 sec".
+  if ParseDuration(tooltipText) >= MIN_AURA_DURATION then
+    return HasAny(tooltipText, ENEMY_WORDS) and "dots" or "buffs"
+  end
   return nil
 end
 
@@ -92,6 +117,9 @@ local CATEGORY_VIEWER = {
   essential = "Essential",
   defensives = "Defensives",
   utility = "Utility",
+  -- Timed auras go to the duration bars, not an icon row
+  dots = "Target DoTs",
+  buffs = "Buffs",
 }
 
 --------------------------------------------------------------------------------
@@ -114,24 +142,24 @@ local function CollectSpellbook(skip)
     local tabName, _, offset, numSpells = GetSpellTabInfo(tab)
     tabName = tabName or ("Tab " .. tab)
     if not (skip and skip[tabName]) then
-    for i = offset + 1, offset + numSpells do
-      if not IsPassiveSpell(i, BOOKTYPE_SPELL) then
-        local link = GetSpellLink(i, BOOKTYPE_SPELL)
-        local spellID = link and tonumber(link:match("spell:(%d+)"))
-        if spellID then
-          local name, rank, icon = GetSpellInfo(spellID)
-          if not name then
-            name, rank = GetSpellName(i, BOOKTYPE_SPELL)
-          end
-          if name then
-            entries[#entries + 1] = {
-              id = spellID, name = name, icon = icon,
-              rank = rank or "", tab = tab, tabName = tabName, index = i,
-            }
+      for i = offset + 1, offset + numSpells do
+        if not IsPassiveSpell(i, BOOKTYPE_SPELL) then
+          local link = GetSpellLink(i, BOOKTYPE_SPELL)
+          local spellID = link and tonumber(link:match("spell:(%d+)"))
+          if spellID then
+            local name, rank, icon = GetSpellInfo(spellID)
+            if not name then
+              name, rank = GetSpellName(i, BOOKTYPE_SPELL)
+            end
+            if name then
+              entries[#entries + 1] = {
+                id = spellID, name = name, icon = icon,
+                rank = rank or "", tab = tab, tabName = tabName, index = i,
+              }
+            end
           end
         end
       end
-    end
     end
   end
   return entries
@@ -304,7 +332,7 @@ function Scanner:Debug()
       skip[tab.name] and "|cffff5555SKIPPED|r" or "scanned"))
   end
 
-  local counts = { suggested = 0, ["no-cooldown"] = 0, ["dup-rank"] = 0,
+  local counts = { suggested = 0, ["no-timer"] = 0, ["dup-rank"] = 0,
     ["on-bar"] = 0, excluded = 0, ["not-CA"] = 0 }
   local lines = {}
   for _, entry in ipairs(entries) do
@@ -319,10 +347,10 @@ function Scanner:Debug()
     elseif FilteredOut(scanner, keeper) then
       verdict = "not-CA"
     else
-      -- Run the real classification: anything without a long enough cooldown
-      -- is dropped by Classify, which is why more spells reach this point than
-      -- ever reach the suggestions window.
-      verdict = Inspect(entry.id) and "suggested" or "no-cooldown"
+      -- Run the real classification. "no-timer" means Classify found neither a
+      -- long enough cooldown nor a trackable aura duration, so there is nothing
+      -- a bar could show -- not that the spell was filtered out.
+      verdict = Inspect(entry.id) and "suggested" or "no-timer"
     end
     counts[verdict] = (counts[verdict] or 0) + 1
     if verdict ~= "dup-rank" then
@@ -335,8 +363,8 @@ function Scanner:Debug()
         tostring(cd or 0), tostring(Scanner.AdvancementVerdict(keeper)), verdict)
     end
   end
-  ns:Print(("%d slots: %d suggested, %d no-cooldown, %d dup-rank, %d on-bar, %d excluded, %d not-CA"):format(
-    #entries, counts.suggested, counts["no-cooldown"], counts["dup-rank"],
+  ns:Print(("%d slots: %d suggested, %d no-timer, %d dup-rank, %d on-bar, %d excluded, %d not-CA"):format(
+    #entries, counts.suggested, counts["no-timer"], counts["dup-rank"],
     counts["on-bar"], counts.excluded, counts["not-CA"]))
   -- Rank duplicates are omitted from the per-spell list: they were 3/4 of the
   -- output and pushed everything else out of the chat scrollback.
@@ -437,3 +465,4 @@ Scanner._ParseCooldown = ParseCooldown
 Scanner._Classify = Classify
 Scanner._CollectSpellbook = CollectSpellbook
 Scanner._DedupeByName = DedupeByName
+Scanner._ParseDuration = ParseDuration

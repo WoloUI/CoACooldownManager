@@ -14,6 +14,8 @@ local CATEGORY_VIEWER = {
   essential = "Essential",
   defensives = "Defensives",
   utility = "Utility",
+  dots = "Target DoTs",
+  buffs = "Buffs",
 }
 
 local ROW_HEIGHT = 26
