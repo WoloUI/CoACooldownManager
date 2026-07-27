@@ -146,6 +146,13 @@ function ns:Print(msg)
   DEFAULT_CHAT_FRAME:AddMessage("|cffd8a24aCoACDM:|r " .. tostring(msg))
 end
 
+-- "/cdm scan debug" -> "scan", "debug". The handler used to keep only the
+-- first word, so sub-commands had nowhere to go.
+function ns.ParseSlash(msg)
+  local cmd, rest = ((msg or ""):lower()):match("^%s*(%S*)%s*(.-)%s*$")
+  return cmd or "", rest or ""
+end
+
 function ns.FormatTime(seconds)
   if seconds >= 3600 then
     return string.format("%dh", math.floor(seconds / 3600 + 0.5))
@@ -1327,14 +1334,18 @@ end)
 --------------------------------------------------------------------------------
 SLASH_COACDM1 = "/cdm"
 SLASH_COACDM2 = "/coacdm"
-SlashCmdList["COACDM"] = function(msg)
-  msg = (msg or ""):lower():match("^%s*(%S*)")
+SlashCmdList["COACDM"] = function(input)
+  local msg, arg = ns.ParseSlash(input)
   if msg == "edit" then
     ns.EditMode:Toggle()
   elseif msg == "test" then
     ns.TestMode:Toggle()
   elseif msg == "scan" then
-    ns.Scanner:Scan(true)
+    if arg == "debug" then
+      ns.Scanner:Debug()
+    else
+      ns.Scanner:Scan(true)
+    end
   elseif msg == "reset" then
     ns.DB:ResetProfile()
   elseif msg == "resetextra" then

@@ -208,6 +208,39 @@ function Scanner:Scan(force)
   return results
 end
 
+-- Prints why every spellbook entry was kept or dropped. The CA heuristic and
+-- the client's rank layout cannot be checked offline, so they get inspected
+-- here before being trusted.
+function Scanner:Debug()
+  local scanner = ns.profile.scanner
+  local entries = CollectSpellbook()
+  local keep = {}
+  for _, entry in ipairs(DedupeByName(entries)) do
+    keep[entry.id] = true
+  end
+  ns:Print(("spellbook: %d active entries, classOnly=%s, %d excluded"):format(
+    #entries, tostring(scanner.classOnly ~= false), #self:ExcludedNames()))
+  for _, entry in ipairs(entries) do
+    local verdict
+    if not keep[entry.id] then
+      verdict = "dup-rank"
+    elseif ElementExists(entry.id) then
+      verdict = "on-bar"
+    elseif Excluded(scanner, entry.name) then
+      verdict = "excluded"
+    elseif FilteredOut(scanner, entry.id) then
+      verdict = "not-CA"
+    else
+      verdict = "scanned"
+    end
+    local ca = Scanner.IsAdvancementSpell(entry.id)
+    ns:Print(("  tab %d #%-3d %s %s | id=%d ca=%s -> %s"):format(
+      entry.tab, entry.index, entry.name,
+      entry.rank ~= "" and ("(" .. entry.rank .. ")") or "",
+      entry.id, ca == nil and "unknown" or tostring(ca), verdict))
+  end
+end
+
 function Scanner:Accept(item)
   local viewerName = CATEGORY_VIEWER[item.category] or "Essential"
   local viewer = ns.DB:GetViewer(viewerName)
