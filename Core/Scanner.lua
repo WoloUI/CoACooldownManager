@@ -22,21 +22,34 @@ local UTILITY_WORDS = {
 --------------------------------------------------------------------------------
 -- Tooltip parsing
 --------------------------------------------------------------------------------
-local function TooltipText(spellID)
+-- Raw tooltip lines, prefixed with where they came from. Kept separate from
+-- TooltipText so /cdm scan tip can show the exact wording: the cooldown regexes
+-- below are guesses about Ascension's phrasing until seen against real text.
+local function TooltipLines(spellID)
   if not scanTip then
     scanTip = CreateFrame("GameTooltip", "CoACDMScanTooltip", nil, "GameTooltipTemplate")
   end
   scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
   scanTip:ClearLines()
   local ok = pcall(scanTip.SetHyperlink, scanTip, "spell:" .. spellID)
-  if not ok then return "" end
-  local parts = {}
+  if not ok then return {} end
+  local lines = {}
   for i = 1, scanTip:NumLines() do
     for _, side in ipairs({ "TextLeft", "TextRight" }) do
       local fs = _G["CoACDMScanTooltip" .. side .. i]
       local text = fs and fs:GetText()
-      if text then parts[#parts + 1] = text end
+      if text then
+        lines[#lines + 1] = { side = side, index = i, text = text }
+      end
     end
+  end
+  return lines
+end
+
+local function TooltipText(spellID)
+  local parts = {}
+  for _, line in ipairs(TooltipLines(spellID)) do
+    parts[#parts + 1] = line.text
   end
   return table.concat(parts, "\n"):lower()
 end
@@ -313,9 +326,13 @@ function Scanner:Debug()
     end
     counts[verdict] = (counts[verdict] or 0) + 1
     if verdict ~= "dup-rank" then
-      lines[#lines + 1] = ("  %-18s %-22s id=%-8d ca=%s -> %s"):format(
+      -- cd= is the cooldown ParseCooldown found in the tooltip. A real ability
+      -- reading cd=0 means the tooltip wording is not being matched, not that
+      -- the spell has no cooldown: /cdm scan tip <name> shows the raw text.
+      local _, cd = Inspect(entry.id)
+      lines[#lines + 1] = ("  %-18s %-22s id=%-8d cd=%-5s ca=%s -> %s"):format(
         entry.tabName or ("tab " .. entry.tab), entry.name, entry.id,
-        tostring(Scanner.AdvancementVerdict(keeper)), verdict)
+        tostring(cd or 0), tostring(Scanner.AdvancementVerdict(keeper)), verdict)
     end
   end
   ns:Print(("%d slots: %d suggested, %d no-cooldown, %d dup-rank, %d on-bar, %d excluded, %d not-CA"):format(
@@ -330,6 +347,45 @@ end
 -- only supplies the default. Goes through AddCapturedSpell so a suggestion
 -- accepted onto a duration bar becomes a buff/debuff element rather than a
 -- cooldown, exactly like a drag or a shift+click would.
+-- /cdm scan tip <name or id>: the raw tooltip, line by line, plus what
+-- ParseCooldown made of it. The only way to fix a cooldown regex is to see the
+-- server's actual wording, which cannot be inspected outside the client.
+function Scanner:DumpTooltip(query)
+  local id = tonumber(query)
+  local name
+  if id then
+    name = GetSpellInfo(id)
+  else
+    id, name = ns.ResolveSpell(query)
+    if not id then
+      -- Not a known spell name: fall back to a spellbook search so partial or
+      -- differently-cased input still lands somewhere useful.
+      local needle = tostring(query or ""):lower()
+      for _, entry in ipairs(CollectSpellbook()) do
+        if entry.name:lower():find(needle, 1, true) then
+          id, name = entry.id, entry.name
+          break
+        end
+      end
+    end
+  end
+  if not id then
+    ns:Print(("no spell matched '%s' - try the exact name or a spell id."):format(tostring(query)))
+    return
+  end
+  ns:Print(("tooltip for %s (id=%d):"):format(name or "?", id))
+  local lines = TooltipLines(id)
+  if #lines == 0 then
+    ns:Print("  |cffff5555the client returned no tooltip lines for that spell.|r")
+  end
+  for _, line in ipairs(lines) do
+    ns:Print(("  %s%d: %s"):format(line.side == "TextRight" and "R" or "L", line.index, line.text))
+  end
+  local category, cd = Inspect(id)
+  ns:Print(("  parsed cooldown = %s, category = %s"):format(
+    tostring(cd or 0), tostring(category)))
+end
+
 function Scanner:Accept(item)
   local viewerName = item.target or CATEGORY_VIEWER[item.category] or "Essential"
   local viewer = ns.DB:GetViewer(viewerName)

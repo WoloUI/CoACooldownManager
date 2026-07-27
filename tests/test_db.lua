@@ -28,6 +28,21 @@ check("essential anchored to power", ns.DB:GetViewer("Essential").anchor.parent 
 check("alerts viewer exists", ns.DB:GetViewer("Alerts") ~= nil)
 check("default profile has an exclusion set", type(ns.profile.scanner.excluded) == "table")
 check("default profile has a skipped-tab set", type(ns.profile.scanner.skipTabs) == "table")
+check("vanity and general tabs are skipped out of the box",
+  ns.profile.scanner.skipTabs["Ascension Vanity Items"] == true
+  and ns.profile.scanner.skipTabs["General"] == true)
+
+-- Seeding is once-only: re-enabling a tab must survive the next activation.
+do
+  local scanner = { seen = {}, rejected = {}, excluded = {} }
+  ns.DB.SeedSkipTabs(scanner)
+  check("seeding marks the profile", scanner.tabDefaults == true)
+  scanner.skipTabs["General"] = nil -- user re-enables it
+  ns.DB.SeedSkipTabs(scanner)
+  check("re-seeding does not undo the user's choice", scanner.skipTabs["General"] == nil)
+  check("re-seeding leaves the other default alone",
+    scanner.skipTabs["Ascension Vanity Items"] == true)
+end
 
 -- v1 -> v2 migration adds the Alerts viewer to old profiles
 do

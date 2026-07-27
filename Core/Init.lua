@@ -1417,8 +1417,15 @@ SlashCmdList["COACDM"] = function(input)
   elseif msg == "test" then
     ns.TestMode:Toggle()
   elseif msg == "scan" then
-    if arg == "debug" then
+    local sub, rest = ns.ParseSlash(arg)
+    if sub == "debug" then
       ns.Scanner:Debug()
+    elseif sub == "tip" then
+      if rest == "" then
+        ns:Print("usage: /cdm scan tip <spell name or id>")
+      else
+        ns.Scanner:DumpTooltip(rest)
+      end
     else
       ns.Scanner:Scan(true)
     end

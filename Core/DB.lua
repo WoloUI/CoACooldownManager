@@ -75,12 +75,33 @@ local function DefaultTracking()
   return { enabled = false, indicators = {} }
 end
 
+-- Spellbook tabs that hold no abilities: Ascension's own vanity-item tab plus
+-- the general tab (racials, PvP toggles, mounts, hearthstones). Those produced
+-- 8 of 20 scan suggestions -- "For the Alliance!", "Mercenary for Hire!",
+-- "Stone of Retreat: Everlook". Character Advancement cannot tell them apart
+-- from real spells, the TAB can. Names come straight from the client.
+local DEFAULT_SKIP_TABS = { ["General"] = true, ["Ascension Vanity Items"] = true }
+
+-- Seeded ONCE per profile, tracked by `tabDefaults`: re-applying the defaults on
+-- every activation would silently undo the user re-enabling a tab.
+function DB.SeedSkipTabs(scanner)
+  if type(scanner) ~= "table" then return end
+  scanner.skipTabs = scanner.skipTabs or {}
+  if scanner.tabDefaults then return end
+  scanner.tabDefaults = true
+  for name in pairs(DEFAULT_SKIP_TABS) do
+    scanner.skipTabs[name] = true
+  end
+end
+
 local function DefaultProfile()
-  return {
+  local profile = {
     viewers = DefaultViewers(),
     scanner = { seen = {}, rejected = {}, excluded = {}, skipTabs = {} },
     tracking = DefaultTracking(),
   }
+  DB.SeedSkipTabs(profile.scanner)
+  return profile
 end
 
 -- The "out of range" reminder type was replaced by the standalone OUT OF RANGE
@@ -282,7 +303,7 @@ function DB:ActivateProfile()
     profile = last and ns.CopyTable(last) or DefaultProfile()
     profile.scanner = profile.scanner or { seen = {}, rejected = {}, excluded = {} }
     profile.scanner.excluded = profile.scanner.excluded or {}
-    profile.scanner.skipTabs = profile.scanner.skipTabs or {}
+    DB.SeedSkipTabs(profile.scanner)
     self.char.specs[specKey] = profile
   end
   -- Profiles created before the Tracking tab existed
@@ -353,7 +374,7 @@ function DB:AssignProfile(specKey, profileName)
     local copy = ns.CopyTable(named)
     copy.scanner = copy.scanner or { seen = {}, rejected = {}, excluded = {} }
     copy.scanner.excluded = copy.scanner.excluded or {}
-    copy.scanner.skipTabs = copy.scanner.skipTabs or {}
+    DB.SeedSkipTabs(copy.scanner)
     copy.tracking = copy.tracking or DefaultTracking()
     self.char.specs[specKey] = copy
     if specKey == self:GetSpecKey() then
@@ -647,7 +668,7 @@ function DB:ImportProfile(text)
 
   data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {}, excluded = {} }
   data.profile.scanner.excluded = data.profile.scanner.excluded or {}
-  data.profile.scanner.skipTabs = data.profile.scanner.skipTabs or {}
+  DB.SeedSkipTabs(data.profile.scanner)
   data.profile.tracking = data.profile.tracking or DefaultTracking()
   -- Older exports can still carry rows of both retired reminder types
   DB.StripRangeReminders(data.profile)
