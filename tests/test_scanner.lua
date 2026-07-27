@@ -100,4 +100,42 @@ ns.Scanner:Reject({ spellID = 1003, name = "Inferno Barrier" })
 ns.Scanner:ClearExclusions()
 check("clear all empties the set", #ns.Scanner:ExcludedNames() == 0)
 
+-- Non-ability spells (racials, Ascension vanity items) have no Character
+-- Advancement internal ID; real abilities do.
+_G.C_CharacterAdvancement = {
+  GetInternalID = function(spellID)
+    if spellID == 1003 then return 55501 end
+    return nil
+  end,
+}
+check("CA spell detected", ns.Scanner.IsAdvancementSpell(1003) == true)
+check("non-CA spell detected", ns.Scanner.IsAdvancementSpell(3001) == false)
+
+_G.C_CharacterAdvancement = nil
+check("missing API returns unknown", ns.Scanner.IsAdvancementSpell(1003) == nil)
+
+_G.C_CharacterAdvancement = { GetInternalID = function() error("boom") end }
+check("erroring API returns unknown", ns.Scanner.IsAdvancementSpell(1003) == nil)
+
+-- Filtering: on by default, unknown never filters, and it can be switched off.
+_G.C_CharacterAdvancement = {
+  GetInternalID = function(spellID)
+    if spellID == 1003 then return 55501 end
+    return nil
+  end,
+}
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {} }
+results = ns.Scanner:Scan(true)
+check("classOnly defaults to on and drops the non-CA spell",
+  #results == 1 and results[1].name == "Inferno Barrier")
+
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {}, classOnly = false }
+results = ns.Scanner:Scan(true)
+check("classOnly off keeps everything", #results == 2)
+
+_G.C_CharacterAdvancement = nil
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {} }
+results = ns.Scanner:Scan(true)
+check("no CA API means no filtering", #results == 2)
+
 return T

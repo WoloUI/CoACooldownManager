@@ -151,6 +151,24 @@ local function Excluded(scanner, name)
   return scanner.excluded and scanner.excluded[name] and true or false
 end
 
+-- Ascension is classless, so there is no class tab to filter on. Spells
+-- learned through the Character Advancement tree carry a CA internal ID;
+-- racials ("For the Alliance!") and vanity-item spells do not. Returns nil
+-- when the client cannot answer -- unknown must never filter, so a missing API
+-- degrades to the old behaviour instead of emptying the scan.
+function Scanner.IsAdvancementSpell(spellID)
+  local CA = _G.C_CharacterAdvancement
+  if not CA or not CA.GetInternalID then return nil end
+  local ok, internalID = pcall(CA.GetInternalID, spellID)
+  if not ok then return nil end
+  return internalID and true or false
+end
+
+local function FilteredOut(scanner, spellID)
+  if scanner.classOnly == false then return false end
+  return Scanner.IsAdvancementSpell(spellID) == false
+end
+
 -- force=true rescans everything not already on a bar (manual /cdm scan).
 function Scanner:Scan(force)
   local scanner = ns.profile.scanner
@@ -159,6 +177,7 @@ function Scanner:Scan(force)
     local spellID = entry.id
     local skip = ElementExists(spellID)
       or Excluded(scanner, entry.name)
+      or FilteredOut(scanner, spellID)
       or (not force and (scanner.seen[spellID] or scanner.rejected[spellID]))
     if not skip then
       local name, icon = entry.name, entry.icon
