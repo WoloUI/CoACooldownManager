@@ -100,14 +100,14 @@ function PowerBar:Build(frame, cfg)
   frame.bar2.text:SetFont(font, ns.FontSize(math.max((p.fontSize or 12) - 1, 8)), "OUTLINE")
 end
 
-local function UpdateResourceBar(holder, data, showTicks, colorOverride, showLabel)
+local function UpdateResourceBar(holder, data, showTicks, colorOverride, showLabel, textMode)
   local color = colorOverride or data.color
   holder.bar:SetMinMaxValues(0, data.max)
   ns.SetBarValueSmooth(holder.bar, data.cur) -- eased, ElvUI-style
   holder.bar:SetStatusBarColor(color[1], color[2], color[3])
-  local text = data.cur .. " / " .. data.max
+  local text = ns.FormatPowerText(data.cur, data.max, textMode)
   if showLabel then
-    text = text .. "  " .. data.label
+    text = text ~= "" and (text .. "  " .. data.label) or data.label
   end
   holder.text:SetText(text)
   LayoutTicks(holder, showTicks and data.ticks)
@@ -119,12 +119,12 @@ function PowerBar:Update(frame, cfg)
   local showLabel = p.showLabel ~= false
   local height = 0
 
-  UpdateResourceBar(frame.bar1, ns.Power:GetBar(type1), p.showTicks, p.color1, showLabel)
+  UpdateResourceBar(frame.bar1, ns.Power:GetBar(type1), p.showTicks, p.color1, showLabel, p.text1)
   height = height + (p.height or 26)
 
   if type2 then
     frame.bar2:Show()
-    UpdateResourceBar(frame.bar2, ns.Power:GetBar(type2), p.showTicks, p.color2, showLabel)
+    UpdateResourceBar(frame.bar2, ns.Power:GetBar(type2), p.showTicks, p.color2, showLabel, p.text2)
     height = height + 3 + (p.subHeight or 18)
   else
     frame.bar2:Hide()

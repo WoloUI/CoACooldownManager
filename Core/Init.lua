@@ -296,6 +296,25 @@ function ns.GetFrameStrata()
   return VALID_STRATA[strata] and strata or "MEDIUM"
 end
 
+-- Power bar text. "curmax" is the historical default; percent is what casters
+-- asked for on mana, and "cur" suits energy where the max never changes.
+local function ClampPercent(value)
+  if value < 0 then return 0 end
+  if value > 100 then return 100 end
+  return value
+end
+
+function ns.FormatPowerText(cur, max, mode)
+  cur, max = cur or 0, max or 0
+  if mode == "none" then return "" end
+  if mode == "cur" then return tostring(cur) end
+  if mode == "percent" then
+    if max <= 0 then return "0%" end
+    return ClampPercent(math.floor(cur / max * 100 + 0.5)) .. "%"
+  end
+  return cur .. " / " .. max
+end
+
 -- Short amounts for shield/absorb values: 897, 12.4k, 1.2M
 function ns.FormatShortNumber(n)
   n = n or 0

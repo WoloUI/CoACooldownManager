@@ -60,6 +60,12 @@ local POWER_TYPE_OPTIONS = {
   { text = "Runic Power", value = 6 },
   { text = "None", value = "none" },
 }
+local POWER_TEXT_OPTIONS = {
+  { text = "Current / Max", value = "curmax" },
+  { text = "Current", value = "cur" },
+  { text = "Percent", value = "percent" },
+  { text = "Hidden", value = "none" },
+}
 local REMINDER_TYPE_OPTIONS = {
   { text = "My aura (ID)", value = "aura" },
   { text = "Weapon enchant", value = "weapon" },
@@ -385,6 +391,18 @@ function Config:BuildControls()
     Touch()
   end)
   c.powerBar2:SetOptions(POWER_TYPE_OPTIONS)
+  c.text1Label = W.CreateLabel(parent, "Text 1", 12, W.colors.inkDim)
+  c.powerText1 = W.CreateDropdown(parent, 110, function(_, value)
+    SelectedViewer().power.text1 = value
+    Touch()
+  end)
+  c.powerText1:SetOptions(POWER_TEXT_OPTIONS)
+  c.text2Label = W.CreateLabel(parent, "Text 2", 12, W.colors.inkDim)
+  c.powerText2 = W.CreateDropdown(parent, 110, function(_, value)
+    SelectedViewer().power.text2 = value
+    Touch()
+  end)
+  c.powerText2:SetOptions(POWER_TEXT_OPTIONS)
   c.powerWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
   c.powerW = W.CreateEditBox(parent, 46, 20, function(_, text)
     SelectedViewer().power.width = tonumber(text) or 340
@@ -2184,6 +2202,18 @@ function Config:Render()
     c.powerH:SetPoint("TOPLEFT", C2, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
     c.powerSubHLabel:SetPoint("TOPLEFT", L3, y - 4); c.powerSubHLabel:Show()
     c.powerSubH:SetPoint("TOPLEFT", C3, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
+    y = y - 28
+    -- Row: Text 1 [dd]      Text 2 [dd]
+    c.text1Label:SetPoint("TOPLEFT", L1, y - 4); c.text1Label:Show()
+    c.powerText1:SetPoint("TOPLEFT", C1, y)
+    c.powerText1:SetValue(viewer.power.text1 or "curmax")
+    c.powerText1:Show()
+    if type2 then
+      c.text2Label:SetPoint("TOPLEFT", LW, y - 4); c.text2Label:Show()
+      c.powerText2:SetPoint("TOPLEFT", CW, y)
+      c.powerText2:SetValue(viewer.power.text2 or "curmax")
+      c.powerText2:Show()
+    end
     y = y - 28
     -- Row: toggles, aligned to the control column
     c.ticks:SetPoint("TOPLEFT", C1, y); c.ticks:SetChecked(viewer.power.showTicks); c.ticks:Show()
