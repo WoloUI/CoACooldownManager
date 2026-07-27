@@ -168,6 +168,117 @@ function EditMode:Toggle()
   end
 end
 
+--------------------------------------------------------------------------------
+-- Spell capture from the spellbook (shift+click)
+--
+-- Ascension replaces the Blizzard spellbook with its own frame, so the buttons
+-- are hooked by name. Buttons are recycled across pages, so one hook each is
+-- enough. HookScript, never SetScript: the client's own click behaviour has to
+-- survive.
+--------------------------------------------------------------------------------
+local SpellCapture = {}
+ns.SpellCapture = SpellCapture
+
+local BUTTON_PREFIXES = {
+  "AscensionSpellbookFrameContentSpellsSpellButton",
+  "AscensionSpellbookFrameContentPetSpellsSpellButton",
+  "SpellButton", -- stock 3.3.5 spellbook, in case the custom frame is absent
+}
+local BUTTONS_PER_PAGE = 12
+
+-- The button's spell, with the source that answered. The custom frame cannot
+-- be inspected offline, hence the chain: /cdm spellbook prints what wins.
+function SpellCapture.ButtonSpell(button)
+  if not button then return nil end
+  if button.spellID then
+    local id, name, icon = ns.ResolveSpell(button.spellID)
+    if name then return id, name, icon, "button.spellID" end
+  end
+  if _G.SpellBook_GetSpellID and button.GetID then
+    local ok, slot = pcall(_G.SpellBook_GetSpellID, button:GetID())
+    if ok and slot then
+      local link = GetSpellLink and GetSpellLink(slot, BOOKTYPE_SPELL)
+      local linkId = link and tonumber(link:match("spell:(%d+)"))
+      if linkId then
+        local id, name, icon = ns.ResolveSpell(linkId)
+        if name then return id, name, icon, "SpellBook_GetSpellID" end
+      end
+    end
+  end
+  local frameName = button.GetName and button:GetName()
+  local nameText = frameName and _G[frameName .. "SpellName"]
+  local text = nameText and nameText.GetText and nameText:GetText()
+  if text and text ~= "" then
+    local id, name, icon = ns.ResolveSpell(text)
+    if name then return id, name, icon, "SpellName text" end
+  end
+  return nil
+end
+
+local function OnSpellButtonClick(button)
+  if not IsShiftKeyDown() then return end
+  -- shift+click in the spellbook also means "insert a link" when a chat box is
+  -- open; leave that alone
+  if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() then return end
+  local viewer = ns.Config and ns.Config.CaptureTarget and ns.Config:CaptureTarget()
+  if not viewer then
+    ns:Print("open the config panel and select a spell bar first, then shift+click to add spells to it.")
+    return
+  end
+  local id, name, icon = SpellCapture.ButtonSpell(button)
+  if not name then
+    ns:Print("could not read that spellbook button - run /cdm spellbook and send the output.")
+    return
+  end
+  ns.CaptureSpell(viewer, id, name, icon)
+end
+
+local hooked = {}
+
+function SpellCapture:HookButtons()
+  for _, prefix in ipairs(BUTTON_PREFIXES) do
+    local count = prefix == "AscensionSpellbookFrameContentSpellsSpellButton"
+      and (_G.SPELLS_PER_PAGE or BUTTONS_PER_PAGE) or BUTTONS_PER_PAGE
+    for i = 1, count do
+      local button = _G[prefix .. i]
+      if button and not hooked[button] and button.HookScript then
+        button:HookScript("OnClick", OnSpellButtonClick)
+        hooked[button] = true
+      end
+    end
+  end
+end
+
+-- /cdm spellbook: which resolver answers for the buttons currently on screen.
+function SpellCapture:Diagnose()
+  self:HookButtons()
+  local found = 0
+  for _, prefix in ipairs(BUTTON_PREFIXES) do
+    for i = 1, (_G.SPELLS_PER_PAGE or BUTTONS_PER_PAGE) do
+      local button = _G[prefix .. i]
+      if button then
+        found = found + 1
+        local id, name, _, source = SpellCapture.ButtonSpell(button)
+        ns:Print(("  %s%d: %s (id=%s) via %s"):format(
+          prefix, i, name or "|cffff5555unresolved|r", tostring(id), source or "-"))
+      end
+    end
+  end
+  if found == 0 then
+    ns:Print("no spellbook buttons found - open your spellbook first.")
+  else
+    local viewer = ns.Config and ns.Config.CaptureTarget and ns.Config:CaptureTarget()
+    ns:Print(("%d buttons hooked; capture target: %s"):format(
+      found, viewer and viewer.name or "|cffff5555none (open the config panel and pick a bar)|r"))
+  end
+end
+
+ns:On("READY", function()
+  SpellCapture:HookButtons()
+  -- the spellbook frame can be created after login
+  ns:RegisterEvent("PLAYER_ENTERING_WORLD", function() SpellCapture:HookButtons() end)
+end)
+
 ns:On("READY", function()
   ns:On("PROFILE_CHANGED", function()
     if EditMode.active then EditMode:RefreshOverlays() end

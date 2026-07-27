@@ -2611,6 +2611,7 @@ end
 --------------------------------------------------------------------------------
 function Config:Toggle()
   if not win then BuildWindow() end
+  if ns.SpellCapture then ns.SpellCapture:HookButtons() end
   if win:IsShown() then
     win:Hide()
   else

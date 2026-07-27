@@ -1418,6 +1418,12 @@ SlashCmdList["COACDM"] = function(input)
     if ns.Tracking then ns.Tracking:Debug() end
   elseif msg == "range" then
     ns.RangeAlert:Diagnose()
+  elseif msg == "spellbook" then
+    if ns.SpellCapture then
+      ns.SpellCapture:Diagnose()
+    else
+      ns:Print("spell capture is not loaded (restart the client after updating).")
+    end
   elseif msg == "trinket" then
     -- Helps configure trinket proc glow/ICD: shows the auto-detected proc
     -- spell and every buff currently on you, so you can copy the exact name
