@@ -126,11 +126,19 @@ end
 -- is rank-ascending, so the last slot with a given name is the highest rank.
 -- Suggestions store the name anyway, so the icon and cooldown keep following
 -- the current rank at runtime.
+-- The kept entry carries `ids`: every rank's spell ID, in book order. The
+-- Character Advancement lookup needs them (see AdvancementVerdict) because the
+-- CA entry is registered against the BASE rank only.
 local function DedupeByName(entries)
   local byName, order = {}, {}
   for _, entry in ipairs(entries) do
-    if byName[entry.name] == nil then
+    local previous = byName[entry.name]
+    if previous == nil then
       order[#order + 1] = entry.name
+      entry.ids = { entry.id }
+    else
+      entry.ids = previous.ids
+      entry.ids[#entry.ids + 1] = entry.id
     end
     byName[entry.name] = entry
   end
@@ -164,9 +172,28 @@ function Scanner.IsAdvancementSpell(spellID)
   return internalID and true or false
 end
 
-local function FilteredOut(scanner, spellID)
+-- Asks every rank, not just the one dedupe kept. The client registers the CA
+-- entry against the BASE rank: Inferno Barrier Rank 1 answers, Rank 6 does not.
+-- Checking only the kept (highest) rank reported every multi-rank ability as
+-- "not a class spell" and emptied the scan. One rank answering yes is enough;
+-- all-nil stays nil, because unknown must never filter.
+function Scanner.AdvancementVerdict(entry)
+  local sawAnswer = false
+  for _, id in ipairs(entry.ids or { entry.id }) do
+    local ca = Scanner.IsAdvancementSpell(id)
+    if ca == true then return true end
+    if ca == false then sawAnswer = true end
+  end
+  -- Spelled out, not `sawAnswer and false or nil`: that idiom can never yield
+  -- false (false or nil -> nil), which silently turned every answer into
+  -- "unknown" and disabled the filter entirely.
+  if sawAnswer then return false end
+  return nil
+end
+
+local function FilteredOut(scanner, entry)
   if scanner.classOnly == false then return false end
-  return Scanner.IsAdvancementSpell(spellID) == false
+  return Scanner.AdvancementVerdict(entry) == false
 end
 
 -- force=true rescans everything not already on a bar (manual /cdm scan).
@@ -177,7 +204,7 @@ function Scanner:Scan(force)
     local spellID = entry.id
     local skip = ElementExists(spellID)
       or Excluded(scanner, entry.name)
-      or FilteredOut(scanner, spellID)
+      or FilteredOut(scanner, entry)
       or (not force and (scanner.seen[spellID] or scanner.rejected[spellID]))
     if not skip then
       local name, icon = entry.name, entry.icon
@@ -214,30 +241,39 @@ end
 function Scanner:Debug()
   local scanner = ns.profile.scanner
   local entries = CollectSpellbook()
-  local keep = {}
+  local kept = {}
   for _, entry in ipairs(DedupeByName(entries)) do
-    keep[entry.id] = true
+    kept[entry.name] = entry
   end
-  ns:Print(("spellbook: %d active entries, classOnly=%s, %d excluded"):format(
-    #entries, tostring(scanner.classOnly ~= false), #self:ExcludedNames()))
+  local CA = _G.C_CharacterAdvancement
+  ns:Print(("spellbook: %d active entries, classOnly=%s, %d excluded, CA API %s"):format(
+    #entries, tostring(scanner.classOnly ~= false), #self:ExcludedNames(),
+    CA and "present" or "|cffff5555missing|r"))
   for _, entry in ipairs(entries) do
+    local keeper = kept[entry.name]
     local verdict
-    if not keep[entry.id] then
+    if keeper.id ~= entry.id then
       verdict = "dup-rank"
     elseif ElementExists(entry.id) then
       verdict = "on-bar"
     elseif Excluded(scanner, entry.name) then
       verdict = "excluded"
-    elseif FilteredOut(scanner, entry.id) then
+    elseif FilteredOut(scanner, keeper) then
       verdict = "not-CA"
     else
       verdict = "scanned"
     end
+    -- ca = this slot's own answer; any = the verdict across every rank, which
+    -- is what actually decides. known = the other CA signal, printed so a bad
+    -- filter can be re-aimed from real data instead of guesswork.
     local ca = Scanner.IsAdvancementSpell(entry.id)
-    ns:Print(("  tab %d #%-3d %s %s | id=%d ca=%s -> %s"):format(
+    local any = Scanner.AdvancementVerdict(keeper)
+    local known = CA and CA.IsKnownSpellID and select(2, pcall(CA.IsKnownSpellID, entry.id))
+    ns:Print(("  tab %d #%-3d %s %s | id=%d ca=%s any=%s known=%s -> %s"):format(
       entry.tab, entry.index, entry.name,
       entry.rank ~= "" and ("(" .. entry.rank .. ")") or "",
-      entry.id, ca == nil and "unknown" or tostring(ca), verdict))
+      entry.id, ca == nil and "unknown" or tostring(ca),
+      any == nil and "unknown" or tostring(any), tostring(known), verdict))
   end
 end
 

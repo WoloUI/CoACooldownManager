@@ -138,4 +138,53 @@ ns.profile.scanner = { seen = {}, rejected = {}, excluded = {} }
 results = ns.Scanner:Scan(true)
 check("no CA API means no filtering", #results == 2)
 
+-- The CA internal ID is registered against the spell's BASE rank, not every
+-- rank. Real client data from /cdm scan debug: Inferno Barrier Rank 1 (504380)
+-- answers, Rank 6 (582764) does not. Dedupe keeps the highest rank, so asking
+-- only about the KEPT id reported every multi-rank ability as "not a class
+-- spell" and the scan came back nearly empty.
+_G.__spellbookEntries = {
+  { id = 504380, name = "Inferno Barrier", rank = "Rank 1" },
+  { id = 535650, name = "Inferno Barrier", rank = "Rank 2" },
+  { id = 582764, name = "Inferno Barrier", rank = "Rank 6" },
+  { id = 803546, name = "Supernova", rank = "" },
+}
+_G.__spells = {
+  [504380] = { name = "Inferno Barrier", icon = "i1" },
+  [535650] = { name = "Inferno Barrier", icon = "i1" },
+  [582764] = { name = "Inferno Barrier", icon = "i1" },
+  [803546] = { name = "Supernova", icon = "i2" },
+}
+ns.SpellHints[582764] = "essential"
+ns.SpellHints[803546] = "essential"
+
+local ranked = ns.Scanner._DedupeByName(ns.Scanner._CollectSpellbook())
+check("dedupe records every rank's id", #ranked[1].ids == 3
+  and ranked[1].ids[1] == 504380 and ranked[1].ids[3] == 582764)
+check("dedupe still keeps the highest rank", ranked[1].id == 582764)
+check("a single-rank spell gets a one-entry id list",
+  #ranked[2].ids == 1 and ranked[2].ids[1] == 803546)
+
+_G.C_CharacterAdvancement = {
+  GetInternalID = function(spellID)
+    if spellID == 504380 then return 55501 end -- base rank only, like the client
+    return nil
+  end,
+}
+check("a CA entry on any rank marks the whole spell",
+  ns.Scanner.AdvancementVerdict(ranked[1]) == true)
+check("no CA entry on any rank stays false",
+  ns.Scanner.AdvancementVerdict(ranked[2]) == false)
+
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {} }
+results = ns.Scanner:Scan(true)
+check("a rank-1-only CA entry keeps the whole spell",
+  #results == 1 and results[1].name == "Inferno Barrier"
+  and results[1].spellID == 582764)
+
+-- A missing API on every rank is still "unknown", which must never filter.
+_G.C_CharacterAdvancement = nil
+check("unknown across every rank stays unknown",
+  ns.Scanner.AdvancementVerdict(ranked[1]) == nil)
+
 return T
