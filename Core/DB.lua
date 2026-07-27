@@ -301,11 +301,15 @@ function DB:ActivateProfile()
     -- so bars carry over and only spells need adjusting.
     local last = self.char.lastSpec and self.char.specs[self.char.lastSpec]
     profile = last and ns.CopyTable(last) or DefaultProfile()
-    profile.scanner = profile.scanner or { seen = {}, rejected = {}, excluded = {} }
-    profile.scanner.excluded = profile.scanner.excluded or {}
-    DB.SeedSkipTabs(profile.scanner)
     self.char.specs[specKey] = profile
   end
+  -- Back-fills for profiles saved before a field existed. These MUST run on
+  -- every activation, not just on creation: an already-saved profile never
+  -- enters the branch above, so putting the scanner defaults in there meant an
+  -- existing character never got them and kept scanning the junk tabs.
+  profile.scanner = profile.scanner or { seen = {}, rejected = {}, excluded = {} }
+  profile.scanner.excluded = profile.scanner.excluded or {}
+  DB.SeedSkipTabs(profile.scanner)
   -- Profiles created before the Tracking tab existed
   profile.tracking = profile.tracking or DefaultTracking()
   self.char.lastSpec = specKey

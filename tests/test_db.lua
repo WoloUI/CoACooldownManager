@@ -32,6 +32,23 @@ check("vanity and general tabs are skipped out of the box",
   ns.profile.scanner.skipTabs["Ascension Vanity Items"] == true
   and ns.profile.scanner.skipTabs["General"] == true)
 
+-- Regression: back-fills must reach an EXISTING profile, not only a new one.
+-- The seed originally sat inside ActivateProfile's "new spec" branch, so a
+-- profile that was already saved never received it and the junk tabs kept
+-- being scanned (Stone of Retreat / Resurrect in Capital City came back).
+do
+  local specKey = ns.DB:GetSpecKey()
+  ns.DB.char.specs[specKey].scanner = { seen = {}, rejected = {} } -- pre-upgrade shape
+  ns.DB:ActivateProfile()
+  local scanner = ns.profile.scanner
+  check("existing profile gets the exclusion set back-filled",
+    type(scanner.excluded) == "table")
+  check("existing profile gets the tab defaults seeded",
+    type(scanner.skipTabs) == "table"
+    and scanner.skipTabs["Ascension Vanity Items"] == true
+    and scanner.skipTabs["General"] == true)
+end
+
 -- Seeding is once-only: re-enabling a tab must survive the next activation.
 do
   local scanner = { seen = {}, rejected = {}, excluded = {} }
