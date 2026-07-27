@@ -1224,6 +1224,23 @@ function Config:BuildControls()
   c.hudEmpty = W.CreateLabel(parent, "Nothing hidden yet.", 11, W.colors.inkDim)
   c.hudRows = {}
 
+  -- Spell scan (per character: the scanner state lives in the profile)
+  c.scanHeader = W.CreateSection(parent, "SPELL SCAN (this character)")
+  c.scanClassOnly = W.CreateCheckbox(parent, "Only class/spec spells", function(_, checked)
+    ns.profile.scanner.classOnly = checked
+  end)
+  c.scanHint = W.CreateLabel(parent,
+    "Skips racials and Ascension vanity items (no Character Advancement entry). "
+    .. "Turn it off if a real ability is missing from the scan.", 10, W.colors.inkDim)
+  c.scanExcludedHeader = W.CreateSection(parent, "EXCLUDED SPELLS")
+  c.scanEmpty = W.CreateLabel(parent, "Nothing excluded yet. The X button in the scan window adds spells here.",
+    11, W.colors.inkDim)
+  c.scanClear = W.CreateButton(parent, "Clear all", 80, 20, function()
+    ns.Scanner:ClearExclusions()
+    Config:Render()
+  end)
+  c.scanRows = {}
+
   c.trigger = ns.TriggerBuilder:Create(parent)
 
   -- Utility buttons at the bottom of the sidebar. Stored on `win`, not in
@@ -1267,6 +1284,7 @@ local function HideAllControls()
   for _, row in ipairs(controls.specRows) do row:Hide() end
   for _, row in ipairs(controls.trackRows) do row:Hide() end
   for _, row in ipairs(controls.hudRows) do row:Hide() end
+  for _, row in ipairs(controls.scanRows) do row:Hide() end
 end
 
 local function RenderSidebar()
@@ -1643,6 +1661,50 @@ function Config:Render()
     c2.genStrataHint:SetPoint("TOPLEFT", 0, y2); c2.genStrataHint:Show()
     y2 = y2 - 34
     -- Aggro / out-of-range overlays now live in Tracking; profile sharing in Profiles
+    -- Spell scan
+    c2.scanHeader:SetPoint("TOPLEFT", 0, y2); c2.scanHeader:Show()
+    y2 = y2 - 24
+    c2.scanClassOnly:SetPoint("TOPLEFT", 0, y2)
+    c2.scanClassOnly:SetChecked(ns.profile.scanner.classOnly ~= false)
+    c2.scanClassOnly:Show()
+    y2 = y2 - 22
+    c2.scanHint:SetPoint("TOPLEFT", 0, y2); c2.scanHint:Show()
+    y2 = y2 - 34
+    c2.scanExcludedHeader:SetPoint("TOPLEFT", 0, y2); c2.scanExcludedHeader:Show()
+    y2 = y2 - 20
+    local excluded = ns.Scanner:ExcludedNames()
+    for i, name in ipairs(excluded) do
+      local row = c2.scanRows[i]
+      if not row then
+        row = CreateFrame("Frame", nil, win.content)
+        row:SetHeight(22)
+        row.label = W.CreateLabel(row, "", 12)
+        row.label:SetPoint("LEFT", 4, 0)
+        row.remove = W.CreateButton(row, "X", 20, 20, function(self)
+          -- resolved at CLICK time: rows are pooled and re-labelled per render
+          ns.Scanner:Include(self.spellName)
+          Config:Render()
+        end)
+        row.remove:SetPoint("RIGHT", -4, 0)
+        c2.scanRows[i] = row
+      end
+      row.remove.spellName = name
+      row.label:SetText(name)
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", 0, y2)
+      row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      row:Show()
+      y2 = y2 - 24
+    end
+    for i = #excluded + 1, #c2.scanRows do c2.scanRows[i]:Hide() end
+    if #excluded == 0 then
+      c2.scanEmpty:SetPoint("TOPLEFT", 0, y2); c2.scanEmpty:Show()
+      y2 = y2 - 24
+    else
+      c2.scanClear:SetPoint("TOPLEFT", 0, y2 - 4); c2.scanClear:Show()
+      y2 = y2 - 30
+    end
+    y2 = y2 - 10
     win.content:SetHeight(math.max(-y2 + 40, 400))
     return
   end
