@@ -406,6 +406,68 @@ function ns.ResolveSpell(input)
   return nil, name, icon
 end
 
+-- A spell sitting on the mouse cursor. On this client GetCursorInfo() returns
+-- "spell", spellbookIndex, bookType for a spell: there is NO 4th spellID
+-- return (that is a later expansion), which is why drops used to no-op. The
+-- Ace3 copies shipped with this client resolve it the same way.
+function ns.CursorSpell()
+  local kind, slot, bookType = GetCursorInfo()
+  if kind ~= "spell" then return nil end
+  local link = GetSpellLink and GetSpellLink(slot, bookType)
+  local linkId = link and tonumber(link:match("spell:(%d+)"))
+  if linkId then
+    local id, name, icon = ns.ResolveSpell(linkId)
+    if name then return id, name, icon end
+  end
+  local bookName = GetSpellInfo(slot, bookType)
+  if not bookName then return nil end
+  local id, name, icon = ns.ResolveSpell(bookName)
+  return id, name or bookName, icon
+end
+
+-- Bars whose elements are spells. Power/stacks/reminders/swing/cast bars are
+-- configured, not filled by dropping spells on them.
+local CAPTURE_STYLES = { icons = true, bars = true, shield = true }
+
+function ns.CanCapture(viewer)
+  return (viewer and CAPTURE_STYLES[viewer.style]) and true or false
+end
+
+-- Builds the element for a captured spell. Shared by the config-panel drop,
+-- edit-mode bar drops and spellbook shift+click so all three behave alike.
+function ns.AddCapturedSpell(viewer, id, name, icon)
+  if not ns.CanCapture(viewer) or not name then return false end
+  for _, el in ipairs(viewer.elements) do
+    if el.name == name or (id and el.spellID == id) then return false, "already" end
+  end
+  local isDots = viewer.name == "Target DoTs"
+  local kind = viewer.style == "icons" and "cooldown" or (isDots and "debuff" or "buff")
+  table.insert(viewer.elements, {
+    spellID = id, name = name, icon = icon,
+    kind = kind,
+    unit = isDots and "target" or "player",
+    onlyMine = true, conditions = {},
+    -- Buffs default to "aura found"; DoTs stay visible (gray) to prompt a refresh
+    showWhen = (kind ~= "cooldown" and not isDots) and "present" or "always",
+  })
+  return true
+end
+
+-- Adds the spell and tells the rest of the addon about it.
+function ns.CaptureSpell(viewer, id, name, icon)
+  local added, reason = ns.AddCapturedSpell(viewer, id, name, icon)
+  if not added then
+    if reason == "already" then
+      ns:Print(("%s is already on %s."):format(name, viewer.name))
+    end
+    return false
+  end
+  ns:Fire("VIEWERS_CHANGED")
+  if ns.Config and ns.Config.Render then ns.Config:Render() end
+  ns:Print(("added %s to %s."):format(name, viewer.name))
+  return true
+end
+
 -- Resolves an item by numeric id or name. Returns itemId, name, icon. Unlike
 -- spells, GetItemInfo only knows items the client has seen (bags, equipped, or
 -- cached), so a fresh name may not resolve until the item has been encountered;

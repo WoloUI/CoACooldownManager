@@ -233,26 +233,22 @@ local function BuildWindow()
   Config:BuildControls()
 end
 
-function Config:HandleSpellDrop()
-  local kind, _, _, spellID = GetCursorInfo()
-  if kind ~= "spell" then return end
-  ClearCursor()
+-- The bar a captured spell lands on: the one selected in an open config panel.
+-- Returns nil rather than guessing, so callers can say so.
+function Config:CaptureTarget()
+  if not win or not win:IsShown() then return nil end
   local viewer = SelectedViewer()
-  if not viewer or (viewer.style ~= "icons" and viewer.style ~= "bars" and viewer.style ~= "shield") then return end
-  local id, name, icon = ns.ResolveSpell(spellID)
-  if not id then return end
-  local isDots = viewer.name == "Target DoTs"
-  local kind = viewer.style == "icons" and "cooldown" or (isDots and "debuff" or "buff")
-  table.insert(viewer.elements, {
-    spellID = id, name = name, icon = icon,
-    kind = kind,
-    unit = isDots and "target" or "player",
-    onlyMine = true, conditions = {},
-    -- Buffs default to "aura found"; DoTs stay visible (gray) to prompt a refresh
-    showWhen = (kind ~= "cooldown" and not isDots) and "present" or "always",
-  })
-  Touch()
-  self:Render()
+  if not ns.CanCapture(viewer) then return nil end
+  return viewer
+end
+
+function Config:HandleSpellDrop()
+  local id, name, icon = ns.CursorSpell()
+  if not name then return end
+  local viewer = self:CaptureTarget()
+  if not viewer then return end
+  ClearCursor()
+  ns.CaptureSpell(viewer, id, name, icon)
 end
 
 --------------------------------------------------------------------------------
