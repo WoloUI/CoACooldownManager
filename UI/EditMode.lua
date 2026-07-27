@@ -188,6 +188,13 @@ local BUTTONS_PER_PAGE = 12
 
 -- The button's spell, with the source that answered. The custom frame cannot
 -- be inspected offline, hence the chain: /cdm spellbook prints what wins.
+--
+-- Verified in-game 2026-07-27: on this client only the THIRD path answers --
+-- the buttons carry no `.spellID` and there is no SpellBook_GetSpellID. The
+-- name FontString is the real resolver, which suits the addon anyway: a name
+-- follows the learned rank, so Cinderheart resolves to its Rank 10 id.
+-- The first two are kept as cheap, more-precise paths in case a client update
+-- starts populating them.
 function SpellCapture.ButtonSpell(button)
   if not button then return nil end
   if button.spellID then
@@ -250,26 +257,34 @@ function SpellCapture:HookButtons()
 end
 
 -- /cdm spellbook: which resolver answers for the buttons currently on screen.
+-- Only VISIBLE buttons are listed. The pet tab and the stock 3.3.5 spellbook
+-- frames exist on this client but sit empty and hidden, so listing them printed
+-- 24 "unresolved" lines that looked like failures and buried the real ones.
 function SpellCapture:Diagnose()
   self:HookButtons()
-  local found = 0
+  local shown, resolved = 0, 0
   for _, prefix in ipairs(BUTTON_PREFIXES) do
     for i = 1, (_G.SPELLS_PER_PAGE or BUTTONS_PER_PAGE) do
       local button = _G[prefix .. i]
-      if button then
-        found = found + 1
+      if button and button.IsVisible and button:IsVisible() then
+        shown = shown + 1
         local id, name, _, source = SpellCapture.ButtonSpell(button)
+        if name then resolved = resolved + 1 end
         ns:Print(("  %s%d: %s (id=%s) via %s"):format(
           prefix, i, name or "|cffff5555unresolved|r", tostring(id), source or "-"))
       end
     end
   end
-  if found == 0 then
-    ns:Print("no spellbook buttons found - open your spellbook first.")
-  else
-    local viewer = ns.Config and ns.Config.CaptureTarget and ns.Config:CaptureTarget()
-    ns:Print(("%d buttons hooked; capture target: %s"):format(
-      found, viewer and viewer.name or "|cffff5555none (open the config panel and pick a bar)|r"))
+  if shown == 0 then
+    ns:Print("no spellbook buttons on screen - open your spellbook first.")
+    return
+  end
+  local viewer = ns.Config and ns.Config.CaptureTarget and ns.Config:CaptureTarget()
+  ns:Print(("%d/%d visible buttons resolved; capture target: %s"):format(
+    resolved, shown,
+    viewer and viewer.name or "|cffff5555none (open the config panel and pick a bar)|r"))
+  if resolved < shown then
+    ns:Print("unresolved buttons above are the ones shift+click cannot read - send this output.")
   end
 end
 
