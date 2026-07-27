@@ -73,6 +73,7 @@ local function SetBarDisplay(holder, display, element, cfg, now)
   holder.nameText:SetFont(font, fontSize, "OUTLINE")
   holder.timeText:SetFont(font, fontSize, "OUTLINE")
   holder.bar:SetStatusBarTexture(ns.GetTexture())
+  local showTimer = cfg.showTimer ~= false
 
   holder.icon:SetTexture(display.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
   holder.icon:SetDesaturated(display.missing or display.desaturate)
@@ -84,7 +85,7 @@ local function SetBarDisplay(holder, display, element, cfg, now)
     holder.bar:SetMinMaxValues(0, 1)
     ns.SetBarStatic(holder.bar, 0)
     holder.nameText:SetTextColor(0.65, 0.65, 0.65)
-    holder.timeText:SetText("--")
+    holder.timeText:SetText(showTimer and "--" or "")
   else
     holder.bar:SetStatusBarColor(color[1], color[2], color[3])
     holder.nameText:SetTextColor(1, 1, 1)
@@ -92,7 +93,7 @@ local function SetBarDisplay(holder, display, element, cfg, now)
       local remaining = math.max(0, display.expirationTime - now)
       holder.bar:SetMinMaxValues(0, display.duration)
       ns.SetBarDrain(holder.bar, display.expirationTime) -- per-frame smooth fill
-      holder.timeText:SetText(ns.FormatTime(remaining))
+      holder.timeText:SetText(showTimer and ns.FormatTime(remaining) or "")
     else -- permanent aura
       holder.bar:SetMinMaxValues(0, 1)
       ns.SetBarStatic(holder.bar, 1)
@@ -148,6 +149,9 @@ function StatusBars:Update(frame, cfg)
   end
   LayoutBars(frame, cfg, shown)
 end
+
+-- Test seams
+StatusBars._SetBarDisplay = SetBarDisplay
 
 --------------------------------------------------------------------------------
 -- Shield style ("shield"): a vertical, slightly curved column of segments per

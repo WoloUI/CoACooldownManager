@@ -111,4 +111,88 @@ check("short numbers: 1k-10k keeps a decimal", ns.FormatShortNumber(2500) == "2.
 check("short numbers: 10k+ rounds", ns.FormatShortNumber(12400) == "12k")
 check("short numbers: millions", ns.FormatShortNumber(1340000) == "1.3M")
 
+-- Timer toggle: "stacks only" for target debuffs. The sweep and the drain stay;
+-- only the number goes away.
+stub.loadAddonFile("UI/IconRow.lua", ns)
+
+local function FakeText()
+  local fs = { text = nil }
+  fs.SetFont = function() end
+  fs.SetText = function(_, value) fs.text = value end
+  fs.SetTextColor = function() end
+  fs.SetJustifyH = function() end
+  return fs
+end
+
+local function FakeIcon()
+  local icon = {}
+  icon.SetTexture = function() end
+  icon.SetDesaturated = function() end
+  icon.SetVertexColor = function() end
+  return icon
+end
+
+local function FakeButton()
+  local btn = {
+    timeText = FakeText(), stacksText = FakeText(), keyText = FakeText(),
+    icon = FakeIcon(),
+    cooldown = { sweeps = 0 },
+  }
+  btn.SetSize = function() end
+  btn.cooldown.SetReverse = function() end
+  btn.cooldown.SetCooldown = function(self) self.sweeps = self.sweeps + 1 end
+  btn._cdStart, btn._cdDuration = 0, 0
+  return btn
+end
+
+local iconDisplay = { icon = "tex", start = 900, duration = 30, expirationTime = 930, stacks = 3 }
+
+local btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920)
+check("icons show the timer by default", btn.timeText.text == "10")
+check("icons show stacks", btn.stacksText.text == 3)
+
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32, showTimer = false }, 920)
+check("icons hide the timer when off", btn.timeText.text == "")
+check("icons keep stacks when the timer is off", btn.stacksText.text == 3)
+check("icons keep the cooldown sweep when the timer is off", btn.cooldown.sweeps == 1)
+
+local function FakeHolder()
+  local holder = {
+    nameText = FakeText(), timeText = FakeText(), icon = FakeIcon(),
+    iconFrame = { SetSize = function() end },
+    bar = {},
+  }
+  holder.SetSize = function() end
+  holder.bar.SetStatusBarTexture = function() end
+  holder.bar.SetStatusBarColor = function() end
+  holder.bar.SetMinMaxValues = function() end
+  holder.bar.SetValue = function() end
+  return holder
+end
+
+local barDisplay = { icon = "tex", name = "Corruption", duration = 18,
+  expirationTime = 930, stacks = 1 }
+local element = { kind = "debuff" }
+
+local holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element, { barWidth = 210 }, 920)
+check("bars show the timer by default", holder.timeText.text == "10")
+
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element,
+  { barWidth = 210, showTimer = false }, 920)
+check("bars hide the timer when off", holder.timeText.text == "")
+
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, { icon = "tex", name = "Corruption", missing = true },
+  element, { barWidth = 210, showTimer = false }, 920)
+check("bars hide the missing dashes when the timer is off", holder.timeText.text == "")
+
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, { icon = "tex", name = "Corruption", missing = true },
+  element, { barWidth = 210 }, 920)
+check("bars keep the missing dashes by default", holder.timeText.text == "--")
+
 return T

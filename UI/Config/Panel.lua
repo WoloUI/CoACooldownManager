@@ -365,6 +365,10 @@ function Config:BuildControls()
     SelectedViewer().showStacks = checked
     Touch()
   end)
+  c.showTimer = W.CreateCheckbox(parent, "Timer", function(_, checked)
+    SelectedViewer().showTimer = checked
+    Touch()
+  end)
   c.reverseSweep = W.CreateCheckbox(parent, "Reverse sweep", function(_, checked)
     SelectedViewer().reverseSweep = checked
     Touch()
@@ -2395,6 +2399,16 @@ function Config:Render()
     end
     c.showStacks:SetChecked(viewer.showStacks ~= false)
     c.showStacks:Show()
+    -- Timer sits beside Stacks for duration bars; icons already use all three
+    -- control columns on that row, so it gets its own line there
+    if style == "bars" then
+      c.showTimer:SetPoint("TOPLEFT", C3 - 60, y)
+    else
+      y = y - 26
+      c.showTimer:SetPoint("TOPLEFT", C1, y)
+    end
+    c.showTimer:SetChecked(viewer.showTimer ~= false)
+    c.showTimer:Show()
     y = y - 30
   else
     c.sizeLabel:SetText("Size")

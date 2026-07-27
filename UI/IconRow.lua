@@ -89,14 +89,16 @@ local function SetButtonDisplay(btn, display, cfg, now)
   -- the elapsed part instead (color = time remaining)
   btn.cooldown:SetReverse(cfg.reverseSweep and true or false)
 
-  -- Cooldown sweep: only re-fire SetCooldown when the spell's timer changed
+  -- Cooldown sweep: only re-fire SetCooldown when the spell's timer changed.
+  -- "Timer" off hides the NUMBER only: the sweep is the point of the icon.
+  local showTimer = cfg.showTimer ~= false
   if display.start > 0 and display.duration > 0 then
     if btn._cdStart ~= display.start or btn._cdDuration ~= display.duration then
       btn._cdStart, btn._cdDuration = display.start, display.duration
       btn.cooldown:SetCooldown(display.start, display.duration)
     end
     local remaining = display.expirationTime - now
-    btn.timeText:SetText(remaining > 0 and ns.FormatTime(remaining) or "")
+    btn.timeText:SetText((showTimer and remaining > 0) and ns.FormatTime(remaining) or "")
   else
     if btn._cdStart ~= 0 then
       btn._cdStart, btn._cdDuration = 0, 0
