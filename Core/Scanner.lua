@@ -191,8 +191,13 @@ function Scanner.AdvancementVerdict(entry)
   return nil
 end
 
+-- OPT-IN, not on by default: C_CharacterAdvancement answers for only a fraction
+-- of this server's spells (Eruption and Spellburn read as non-CA while sitting
+-- on the player's own bars), so an on-by-default gate hid entire
+-- specialization tabs -- Draconic / Flameweaving / Incineration for a Pyro all
+-- vanished from the scan.
 local function FilteredOut(scanner, entry)
-  if scanner.classOnly == false then return false end
+  if not scanner.classOnly then return false end
   return Scanner.AdvancementVerdict(entry) == false
 end
 
@@ -247,7 +252,7 @@ function Scanner:Debug()
   end
   local CA = _G.C_CharacterAdvancement
   ns:Print(("spellbook: %d active entries, classOnly=%s, %d excluded, CA API %s"):format(
-    #entries, tostring(scanner.classOnly ~= false), #self:ExcludedNames(),
+    #entries, tostring(scanner.classOnly == true), #self:ExcludedNames(),
     CA and "present" or "|cffff5555missing|r"))
   for _, entry in ipairs(entries) do
     local keeper = kept[entry.name]

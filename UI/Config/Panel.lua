@@ -1226,8 +1226,9 @@ function Config:BuildControls()
     ns.profile.scanner.classOnly = checked
   end)
   c.scanHint = W.CreateLabel(parent,
-    "Skips racials and Ascension vanity items (no Character Advancement entry). "
-    .. "Turn it off if a real ability is missing from the scan.", 10, W.colors.inkDim)
+    "Off by default: this server only registers a Character Advancement entry for some "
+    .. "spells, so turning it on hides whole specialization tabs. Use the X button below "
+    .. "to drop what you don't want instead.", 10, W.colors.inkDim)
   c.scanExcludedHeader = W.CreateSection(parent, "EXCLUDED SPELLS")
   c.scanEmpty = W.CreateLabel(parent, "Nothing excluded yet. The X button in the scan window adds spells here.",
     11, W.colors.inkDim)
@@ -1661,7 +1662,7 @@ function Config:Render()
     c2.scanHeader:SetPoint("TOPLEFT", 0, y2); c2.scanHeader:Show()
     y2 = y2 - 24
     c2.scanClassOnly:SetPoint("TOPLEFT", 0, y2)
-    c2.scanClassOnly:SetChecked(ns.profile.scanner.classOnly ~= false)
+    c2.scanClassOnly:SetChecked(ns.profile.scanner.classOnly == true)
     c2.scanClassOnly:Show()
     y2 = y2 - 22
     c2.scanHint:SetPoint("TOPLEFT", 0, y2); c2.scanHint:Show()

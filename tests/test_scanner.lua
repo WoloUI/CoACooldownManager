@@ -124,9 +124,16 @@ _G.C_CharacterAdvancement = {
     return nil
   end,
 }
+-- classOnly defaults OFF (2026-07-27): C_CharacterAdvancement answers for only
+-- a fraction of this server's spells, so an on-by-default gate hid whole
+-- specialization tabs. It is opt-in now.
 ns.profile.scanner = { seen = {}, rejected = {}, excluded = {} }
 results = ns.Scanner:Scan(true)
-check("classOnly defaults to on and drops the non-CA spell",
+check("classOnly defaults to off so nothing is filtered", #results == 2)
+
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {}, classOnly = true }
+results = ns.Scanner:Scan(true)
+check("classOnly on drops the non-CA spell",
   #results == 1 and results[1].name == "Inferno Barrier")
 
 ns.profile.scanner = { seen = {}, rejected = {}, excluded = {}, classOnly = false }
@@ -176,7 +183,7 @@ check("a CA entry on any rank marks the whole spell",
 check("no CA entry on any rank stays false",
   ns.Scanner.AdvancementVerdict(ranked[2]) == false)
 
-ns.profile.scanner = { seen = {}, rejected = {}, excluded = {} }
+ns.profile.scanner = { seen = {}, rejected = {}, excluded = {}, classOnly = true }
 results = ns.Scanner:Scan(true)
 check("a rank-1-only CA entry keeps the whole spell",
   #results == 1 and results[1].name == "Inferno Barrier"
