@@ -418,7 +418,10 @@ function Scanner:Accept(item)
   local viewerName = item.target or CATEGORY_VIEWER[item.category] or "Essential"
   local viewer = ns.DB:GetViewer(viewerName)
   if not viewer then return end
-  ns.AddCapturedSpell(viewer, item.spellID, item.name, item.icon)
+  -- Pass the classification through: the user is free to send a DoT to any bar
+  -- they like, and the element should still be built as a target debuff there.
+  local hint = (item.category == "dots" or item.category == "buffs") and item.category or nil
+  ns.AddCapturedSpell(viewer, item.spellID, item.name, item.icon, hint)
   ns.profile.scanner.seen[item.spellID] = true
   ns:Fire("VIEWERS_CHANGED")
 end

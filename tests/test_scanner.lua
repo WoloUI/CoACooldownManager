@@ -286,4 +286,21 @@ check("accept without a target falls back to the category's bar",
   #ns.profile.viewers[1].elements == 1
   and ns.profile.viewers[1].elements[1].name == "Inferno Barrier")
 
+-- A DoT accepted onto a duration bar the user named themselves still becomes a
+-- target debuff: the classification travels with the suggestion.
+local ownBar = { name = "Mis DoTs", style = "bars", elements = {} }
+ns.profile.viewers[#ns.profile.viewers + 1] = ownBar
+ns.Scanner:Accept({ spellID = 572160, name = "Blaze", icon = "i3",
+  category = "dots", target = "Mis DoTs" })
+check("an accepted DoT is a target debuff on the user's own bar",
+  ownBar.elements[1].kind == "debuff" and ownBar.elements[1].unit == "target")
+
+-- Sent to an icon row instead, the same suggestion becomes a cooldown: the
+-- bar's style decides, and the user is free to pick either.
+ns.Scanner:Accept({ spellID = 572161, name = "Blaze II", icon = "i3",
+  category = "dots", target = "My Cooldowns" })
+local cds = ns.profile.viewers[2].elements
+check("the same DoT sent to an icon row becomes a cooldown",
+  cds[#cds].name == "Blaze II" and cds[#cds].kind == "cooldown")
+
 return T

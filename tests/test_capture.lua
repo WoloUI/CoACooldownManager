@@ -74,4 +74,35 @@ check("a power bar cannot be captured onto",
   ns.AddCapturedSpell({ name = "Power", style = "power", elements = {} }, 1003, "X") == false)
 check("a nameless spell cannot be captured", ns.AddCapturedSpell(icons, nil, nil) == false)
 
+-- An explicit kind hint. The scanner already knows whether a spell is a DoT or
+-- a self buff, so it says so instead of leaving AddCapturedSpell to guess from
+-- the bar's NAME -- a duration bar the user called anything other than
+-- "Target DoTs" used to turn a DoT into a buff on the player.
+local myDots = { name = "Mis DoTs", style = "bars", elements = {} }
+ns.AddCapturedSpell(myDots, 1003, "Inferno Barrier", "icon1", "dots")
+check("a dots hint makes a target debuff on any bar name",
+  myDots.elements[1].kind == "debuff"
+  and myDots.elements[1].unit == "target"
+  and myDots.elements[1].showWhen == "always")
+
+local myBuffs = { name = "Whatever", style = "bars", elements = {} }
+ns.AddCapturedSpell(myBuffs, 1003, "Inferno Barrier", "icon1", "buffs")
+check("a buffs hint makes a self buff",
+  myBuffs.elements[1].kind == "buff"
+  and myBuffs.elements[1].unit == "player"
+  and myBuffs.elements[1].showWhen == "present")
+
+-- The hint never overrides the bar's own nature: an icon row is a cooldown row.
+local iconRow = { name = "Essential", style = "icons", elements = {} }
+ns.AddCapturedSpell(iconRow, 1003, "Inferno Barrier", "icon1", "dots")
+check("an icon bar stays a cooldown even with a dots hint",
+  iconRow.elements[1].kind == "cooldown" and iconRow.elements[1].unit == "player")
+
+-- Without a hint the old name-based default still applies, so drag and
+-- shift+click keep behaving exactly as before.
+local named = { name = "Target DoTs", style = "bars", elements = {} }
+ns.AddCapturedSpell(named, 1003, "Inferno Barrier", "icon1")
+check("no hint falls back to the bar name", named.elements[1].kind == "debuff"
+  and named.elements[1].unit == "target")
+
 return T

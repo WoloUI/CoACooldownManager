@@ -448,18 +448,34 @@ function ns.CaptureTargetOptions()
 end
 
 -- Builds the element for a captured spell. Shared by the config-panel drop,
--- edit-mode bar drops and spellbook shift+click so all three behave alike.
-function ns.AddCapturedSpell(viewer, id, name, icon)
+-- edit-mode bar drops, spellbook shift+click and accepted scan suggestions, so
+-- all four behave alike.
+--
+-- `hint` ("dots" | "buffs") is the scanner's classification: it already read the
+-- tooltip and knows whether the spell lands on the target or on you, so it says
+-- so rather than leaving this to the bar's NAME. Without it the aura kind is
+-- guessed from the name "Target DoTs", which silently made a DoT into a
+-- self-buff on any duration bar the user named something else.
+function ns.AddCapturedSpell(viewer, id, name, icon, hint)
   if not ns.CanCapture(viewer) or not name then return false end
   for _, el in ipairs(viewer.elements) do
     if el.name == name or (id and el.spellID == id) then return false, "already" end
   end
-  local isDots = viewer.name == "Target DoTs"
+  local isDots
+  if hint == "dots" then
+    isDots = true
+  elseif hint == "buffs" then
+    isDots = false
+  else
+    isDots = viewer.name == "Target DoTs"
+  end
+  -- The bar's style always wins on kind: an icon row is a cooldown row no
+  -- matter what the spell is.
   local kind = viewer.style == "icons" and "cooldown" or (isDots and "debuff" or "buff")
   table.insert(viewer.elements, {
     spellID = id, name = name, icon = icon,
     kind = kind,
-    unit = isDots and "target" or "player",
+    unit = (kind ~= "cooldown" and isDots) and "target" or "player",
     onlyMine = true, conditions = {},
     -- Buffs default to "aura found"; DoTs stay visible (gray) to prompt a refresh
     showWhen = (kind ~= "cooldown" and not isDots) and "present" or "always",
