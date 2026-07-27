@@ -61,4 +61,43 @@ check("dedupe preserves first-appearance order",
 local single = ns.Scanner._DedupeByName({ { id = 7, name = "Solo", rank = "" } })
 check("dedupe passes a single spell through", #single == 1 and single[1].id == 7)
 
+-- Exclusions: the X button must stick even for a manual /cdm scan (force),
+-- which is what kept resurfacing the reporter's vanity items.
+ns.profile = {
+  viewers = { { name = "Essential", style = "icons", elements = {} } },
+  scanner = { seen = {}, rejected = {}, excluded = {} },
+}
+_G.__spellbookEntries = {
+  { id = 1003, name = "Inferno Barrier", rank = "Rank 3" },
+  { id = 3001, name = "Cataclysm", rank = "" },
+}
+_G.__spells = {
+  [1003] = { name = "Inferno Barrier", rank = "Rank 3", icon = "icon1" },
+  [3001] = { name = "Cataclysm", rank = "", icon = "icon2" },
+}
+-- Both spells classify as essential through the fallback rule (long cooldown);
+-- the stub tooltip is empty, so hint them explicitly instead.
+ns.SpellHints[1003] = "essential"
+ns.SpellHints[3001] = "essential"
+
+local results = ns.Scanner:Scan(true)
+check("both spells suggested before excluding", #results == 2)
+
+ns.Scanner:Reject({ spellID = 1003, name = "Inferno Barrier" })
+check("reject records the name", ns.profile.scanner.excluded["Inferno Barrier"] == true)
+
+results = ns.Scanner:Scan(true)
+check("a forced scan honours the exclusion",
+  #results == 1 and results[1].name == "Cataclysm")
+
+check("excluded names are listed", ns.Scanner:ExcludedNames()[1] == "Inferno Barrier")
+
+ns.Scanner:Include("Inferno Barrier")
+results = ns.Scanner:Scan(true)
+check("removing the exclusion brings the spell back", #results == 2)
+
+ns.Scanner:Reject({ spellID = 1003, name = "Inferno Barrier" })
+ns.Scanner:ClearExclusions()
+check("clear all empties the set", #ns.Scanner:ExcludedNames() == 0)
+
 return T

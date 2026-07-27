@@ -7,6 +7,7 @@ local function MakeFrame()
   setmetatable(frame, {
     __index = function(_, key)
       if key == "GetFrameLevel" then return function() return 1 end end
+      if key == "NumLines" then return function() return 0 end end
       if key == "CreateTexture" or key == "CreateFontString" then
         return function() return MakeFrame() end
       end

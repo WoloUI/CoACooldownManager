@@ -26,6 +26,7 @@ check("default profile has 8 viewers", #ns.profile.viewers == 8)
 check("power viewer exists", ns.DB:GetViewer("Power") ~= nil)
 check("essential anchored to power", ns.DB:GetViewer("Essential").anchor.parent == "Power")
 check("alerts viewer exists", ns.DB:GetViewer("Alerts") ~= nil)
+check("default profile has an exclusion set", type(ns.profile.scanner.excluded) == "table")
 
 -- v1 -> v2 migration adds the Alerts viewer to old profiles
 do

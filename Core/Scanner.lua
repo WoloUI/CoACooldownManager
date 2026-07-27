@@ -144,6 +144,13 @@ end
 --------------------------------------------------------------------------------
 -- Public API
 --------------------------------------------------------------------------------
+-- Exclusions are keyed by NAME so they cover every rank, and they are honoured
+-- even by a manual /cdm scan: `rejected` (id-keyed, ignored when force=true) is
+-- kept only so profiles saved before this change keep their old skips.
+local function Excluded(scanner, name)
+  return scanner.excluded and scanner.excluded[name] and true or false
+end
+
 -- force=true rescans everything not already on a bar (manual /cdm scan).
 function Scanner:Scan(force)
   local scanner = ns.profile.scanner
@@ -151,6 +158,7 @@ function Scanner:Scan(force)
   for _, entry in ipairs(DedupeByName(CollectSpellbook())) do
     local spellID = entry.id
     local skip = ElementExists(spellID)
+      or Excluded(scanner, entry.name)
       or (not force and (scanner.seen[spellID] or scanner.rejected[spellID]))
     if not skip then
       local name, icon = entry.name, entry.icon
@@ -194,8 +202,29 @@ function Scanner:Accept(item)
 end
 
 function Scanner:Reject(item)
-  ns.profile.scanner.rejected[item.spellID] = true
-  ns.profile.scanner.seen[item.spellID] = true
+  local scanner = ns.profile.scanner
+  scanner.excluded = scanner.excluded or {}
+  if item.name then scanner.excluded[item.name] = true end
+  scanner.seen[item.spellID] = true
+end
+
+-- Excluded spell names, sorted for the config list.
+function Scanner:ExcludedNames()
+  local names = {}
+  for name in pairs(ns.profile.scanner.excluded or {}) do
+    names[#names + 1] = name
+  end
+  table.sort(names)
+  return names
+end
+
+function Scanner:Include(name)
+  local scanner = ns.profile.scanner
+  if scanner.excluded then scanner.excluded[name] = nil end
+end
+
+function Scanner:ClearExclusions()
+  ns.profile.scanner.excluded = {}
 end
 
 function Scanner:Dismiss(results)

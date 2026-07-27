@@ -78,7 +78,7 @@ end
 local function DefaultProfile()
   return {
     viewers = DefaultViewers(),
-    scanner = { seen = {}, rejected = {} },
+    scanner = { seen = {}, rejected = {}, excluded = {} },
     tracking = DefaultTracking(),
   }
 end
@@ -280,7 +280,8 @@ function DB:ActivateProfile()
     -- so bars carry over and only spells need adjusting.
     local last = self.char.lastSpec and self.char.specs[self.char.lastSpec]
     profile = last and ns.CopyTable(last) or DefaultProfile()
-    profile.scanner = profile.scanner or { seen = {}, rejected = {} }
+    profile.scanner = profile.scanner or { seen = {}, rejected = {}, excluded = {} }
+    profile.scanner.excluded = profile.scanner.excluded or {}
     self.char.specs[specKey] = profile
   end
   -- Profiles created before the Tracking tab existed
@@ -349,7 +350,8 @@ function DB:AssignProfile(specKey, profileName)
     local named = self.db.global.profiles[profileName]
     if not named then return end
     local copy = ns.CopyTable(named)
-    copy.scanner = copy.scanner or { seen = {}, rejected = {} }
+    copy.scanner = copy.scanner or { seen = {}, rejected = {}, excluded = {} }
+    copy.scanner.excluded = copy.scanner.excluded or {}
     copy.tracking = copy.tracking or DefaultTracking()
     self.char.specs[specKey] = copy
     if specKey == self:GetSpecKey() then
@@ -641,7 +643,8 @@ function DB:ImportProfile(text)
     return nil, "the string does not contain a valid profile"
   end
 
-  data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {} }
+  data.profile.scanner = data.profile.scanner or { seen = {}, rejected = {}, excluded = {} }
+  data.profile.scanner.excluded = data.profile.scanner.excluded or {}
   data.profile.tracking = data.profile.tracking or DefaultTracking()
   -- Older exports can still carry rows of both retired reminder types
   DB.StripRangeReminders(data.profile)
