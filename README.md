@@ -56,7 +56,7 @@ Eight display styles per bar:
 | **Icons** | Cooldown sweep, charge counts, keybind text, desaturate-when-unusable |
 | **Bars** | Duration status bars that drain smoothly |
 | **Power** | 1–2 auto-detected resources, energy ticks, combo points |
-| **Stacks** | CoA pseudo-resources (Reaper Souls, Occultist Sanity) as segments or a continuous bar |
+| **Stacks** | CoA pseudo-resources (Reaper Soul Fragments, Occultist Sanity) as segments or a continuous bar, with an optional gradient |
 | **Shield** | A vertical curved segment column that drains with your absorb shields |
 | **Swing** | Swing timer |
 | **Cast** | Cast bar |

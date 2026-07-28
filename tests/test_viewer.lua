@@ -105,6 +105,32 @@ ns.Viewer:ApplyStrata()
 check("ApplyStrata pushes the value onto frames", strataFrame.applied == "BACKGROUND")
 ns.Viewer.frames.__test = nil
 
+-- Stack-bar gradient: pale at the first segment, saturated at the last, so a
+-- Reaper's Soul Fragments read at a glance without counting them
+stub.loadAddonFile("UI/StackBar.lua", ns)
+local PURPLE = { 0.62, 0.35, 0.85 }
+local function shade(i, n) return ns.GradientShade(PURPLE, i, n) end
+
+local r1 = shade(1, 3)
+local r2 = shade(2, 3)
+local r3 = shade(3, 3)
+check("the first segment is paler than the base colour", r1 > PURPLE[1])
+check("the last segment is deeper than the base colour", r3 < PURPLE[1])
+check("the ramp is monotonic", r1 > r2 and r2 > r3)
+
+local g1, _, b1 = shade(1, 3)
+check("every channel takes part", g1 > PURPLE[2] and b1 > PURPLE[3])
+
+-- A single segment has nowhere to ramp: the colour stays as configured
+local s1, s2, s3 = shade(1, 1)
+check("one segment keeps the base colour",
+  s1 == PURPLE[1] and s2 == PURPLE[2] and s3 == PURPLE[3])
+check("a nil total keeps the base colour", ns.GradientShade(PURPLE, 1, nil) == PURPLE[1])
+
+-- Out-of-range indices clamp instead of running off the ramp
+check("index 0 clamps to the first shade", shade(0, 3) == r1)
+check("an index past the end clamps to the last", shade(9, 3) == r3)
+
 -- Short number formatting for absorb amounts
 check("short numbers: plain", ns.FormatShortNumber(897) == "897")
 check("short numbers: 1k-10k keeps a decimal", ns.FormatShortNumber(2500) == "2.5k")

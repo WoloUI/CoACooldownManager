@@ -663,6 +663,10 @@ function Config:BuildControls()
     SelectedViewer().stack.showCount = checked
     Touch()
   end)
+  c.stackGradient = W.CreateCheckbox(parent, "Gradient", function(_, checked)
+    SelectedViewer().stack.gradient = checked or nil
+    Touch()
+  end)
   c.stackDisplayLabel = W.CreateLabel(parent, "Display", 12, W.colors.inkDim)
   c.stackDisplay = W.CreateDropdown(parent, 150, function(_, value)
     SelectedViewer().stack.display = value
@@ -2408,6 +2412,9 @@ function Config:Render()
     c.stackColorLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackColorLabel:Show()
     c.stackColor:SetPoint("TOPLEFT", C1, y); c.stackColor:SetValue(viewer.stack.colorName or "gold"); c.stackColor:Show()
     c.stackCount:SetPoint("TOPLEFT", LW, y); c.stackCount:SetChecked(viewer.stack.showCount ~= false); c.stackCount:Show()
+    c.stackGradient:SetPoint("TOPLEFT", C3 - 20, y)
+    c.stackGradient:SetChecked(viewer.stack.gradient == true)
+    c.stackGradient:Show()
     y = y - 26
     -- Row: sizes per display mode
     if viewer.stack.display == "bar" then
