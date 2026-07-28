@@ -68,6 +68,11 @@ local function ConditionMatches(cond, element, display, ctx)
     -- Whether a pet is out (value=true) or not (value=false). An optional
     -- cond.petName filters to a specific pet by name or npc id; empty = any pet.
     return ctx.petActive(cond.petName) == (cond.value ~= false)
+  elseif ctype == "totemup" then
+    -- THIS element's totem is standing (value=true) or down (value=false).
+    -- Glow while it works, which "This spell ready" cannot say: that one means
+    -- "can plant now", true only while the totem is down AND off cooldown.
+    return (display.missing ~= true) == (cond.value ~= false)
   elseif ctype == "otheraura" then
     -- A DIFFERENT aura is active (value=true) or missing (value=false)
     if not cond.spellID then return false end

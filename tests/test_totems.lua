@@ -149,6 +149,35 @@ d = ns.Triggers:Evaluate(canPlant, Ctx(up, nil,
   { state = { known = true, onCooldown = false } }))
 check("no glow while it is standing", not d.glow)
 
+-- Glow WHILE it works: "This totem up"
+local upGlow = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemup", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(upGlow, Ctx(up))
+check("totemup glows while the totem stands", d.glow)
+d = ns.Triggers:Evaluate(upGlow, Ctx(nil, nil, onCD))
+check("totemup stays quiet while it is down", not d.glow)
+
+-- ...and its inverse is "down", regardless of the re-plant cooldown, which is
+-- what tells it apart from "can plant now"
+local downGlow = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemup", value = false, action = "glow" } } }
+d = ns.Triggers:Evaluate(downGlow, Ctx(nil, nil, onCD))
+check("totemup=false glows while down even on cooldown", d.glow)
+d = ns.Triggers:Evaluate(downGlow, Ctx(up))
+check("totemup=false stays quiet while standing", not d.glow)
+
+-- A sound on it fires once on the edge, not every frame
+local played = {}
+ns.PlayAlertSound = function(s) played[#played + 1] = s end
+local upSound = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemup", value = true, action = "sound", sound = "ding" } } }
+ns.Triggers:Evaluate(upSound, Ctx(up))
+ns.Triggers:Evaluate(upSound, Ctx(up))
+check("the sound fires once while it keeps standing", #played == 1)
+ns.Triggers:Evaluate(upSound, Ctx(nil, nil, onCD))
+ns.Triggers:Evaluate(upSound, Ctx(up))
+check("it re-arms after the totem drops", #played == 2)
+
 -- Time left is the TOTEM's, never the re-plant cooldown's
 local expiring = { kind = "totem", slot = 2, conditions = {
   { ctype = "remaining", op = "<", value = 10, action = "glow" } } }

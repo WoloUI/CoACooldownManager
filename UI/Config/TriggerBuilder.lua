@@ -50,6 +50,7 @@ local CONDITION_TYPES = {
   { text = "Other aura time left", value = "otherremaining" },
   { text = "Other spell ready", value = "othercd" },
   { text = "Pet active", value = "petactive" },
+  { text = "This totem up", value = "totemup" },
 }
 local OP_OPTIONS = {
   { text = "<", value = "<" }, { text = ">", value = ">" },
@@ -101,6 +102,7 @@ local BOOL_OPTIONS = {
   combat = { { text = "In combat", value = true }, { text = "Out of combat", value = false } },
   hastarget = { { text = "Has target", value = true }, { text = "No target", value = false } },
   petactive = { { text = "Active", value = true }, { text = "Missing", value = false } },
+  totemup = { { text = "Standing", value = true }, { text = "Down", value = false } },
 }
 
 --------------------------------------------------------------------------------

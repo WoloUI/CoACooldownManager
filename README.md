@@ -147,10 +147,16 @@ optional field for it when the two names differ.
 Being ordinary elements, they take the whole trigger builder, so a **glow or a sound** is
 two dropdowns away:
 
+- *This totem up* = **standing / down**, so you can glow or beep for the whole time the
+  totem is doing its job.
 - *This spell ready* = **can be planted now** (down *and* off cooldown) — the actionable
-  alert. Not "while it's down", which on a 2s/45s totem would fire almost permanently.
+  re-plant alert. Not "while it's down", which on a 2s/45s totem would fire almost
+  permanently.
 - *Time left* is the **totem's** own remaining time, 0 while it's down, never the
   cooldown's.
+
+If the totem's *effect* outlives the totem itself, track that buff with an
+*Other aura active* condition instead.
 
 ### Class HUD hider
 
