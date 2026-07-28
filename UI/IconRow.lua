@@ -275,18 +275,28 @@ function TotemRow:Update(frame, cfg)
   LayoutRow(frame, cfg, shown)
 end
 
--- /cdm totems: whether CoA's idols/wards/effigy occupy the standard slots
--- cannot be checked offline -- this dumps what the client actually reports.
+-- /cdm totems: dumps what the client reports per slot. Verified on a CoA Witch
+-- Doctor (2026-07-28): its wards, idols and effigies DO take the standard four
+-- slots (Serpent Ward 1, Shadow Effigy 2, Cleansing Idol 3), and a FREE slot
+-- answers haveTotem=true with an empty name and icon -- hence the icon check
+-- in TotemDisplays rather than trusting haveTotem.
 function TotemRow:Diagnose()
   local max = ns.MaxTotemSlots()
   ns:Print(("MAX_TOTEMS = %s (using %d), TOTEM_PRIORITIES = %s"):format(
     tostring(_G.MAX_TOTEMS), max,
     _G.TOTEM_PRIORITIES and table.concat(_G.TOTEM_PRIORITIES, ",") or "nil"))
+  local occupied = 0
   for slot = 1, max do
     local haveTotem, name, startTime, duration, icon = GetTotemInfo(slot)
+    if haveTotem and icon and icon ~= "" then occupied = occupied + 1 end
     ns:Print(("slot %d: have=%s name=%s start=%s duration=%s icon=%s"):format(
       slot, tostring(haveTotem), tostring(name), tostring(startTime),
-      tostring(duration), tostring(icon) ~= "" and tostring(icon) or "(empty)"))
+      tostring(duration), (icon and icon ~= "") and icon or "(empty)"))
   end
-  ns:Print("Plant your idols / wards / effigy and run this again to see which slots they take.")
+  if occupied == 0 then
+    ns:Print("No slot is occupied - plant your idols / wards / effigy and run this again.")
+  else
+    ns:Print(("%d slot(s) occupied, so a Totems bar should be showing %d icon(s)."):format(
+      occupied, occupied))
+  end
 end
