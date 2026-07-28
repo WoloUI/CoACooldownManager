@@ -98,8 +98,8 @@ local function SetButtonDisplay(btn, display, cfg, now)
   local showTimer = cfg.showTimer ~= false
   -- Optional GCD sweep, per bar ("GCD sweep" in its Appearance section).
   -- Triggers only sets these fields when the GCD outlasts the spell's own
-  -- cooldown, so it wins here; its number is never drawn, a 1.5s countdown
-  -- is just noise.
+  -- cooldown, so it wins here. Its countdown is off by default (a 1.5s number
+  -- is mostly noise) behind its own "GCD time" checkbox.
   local start, duration, isGCD = display.start, display.duration, false
   if cfg.showGCD and display.gcdStart and display.gcdDuration then
     start, duration, isGCD = display.gcdStart, display.gcdDuration, true
@@ -109,8 +109,11 @@ local function SetButtonDisplay(btn, display, cfg, now)
       btn._cdStart, btn._cdDuration = start, duration
       btn.cooldown:SetCooldown(start, duration)
     end
-    local remaining = display.expirationTime - now
-    btn.timeText:SetText((showTimer and not isGCD and remaining > 0)
+    -- From the timer being DRAWN, so the GCD counts the GCD down and not the
+    -- spell's own expiration (the two differ while the GCD wins)
+    local remaining = start + duration - now
+    local wantNumber = isGCD and cfg.showGCDTime or (not isGCD and showTimer)
+    btn.timeText:SetText((wantNumber and remaining > 0)
       and ns.FormatTime(remaining) or "")
   else
     if btn._cdStart ~= 0 then

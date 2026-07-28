@@ -373,6 +373,11 @@ function Config:BuildControls()
   c.showGCD = W.CreateCheckbox(parent, "GCD sweep", function(_, checked)
     SelectedViewer().showGCD = checked or nil
     Touch()
+    Config:Render() -- the GCD time box only exists while the sweep is on
+  end)
+  c.showGCDTime = W.CreateCheckbox(parent, "GCD time", function(_, checked)
+    SelectedViewer().showGCDTime = checked or nil
+    Touch()
   end)
 
   c.visLabel = W.CreateLabel(parent, "Show bar", 12, W.colors.inkDim)
@@ -2583,6 +2588,11 @@ function Config:Render()
       c.showGCD:SetPoint("TOPLEFT", C2, y)
       c.showGCD:SetChecked(viewer.showGCD == true)
       c.showGCD:Show()
+      if viewer.showGCD then
+        c.showGCDTime:SetPoint("TOPLEFT", C3 - 60, y)
+        c.showGCDTime:SetChecked(viewer.showGCDTime == true)
+        c.showGCDTime:Show()
+      end
     end
     c.showTimer:SetChecked(viewer.showTimer ~= false)
     c.showTimer:Show()

@@ -169,7 +169,25 @@ btn = FakeButton()
 ns.IconRow._SetButtonDisplay(btn, gcdDisplay, { iconSize = 32, showGCD = true }, 920)
 check("gcd fields drive the sweep when the bar wants it",
   btn.cooldown.start == 919 and btn.cooldown.duration == 1.5)
-check("gcd sweep draws no number", btn.timeText.text == "")
+check("gcd sweep draws no number by default", btn.timeText.text == "")
+
+-- "GCD time" counts the GCD down, not the spell's own expiration
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, gcdDisplay,
+  { iconSize = 32, showGCD = true, showGCDTime = true }, 920)
+check("GCD time draws the gcd countdown", btn.timeText.text == "0.5")
+
+-- It is its own toggle: the spell's Timer setting does not silence it
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, gcdDisplay,
+  { iconSize = 32, showGCD = true, showGCDTime = true, showTimer = false }, 920)
+check("GCD time is independent of Timer", btn.timeText.text == "0.5")
+
+-- A real cooldown still counts ITS own remaining time, not the GCD's
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, iconDisplay,
+  { iconSize = 32, showGCD = true, showGCDTime = true }, 920)
+check("a real cooldown keeps its own number", btn.timeText.text == "10")
 
 -- Per bar: the same display on a bar without the setting draws nothing
 btn = FakeButton()

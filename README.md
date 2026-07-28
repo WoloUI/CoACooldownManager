@@ -124,7 +124,8 @@ colour picker.
 
 **GCD sweep** (per icon bar, off by default) runs the global cooldown sweep on that bar's
 icons, but only while the GCD outlasts the spell's own cooldown — the same rule WeakAuras
-uses, so icons stay readable instead of flickering on every cast.
+uses, so icons stay readable instead of flickering on every cast. **GCD time** adds the
+countdown on top of it.
 
 ### Totem tracker
 
