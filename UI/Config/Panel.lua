@@ -46,12 +46,22 @@ local KIND_OPTIONS = {
   { text = "Buff", value = "buff" },
   { text = "Debuff", value = "debuff" },
   { text = "Summon timer", value = "summon" },
+  { text = "Totem", value = "totem" },
   { text = "Trinket", value = "trinket" },
   { text = "Item (consumable)", value = "item" },
 }
 local TRINKET_SLOT_OPTIONS = {
   { text = "Trinket 1", value = 13 },
   { text = "Trinket 2", value = 14 },
+}
+-- Totem elements track a SLOT (safest: the spell name and the totem's own name
+-- can differ) or, with "By name", whatever slot that totem lands in
+local TOTEM_SLOT_OPTIONS = {
+  { text = "Slot 1", value = 1 },
+  { text = "Slot 2", value = 2 },
+  { text = "Slot 3", value = 3 },
+  { text = "Slot 4", value = 4 },
+  { text = "By name", value = "name" },
 }
 local POWER_TYPE_OPTIONS = {
   { text = "Auto", value = "auto" },
@@ -810,6 +820,10 @@ function Config:BuildControls()
   c.addSlot = W.CreateDropdown(parent, 100, nil)
   c.addSlot:SetOptions(TRINKET_SLOT_OPTIONS)
   c.addSlot:SetValue(13)
+  -- Totem elements track a totem slot; "By name" falls back to the text box
+  c.addTotemSlot = W.CreateDropdown(parent, 100, function() Config:Render() end)
+  c.addTotemSlot:SetOptions(TOTEM_SLOT_OPTIONS)
+  c.addTotemSlot:SetValue(1)
   c.addBtn = W.CreateButton(parent, "Add", 50, 20, function()
     local viewer = SelectedViewer()
     local kind = c.addKind.value
@@ -827,8 +841,35 @@ function Config:BuildControls()
       return
     end
 
+    -- Totem by slot: no spell text at all, the icon and name are learned from
+    -- whatever gets planted there
+    if kind == "totem" and c.addTotemSlot.value ~= "name" then
+      local slot = c.addTotemSlot.value or 1
+      table.insert(viewer.elements, {
+        kind = "totem", slot = slot, name = "Totem slot " .. slot,
+        conditions = {}, showWhen = "always",
+      })
+      Touch()
+      Config:Render()
+      return
+    end
+
     local input = (c.addInput:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if input == "" then return end
+
+    -- Totem by name: matched against the TOTEM's name in the slots, which is
+    -- not always the spell's name, so an unresolvable name is kept as typed
+    if kind == "totem" then
+      local id, name, icon = ns.ResolveSpell(input)
+      table.insert(viewer.elements, {
+        kind = "totem", spellID = id, name = name or input, icon = icon,
+        conditions = {}, showWhen = "always",
+      })
+      c.addInput:SetText("")
+      Touch()
+      Config:Render()
+      return
+    end
 
     -- Item (consumable): resolve against items, not spells; the count and
     -- cooldown resolve live so an uncached name still works once seen
@@ -1392,6 +1433,12 @@ local function ElementLabel(el)
   if el.kind == "item" then
     local idText = el.itemID and (" #" .. el.itemID) or ""
     return (el.name or "?") .. "  |cff9aa3b5(item" .. idText .. ")|r"
+  end
+  if el.kind == "totem" then
+    -- Slot elements learn the totem's real name once you plant one
+    local what = el.slot and ("slot " .. el.slot) or "by name"
+    local learned = el.totemName and ("  |cff7fbf7f" .. el.totemName .. "|r") or ""
+    return (el.name or "?") .. "  |cff9aa3b5(totem " .. what .. ")|r" .. learned
   end
   local kindText = el.kind == "cooldown" and "CD" or el.kind == "buff" and "Buff"
     or el.kind == "summon" and ("Summon " .. (el.duration or 60) .. "s") or "Debuff"
@@ -2623,10 +2670,18 @@ function Config:Render()
       c.addKind:SetValue("buff") -- shields are buffs; save the extra click
     end
     local isTrinket = c.addKind.value == "trinket"
+    local isTotem = c.addKind.value == "totem"
+    local totemByName = isTotem and c.addTotemSlot.value == "name"
     if isTrinket then
       -- Trinket picks an equipped slot; the spell text box is not used
       c.addInput:Hide()
       c.addSlot:SetPoint("TOPLEFT", C1, y); c.addSlot:Show()
+    elseif isTotem then
+      -- Totem picks a slot; the name box gets its own line below (the row is
+      -- already full at the kind dropdown)
+      c.addSlot:Hide()
+      c.addInput:Hide()
+      c.addTotemSlot:SetPoint("TOPLEFT", C1, y); c.addTotemSlot:Show()
     else
       c.addSlot:Hide()
       c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
@@ -2634,8 +2689,16 @@ function Config:Render()
     c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
     c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
     y = y - 24
+    if totemByName then
+      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
+      y = y - 24
+    end
     local addHint
-    if isTrinket then
+    if isTotem then
+      addHint = totemByName
+        and "Type the TOTEM's name as /cdm totems prints it (it can differ from the spell's).\nGray when it is not planted; add a Time left or This spell ready condition for glow or sound."
+        or "Tracks whatever stands in that totem slot: sweep and time left while it is up,\ngray when it is not. The icon and name are learned the first time you plant one."
+    elseif isTrinket then
       addHint = "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
     elseif c.addKind.value == "item" then
       addHint = "Type a consumable's name or item ID. Shows its cooldown and the count you carry."

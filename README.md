@@ -63,9 +63,9 @@ Nine display styles per bar:
 | **Totems** | One icon per occupied totem slot, with its duration sweep |
 | **Reminders** | Text alert rows |
 
-Each bar tracks four kinds of element: **spells**, **items** (consumables),
-**trinkets** (with internal-cooldown gray-out after a proc), and **summons**
-(pet/guardian duration timers). Element order in the config *is* display order, with
+Each bar tracks five kinds of element: **spells**, **items** (consumables),
+**trinkets** (with internal-cooldown gray-out after a proc), **summons**
+(pet/guardian duration timers), and **totems** (a totem slot, gray while empty). Element order in the config *is* display order, with
 `^` / `v` buttons to reorder.
 
 - Add spells four ways: drag from the spellbook onto the config panel, drop them on a
@@ -129,10 +129,20 @@ countdown on top of it.
 
 ### Totem tracker
 
-The **Totems** style reads the totem *slots* rather than a spell list, so whatever this
-server plants there — a shaman's four totems, a Witch Doctor's idols, wards and effigies —
-shows up with its own icon, name and timer. Empty slots are hidden, and each slot has its
-own checkbox. `/cdm totems` prints what the client reports per slot.
+Totems are read from the *slots* rather than a spell list, so whatever this server plants
+there — a shaman's four totems, a Witch Doctor's idols, wards and effigies — shows up with
+its own icon, name and timer. `/cdm totems` prints what the client reports per slot.
+
+Two ways to use it:
+
+- **Totem elements** on any icon bar: sweep and time left while the totem stands, and a
+  **gray icon while it does not**, so an empty slot still tells you what to re-plant. Pick
+  a slot (the icon and the totem's real name are learned the first time you plant one) or
+  match by name. Being ordinary elements, they take the whole trigger builder — add a
+  *Time left* or *This spell ready* condition to get a **glow or a sound** when a totem
+  drops or is about to expire.
+- The **Totems** bar style: a whole bar that fills itself from the occupied slots, with a
+  checkbox per slot and no elements to configure. Empty slots are hidden.
 
 ### Class HUD hider
 

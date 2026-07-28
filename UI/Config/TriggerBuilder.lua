@@ -12,6 +12,7 @@ local KIND_OPTIONS = {
   { text = "Spell cooldown", value = "cooldown" },
   { text = "Buff", value = "buff" },
   { text = "Debuff", value = "debuff" },
+  { text = "Totem", value = "totem" },
   { text = "Trinket", value = "trinket" },
   { text = "Item (consumable)", value = "item" },
 }
@@ -382,6 +383,9 @@ function TriggerBuilder:Load(element, onChange)
   local kind = element.kind or "cooldown"
   local isAura = kind == "buff" or kind == "debuff"
   local isTrinket = kind == "trinket"
+  -- A totem is present/absent like an aura, so it takes the aura show modes
+  -- ("Always (gray when missing)"), not the cooldown ones
+  local presenceShow = isAura or kind == "totem"
   local y = -PAD
 
   -- TRIGGER header
@@ -423,7 +427,7 @@ function TriggerBuilder:Load(element, onChange)
   builder.showLabel:SetPoint("TOPLEFT", PAD, y - 5)
   builder.show:ClearAllPoints()
   builder.show:SetPoint("TOPLEFT", PAD + 40, y)
-  builder.show:SetOptions(isAura and SHOW_AURA or SHOW_COOLDOWN)
+  builder.show:SetOptions(presenceShow and SHOW_AURA or SHOW_COOLDOWN)
   builder.show:SetValue(element.showWhen or "always")
   if isAura then
     builder.mine:Show()

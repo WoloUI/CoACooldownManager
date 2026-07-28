@@ -26,6 +26,9 @@ local function ConditionValue(cond, element, display, ctx)
     if display.expirationTime and display.expirationTime > 0 then
       return math.max(0, display.expirationTime - ctx.now())
     end
+    -- A totem that is not planted has zero left, so "Time left < 5" covers
+    -- both "about to expire" and "already down" -- the useful glow/sound rule
+    if element.kind == "totem" then return 0 end
     return nil
   elseif ctype == "stacks" then
     return display.stacks or 0
@@ -71,6 +74,11 @@ local function ConditionMatches(cond, element, display, ctx)
     local aura = ctx.aura(cond.unit or "player", cond.spellID, cond.onlyMine)
     return (aura ~= nil) == (cond.value ~= false)
   elseif ctype == "ready" then
+    -- For a totem, "ready" reads as PLANTED: value=false is the direct way to
+    -- say "glow/beep while this totem is down"
+    if element.kind == "totem" then
+      return (not display.missing) == (cond.value ~= false)
+    end
     -- THIS element's spell is ready (value=true) or on cooldown (value=false)
     local state = ctx.cooldown(element.name or element.spellID)
     local ready = (state and state.known and not state.onCooldown) and true or false
@@ -246,6 +254,34 @@ function Triggers:Evaluate(element, ctx)
     if display.shown and ctx.gcd then
       Triggers.MergeGCD(display, ctx.gcd())
     end
+  elseif element.kind == "totem" then
+    -- A totem slot: sweep + time left while it stands, gray while it does not.
+    -- Matched by SLOT when the element picked one (immune to the spell name
+    -- differing from the totem's own, e.g. Graven Effigy -> "Shadow Effigy"),
+    -- otherwise by the totem's name across every slot.
+    local info = ctx.totem and ctx.totem(element.slot, element.name)
+    local showWhen = element.showWhen or "always"
+    if info then
+      display.shown = showWhen == "always" or showWhen == "present"
+      display.icon = info.icon or display.icon
+      display.name = info.name or display.name
+      display.start = info.start
+      display.duration = info.duration
+      display.expirationTime = info.start + info.duration
+      -- Learn what stands in this slot so the gray placeholder has the right
+      -- icon later, including after a reload (elements live in the profile).
+      if info.icon and info.icon ~= "" then element.icon = info.icon end
+      if info.name and info.name ~= "" then element.totemName = info.name end
+    else
+      display.missing = true
+      display.name = element.totemName or display.name
+      if showWhen == "always" then
+        display.shown = true -- gray: prompts a re-plant
+        display.desaturate = true
+      elseif showWhen == "missing" then
+        display.shown = true
+      end
+    end
   elseif element.kind == "summon" then
     -- Manual timer for spells that leave no aura (pets, banners, totems):
     -- casting the spell starts a countdown of element.duration seconds
@@ -398,6 +434,25 @@ function Triggers:LiveContext()
     cooldown = function(spellID) return ns.Cooldowns:Track(spellID) end,
     cooldownRemaining = function(spellID) return ns.Cooldowns:Remaining(spellID) end,
     gcd = function() return ns.Cooldowns:GCD() end,
+    -- A planted totem, by slot or by the totem's own name. A FREE slot answers
+    -- haveTotem=true with an empty name and icon on this client, so the icon is
+    -- what decides (verified on a CoA Witch Doctor).
+    totem = function(slot, name)
+      if not GetTotemInfo then return nil end
+      local max = ns.MaxTotemSlots and ns.MaxTotemSlots() or 4
+      local wanted = name and name ~= "" and Triggers.SummonKey(name) or nil
+      for i = 1, max do
+        if not slot or slot == i then
+          local have, tname, start, duration, icon = GetTotemInfo(i)
+          if have and icon and icon ~= ""
+            and (not wanted or slot or Triggers.SummonKey(tname or "") == wanted) then
+            return { slot = i, name = tname, icon = icon,
+              start = start or 0, duration = duration or 0 }
+          end
+        end
+      end
+      return nil
+    end,
     aura = function(unit, ref, onlyMine) return ns.Auras:GetAura(unit, ref, onlyMine) end,
     power = function(ptype)
       ptype = ptype or UnitPowerType("player")
