@@ -132,6 +132,23 @@ end
 Triggers._CheckSound = CheckSound -- test seam
 
 --------------------------------------------------------------------------------
+-- Global cooldown overlay (pure)
+--------------------------------------------------------------------------------
+-- Mirrors the WeakAuras "showgcd" rule: the GCD is only worth showing when it
+-- outlasts the spell's own cooldown. It is written to SEPARATE fields so the
+-- icon row can opt in while duration bars and every other style stay unaware.
+function Triggers.MergeGCD(display, gcdStart, gcdDuration)
+  gcdStart, gcdDuration = gcdStart or 0, gcdDuration or 0
+  if gcdStart <= 0 or gcdDuration <= 0 then return display end
+  if gcdStart + gcdDuration <= (display.start or 0) + (display.duration or 0) then
+    return display
+  end
+  display.gcdStart = gcdStart
+  display.gcdDuration = gcdDuration
+  return display
+end
+
+--------------------------------------------------------------------------------
 -- Summon timers: casting the spell starts a manual countdown (for summons
 -- that leave no aura). Keyed by lowercase spell name.
 --------------------------------------------------------------------------------
@@ -172,6 +189,7 @@ ns:On("READY", function()
   ns:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, spellName)
     if unit == "player" then
       Triggers:OnCastSucceeded(spellName, GetTime())
+      ns.Cooldowns:NoteCast(spellName) -- fallback source for the GCD probe
     end
   end)
 end)
@@ -222,6 +240,10 @@ function Triggers:Evaluate(element, ctx)
     end
     if not state.usable and not state.onCooldown then
       display.desaturate = true
+    end
+    -- Opt-in global cooldown sweep (Appearance tab), spells only
+    if display.shown and ctx.gcd and ns.ShowGCD and ns.ShowGCD() then
+      Triggers.MergeGCD(display, ctx.gcd())
     end
   elseif element.kind == "summon" then
     -- Manual timer for spells that leave no aura (pets, banners, totems):
@@ -374,6 +396,7 @@ function Triggers:LiveContext()
     now = GetTime,
     cooldown = function(spellID) return ns.Cooldowns:Track(spellID) end,
     cooldownRemaining = function(spellID) return ns.Cooldowns:Remaining(spellID) end,
+    gcd = function() return ns.Cooldowns:GCD() end,
     aura = function(unit, ref, onlyMine) return ns.Auras:GetAura(unit, ref, onlyMine) end,
     power = function(ptype)
       ptype = ptype or UnitPowerType("player")

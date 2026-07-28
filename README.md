@@ -49,7 +49,7 @@ Everything you see is a *viewer* anchored in a hierarchy off the root Power bar.
 Essential / Defensives / Utility / Buffs / Target DoTs / Reminders / Alerts, plus
 **unlimited custom bars** of your own.
 
-Eight display styles per bar:
+Nine display styles per bar:
 
 | Style | What it shows |
 |---|---|
@@ -60,6 +60,7 @@ Eight display styles per bar:
 | **Shield** | A vertical curved segment column that drains with your absorb shields |
 | **Swing** | Swing timer |
 | **Cast** | Cast bar |
+| **Totems** | One icon per occupied totem slot, with its duration sweep |
 | **Reminders** | Text alert rows |
 
 Each bar tracks four kinds of element: **spells**, **items** (consumables),
@@ -120,6 +121,17 @@ Drag every bar with 12px magnet snapping to other bars and to screen centre. A m
 (consumed if another addon provides it, never embedded), font scaling, frame strata
 selector, and five glow styles — proc flipbook, pixel, pulse, shine, solid — with a
 colour picker.
+
+**Show GCD on icons** (off by default) runs the global cooldown sweep on your spell icons,
+but only while the GCD outlasts the spell's own cooldown — the same rule WeakAuras uses,
+so icons stay readable instead of flickering on every cast.
+
+### Totem tracker
+
+The **Totems** style reads the totem *slots* rather than a spell list, so whatever this
+server plants there — a shaman's four totems, a Witch Doctor's idols, wards and effigies —
+shows up with its own icon, name and timer. Empty slots are hidden, and each slot has its
+own checkbox. `/cdm totems` prints what the client reports per slot.
 
 ### Class HUD hider
 
@@ -189,6 +201,8 @@ Optional but recommended: ElvUI (unit-frame tracking + skinning) and LibSharedMe
 | `/cdm scan` | Run the spell scanner |
 | `/cdm debug` | Dump unit-frame mapping and cached auras (tracking triage) |
 | `/cdm range` | Print melee-range probe candidates and raw results |
+| `/cdm gcd` | Show which global-cooldown probe answers on this server |
+| `/cdm totems` | Dump every totem slot's raw contents |
 | `/cdm trinket` | Trinket diagnostic |
 | `/cdm minimap` | Toggle the minimap button |
 | `/cdm reset` | Reset positions |

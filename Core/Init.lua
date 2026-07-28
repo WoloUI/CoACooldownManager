@@ -244,6 +244,13 @@ function ns.FontSize(base)
   return math.max(math.floor((base or 12) * (Appearance().fontScale or 1) + 0.5), 6)
 end
 
+-- Off by default: cooldown tracking filters the GCD out on purpose, so icons
+-- do not flicker on every cast. Turning it on mirrors the WeakAuras "showgcd"
+-- option (the GCD sweep shows only when it outlasts the spell's own cooldown).
+function ns.ShowGCD()
+  return Appearance().showGCD == true
+end
+
 ns.GlowOptions = {
   { text = "Proc (WeakAuras style)", value = "proc" },
   { text = "Pixel (bright dashes)", value = "pixel" },
@@ -1455,6 +1462,14 @@ SlashCmdList["COACDM"] = function(input)
     if ns.Tracking then ns.Tracking:Debug() end
   elseif msg == "range" then
     ns.RangeAlert:Diagnose()
+  elseif msg == "gcd" then
+    ns.Cooldowns:DiagnoseGCD()
+  elseif msg == "totems" then
+    if ns.TotemRow then
+      ns.TotemRow:Diagnose()
+    else
+      ns:Print("totem tracking is not loaded (restart the client after updating).")
+    end
   elseif msg == "spellbook" then
     if ns.SpellCapture then
       ns.SpellCapture:Diagnose()

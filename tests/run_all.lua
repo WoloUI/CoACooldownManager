@@ -8,6 +8,7 @@ local files = {
   "tests/test_tracking.lua",
   "tests/test_viewer.lua",
   "tests/test_activitybars.lua",
+  "tests/test_totems.lua",
   "tests/test_extraaction.lua",
   "tests/test_widgets.lua",
   "tests/test_power.lua",

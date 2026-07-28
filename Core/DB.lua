@@ -468,6 +468,10 @@ function DB:AddViewer(name, style)
     -- Player cast bar with channel ticks (event-driven, no elements)
     viewer.cast = { width = 220, height = 22, showIcon = true, showTime = true,
       showTicks = true, tickSeconds = 1.0 }
+  elseif style == "totems" then
+    -- One icon per occupied totem slot, read live (no elements). Empty `slots`
+    -- means every slot is on; the config writes false to switch one off.
+    viewer.totems = { slots = {}, colorBySlot = false }
   end
   table.insert(self.profile.viewers, viewer)
   ns:Fire("VIEWERS_CHANGED")

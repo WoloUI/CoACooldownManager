@@ -18,6 +18,7 @@ local STYLE_OPTIONS = {
   { text = "NaNShield", value = "shield" },
   { text = "Swing timer", value = "swing" },
   { text = "Cast bar", value = "cast" },
+  { text = "Totems", value = "totems" },
   { text = "Alert row", value = "reminders" },
 }
 local POSITION_OPTIONS = {
@@ -507,6 +508,12 @@ function Config:BuildControls()
   c.genStrata:SetOptions(ns.FrameStrataOptions)
   c.genStrataHint = W.CreateLabel(parent, "Lower this so game windows (map, character, bags) appear above the bars.", 10, W.colors.inkDim)
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
+  c.genShowGCD = W.CreateCheckbox(parent, "Show GCD on icons", function(_, ck)
+    AppearanceCfg().showGCD = ck or nil
+    Touch()
+  end)
+  c.genGCDHint = W.CreateLabel(parent,
+    "Runs the global cooldown sweep on spell icons, but only while it lasts longer\nthan the spell's own cooldown (same rule as WeakAuras). /cdm gcd diagnoses it.", 10, W.colors.inkDim)
 
   -- Screen-space alert overlays, rendered at the bottom of the Tracking page
   c.alertsHeader = W.CreateSection(parent, "ALERTS (screen overlays)")
@@ -772,6 +779,21 @@ function Config:BuildControls()
   end, "1.0")
   c.castHint = W.CreateLabel(parent,
     "Your own casts and channels. Channel ticks are drawn one every N seconds\n(no per-spell tick API on this client - tune it to the channel).", 10, W.colors.inkDim)
+
+  -- Totems (config resolved at click time: pooled controls)
+  local function TotemCfg()
+    local viewer = SelectedViewer()
+    viewer.totems = viewer.totems or { slots = {}, colorBySlot = false }
+    viewer.totems.slots = viewer.totems.slots or {}
+    return viewer.totems
+  end
+  c.totemHeader = W.CreateSection(parent, "TOTEM SLOTS")
+  c.totemSlotRows = {}
+  c.totemColorChk = W.CreateCheckbox(parent, "Color border by slot", function(_, ck)
+    TotemCfg().colorBySlot = ck or nil; Touch()
+  end)
+  c.totemHint = W.CreateLabel(parent,
+    "Reads the totem slots live, so whatever this server plants there (idols, wards,\neffigies) shows up with its own icon and timer. Empty slots are hidden.\nRun /cdm totems with yours planted to see which slot each one takes.", 10, W.colors.inkDim)
 
   -- Elements
   c.elementsHeader = W.CreateSection(parent, "ELEMENTS")
@@ -1287,6 +1309,7 @@ local function HideAllControls()
   for _, row in ipairs(controls.hudRows) do row:Hide() end
   for _, row in ipairs(controls.scanRows) do row:Hide() end
   for _, row in ipairs(controls.scanTabRows) do row:Hide() end
+  for _, row in ipairs(controls.totemSlotRows) do row:Hide() end
 end
 
 local function RenderSidebar()
@@ -1654,6 +1677,12 @@ function Config:Render()
     c2.genGlowHint:SetPoint("TOPLEFT", 0, y2); c2.genGlowHint:Show()
     y2 = y2 - 24
     c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
+    y2 = y2 - 40
+    c2.genShowGCD:SetPoint("TOPLEFT", 0, y2)
+    c2.genShowGCD:SetChecked(ns.ShowGCD())
+    c2.genShowGCD:Show()
+    y2 = y2 - 22
+    c2.genGCDHint:SetPoint("TOPLEFT", 0, y2); c2.genGCDHint:Show()
     y2 = y2 - 40
     c2.genStrataLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genStrataLabel:Show()
     c2.genStrata:SetPoint("TOPLEFT", 80, y2)
@@ -2445,6 +2474,66 @@ function Config:Render()
     y = y - 28
     c.castHint:SetPoint("TOPLEFT", L1, y); c.castHint:Show()
     y = y - 40
+  elseif style == "totems" then
+    local tot = viewer.totems or {}
+    local slots = tot.slots or {}
+    -- Look row: keeps the Style dropdown reachable so the bar can be converted
+    c.lookHeader:SetPoint("TOPLEFT", 0, y); c.lookHeader:Show()
+    y = y - 22
+    c.styleLabel:SetPoint("TOPLEFT", L1, y - 4); c.styleLabel:Show()
+    c.style:SetPoint("TOPLEFT", C1, y); c.style:SetValue(style); c.style:Show()
+    c.growthLabel:SetPoint("TOPLEFT", LW, y - 4); c.growthLabel:Show()
+    c.growth:SetOptions(GROWTH_ICONS)
+    c.growth:SetValue(viewer.growth or "CENTER")
+    c.growth:SetPoint("TOPLEFT", CW, y); c.growth:Show()
+    y = y - 26
+    c.sizeLabel:SetText("Size")
+    c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
+    c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 32)); c.iconSize:Show()
+    c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
+    c.spacing:SetPoint("TOPLEFT", C2, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
+    c.fontLabel:SetPoint("TOPLEFT", L3, y - 4); c.fontLabel:Show()
+    c.fontSize:SetPoint("TOPLEFT", C3, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
+    y = y - 28
+    c.showTimer:SetPoint("TOPLEFT", C1, y)
+    c.showTimer:SetChecked(viewer.showTimer ~= false)
+    c.showTimer:Show()
+    c.totemColorChk:SetPoint("TOPLEFT", C2, y)
+    c.totemColorChk:SetChecked(tot.colorBySlot == true)
+    c.totemColorChk:Show()
+    y = y - 32
+    -- One checkbox per slot, labelled with the totem standing in it right now
+    c.totemHeader:SetPoint("TOPLEFT", 0, y); c.totemHeader:Show()
+    y = y - 24
+    local maxSlots = ns.MaxTotemSlots()
+    for slot = 1, maxSlots do
+      local box = c.totemSlotRows[slot]
+      if not box then
+        box = W.CreateCheckbox(win.content, "", function(self, checked)
+          -- resolved at CLICK time: these boxes are pooled across viewers
+          if self.slot then
+            local cfg = SelectedViewer()
+            cfg.totems = cfg.totems or { slots = {} }
+            cfg.totems.slots = cfg.totems.slots or {}
+            cfg.totems.slots[self.slot] = (not checked) or nil
+            Touch()
+          end
+        end)
+        c.totemSlotRows[slot] = box
+      end
+      box.slot = slot
+      local live = GetTotemInfo and select(2, GetTotemInfo(slot)) or nil
+      box:SetLabel((live and live ~= "") and ("Slot " .. slot .. "  |cff9aa3b5" .. live .. "|r")
+        or ("Slot " .. slot))
+      box:ClearAllPoints()
+      box:SetPoint("TOPLEFT", (slot % 2 == 1) and L1 or LW, y)
+      box:SetChecked(slots[slot] ~= false)
+      box:Show()
+      if slot % 2 == 0 or slot == maxSlots then y = y - 24 end
+    end
+    y = y - 4
+    c.totemHint:SetPoint("TOPLEFT", L1, y); c.totemHint:Show()
+    y = y - 52
   elseif style ~= "reminders" then
     c.lookHeader:SetPoint("TOPLEFT", 0, y)
     c.lookHeader:Show()

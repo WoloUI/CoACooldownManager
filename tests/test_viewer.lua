@@ -128,19 +128,22 @@ local function FakeIcon()
   local icon = {}
   icon.SetTexture = function() end
   icon.SetDesaturated = function() end
-  icon.SetVertexColor = function() end
+  icon.SetVertexColor = function(_, r, g, b, a) icon.color = { r, g, b, a } end
   return icon
 end
 
 local function FakeButton()
   local btn = {
     timeText = FakeText(), stacksText = FakeText(), keyText = FakeText(),
-    icon = FakeIcon(),
+    icon = FakeIcon(), border = FakeIcon(),
     cooldown = { sweeps = 0 },
   }
   btn.SetSize = function() end
   btn.cooldown.SetReverse = function() end
-  btn.cooldown.SetCooldown = function(self) self.sweeps = self.sweeps + 1 end
+  btn.cooldown.SetCooldown = function(self, start, duration)
+    self.sweeps = self.sweeps + 1
+    self.start, self.duration = start, duration
+  end
   btn._cdStart, btn._cdDuration = 0, 0
   return btn
 end
@@ -157,6 +160,26 @@ ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32, showTimer = fals
 check("icons hide the timer when off", btn.timeText.text == "")
 check("icons keep stacks when the timer is off", btn.stacksText.text == 3)
 check("icons keep the cooldown sweep when the timer is off", btn.cooldown.sweeps == 1)
+
+-- GCD sweep: only set when Triggers decided the GCD outlasts the spell's own
+-- cooldown, so here it always wins the sweep -- and never draws a number
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, { icon = "tex", start = 0, duration = 0,
+  expirationTime = 0, stacks = 0, gcdStart = 919, gcdDuration = 1.5 },
+  { iconSize = 32 }, 920)
+check("gcd fields drive the sweep", btn.cooldown.start == 919 and btn.cooldown.duration == 1.5)
+check("gcd sweep draws no number", btn.timeText.text == "")
+
+-- Without the GCD fields nothing changes for a ready spell
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, { icon = "tex", start = 0, duration = 0,
+  expirationTime = 0, stacks = 0 }, { iconSize = 32 }, 920)
+check("no gcd fields -> no sweep on a ready spell", btn.cooldown.start == nil)
+
+-- The border is reset on every draw, so a totem slot tint cannot stick around
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920)
+check("border resets to black", btn.border.color and btn.border.color[1] == 0)
 
 local function FakeHolder()
   local holder = {

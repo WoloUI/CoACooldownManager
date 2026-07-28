@@ -353,4 +353,40 @@ check("muteOnCooldown silences sound while on CD", #played == 0)
 ns.Triggers:Evaluate(muteSound, Ctx({ cooldown = function() return readyState end }))
 check("sound fires once when the spell comes off CD", #played == 1)
 
+-- MergeGCD: the WeakAuras "showgcd" rule, applied to separate display fields
+local MergeGCD = ns.Triggers.MergeGCD
+
+-- Ready spell (no cooldown of its own): the GCD sweep is all there is
+local g = MergeGCD({ start = 0, duration = 0 }, 1000, 1.5)
+check("gcd shows on a ready spell", g.gcdStart == 1000 and g.gcdDuration == 1.5)
+
+-- A real cooldown outlasting the GCD keeps the icon on its own timer
+g = MergeGCD({ start = 995, duration = 30 }, 1000, 1.5)
+check("real cooldown outlasts the gcd", g.gcdStart == nil)
+
+-- ...and a GCD that outlasts a nearly-expired cooldown wins
+g = MergeGCD({ start = 990, duration = 10.5 }, 1000, 1.5)
+check("gcd outlasting the cooldown wins", g.gcdStart == 1000)
+
+-- No GCD running: nothing is written
+g = MergeGCD({ start = 0, duration = 0 }, 0, 0)
+check("no gcd running writes nothing", g.gcdStart == nil)
+
+-- The spell's own timer is never overwritten (duration bars must not see this)
+g = MergeGCD({ start = 990, duration = 10.5 }, 1000, 1.5)
+check("merge never touches start/duration", g.start == 990 and g.duration == 10.5)
+
+-- Evaluate wires it through ctx.gcd, but only with the toggle on
+local gcdEl = { kind = "cooldown", spellID = 20, showWhen = "always" }
+local gcdCtx = Ctx({ cooldown = function() return readyState end,
+  gcd = function() return NOW, 1.5 end })
+local realShowGCD = ns.ShowGCD
+ns.ShowGCD = function() return false end
+d = ns.Triggers:Evaluate(gcdEl, gcdCtx)
+check("toggle off -> no gcd fields", d.gcdStart == nil)
+ns.ShowGCD = function() return true end
+d = ns.Triggers:Evaluate(gcdEl, gcdCtx)
+check("toggle on -> gcd fields set", d.gcdStart == NOW and d.gcdDuration == 1.5)
+ns.ShowGCD = realShowGCD
+
 return T

@@ -78,6 +78,10 @@ local function SetButtonDisplay(btn, display, cfg, now)
     btn.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
   end
 
+  -- Back to the default border: the totem style tints it per slot on top of
+  -- this, so a bar switched back to plain icons does not keep the tint.
+  btn.border:SetVertexColor(0, 0, 0, 0.9)
+
   btn.icon:SetDesaturated(display.desaturate)
   if display.desaturate then
     btn.icon:SetVertexColor(0.75, 0.75, 0.75)
@@ -92,13 +96,21 @@ local function SetButtonDisplay(btn, display, cfg, now)
   -- Cooldown sweep: only re-fire SetCooldown when the spell's timer changed.
   -- "Timer" off hides the NUMBER only: the sweep is the point of the icon.
   local showTimer = cfg.showTimer ~= false
-  if display.start > 0 and display.duration > 0 then
-    if btn._cdStart ~= display.start or btn._cdDuration ~= display.duration then
-      btn._cdStart, btn._cdDuration = display.start, display.duration
-      btn.cooldown:SetCooldown(display.start, display.duration)
+  -- Optional GCD sweep (Appearance -> Show GCD on icons). Triggers only sets
+  -- these fields when the GCD outlasts the spell's own cooldown, so it wins
+  -- here; its number is never drawn, a 1.5s countdown is just noise.
+  local start, duration, isGCD = display.start, display.duration, false
+  if display.gcdStart and display.gcdDuration then
+    start, duration, isGCD = display.gcdStart, display.gcdDuration, true
+  end
+  if start > 0 and duration > 0 then
+    if btn._cdStart ~= start or btn._cdDuration ~= duration then
+      btn._cdStart, btn._cdDuration = start, duration
+      btn.cooldown:SetCooldown(start, duration)
     end
     local remaining = display.expirationTime - now
-    btn.timeText:SetText((showTimer and remaining > 0) and ns.FormatTime(remaining) or "")
+    btn.timeText:SetText((showTimer and not isGCD and remaining > 0)
+      and ns.FormatTime(remaining) or "")
   else
     if btn._cdStart ~= 0 then
       btn._cdStart, btn._cdDuration = 0, 0
@@ -176,3 +188,101 @@ end
 
 IconRow._SetButtonDisplay = SetButtonDisplay
 IconRow._AcquireButton = AcquireButton
+
+--------------------------------------------------------------------------------
+-- Totem row: one icon per occupied totem slot
+--------------------------------------------------------------------------------
+-- Reads SLOTS, never a spell list: Ascension is classless and its totem-likes
+-- are not the vanilla four (the Witch Doctor plants idols, wards and a Graven
+-- Effigy), so whatever the server parks in a slot shows up under its own name
+-- and icon. Lives in this file to reuse the button pool -- and because a new
+-- file in the .toc costs a full client restart.
+local TotemRow = {}
+ns.TotemRow = TotemRow
+
+-- Vanilla slot tints, opt-in: on this server the slots do not reliably map to
+-- fire/earth/water/air, so the default is the plain black border.
+ns.TotemSlotColors = {
+  [1] = { 0.58, 0.23, 0.10 }, -- fire
+  [2] = { 0.23, 0.45, 0.13 }, -- earth
+  [3] = { 0.19, 0.48, 0.60 }, -- water
+  [4] = { 0.42, 0.18, 0.74 }, -- air
+}
+
+function ns.MaxTotemSlots()
+  return _G.MAX_TOTEMS or 4
+end
+
+-- Pure: `info(slot)` returns the GetTotemInfo tuple, so slot filtering and
+-- ordering are testable without the client. Ordered by slot; empty slots and
+-- slots the user unchecked are dropped.
+function ns.TotemDisplays(cfg, info, maxSlots)
+  local out = {}
+  local slots = cfg and cfg.slots or nil
+  for slot = 1, maxSlots or 4 do
+    if not slots or slots[slot] ~= false then
+      local haveTotem, name, startTime, duration, icon = info(slot)
+      -- An empty slot answers with a blank icon even when haveTotem lies
+      if haveTotem and icon and icon ~= "" then
+        startTime, duration = startTime or 0, duration or 0
+        out[#out + 1] = {
+          shown = true, desaturate = false, glow = false, missing = false,
+          stacks = 0, slot = slot, icon = icon, name = name,
+          start = startTime, duration = duration,
+          expirationTime = startTime + duration,
+        }
+      end
+    end
+  end
+  return out
+end
+
+function TotemRow:Build(frame, cfg)
+  frame.buttons = frame.buttons or {}
+  for _, btn in ipairs(frame.buttons) do btn:Hide() end
+end
+
+function TotemRow:Update(frame, cfg)
+  local now = GetTime()
+  local shown = 0
+  -- With nothing planted the row would be empty and impossible to grab, so
+  -- edit/test mode borrows the sample icons like every other style.
+  if (ns.TestMode and ns.TestMode.active) or (ns.EditMode and ns.EditMode.active) then
+    shown = ns.TestMode:FillIcons(frame, cfg, AcquireButton, SetButtonDisplay)
+  else
+    local displays = ns.TotemDisplays(cfg.totems, GetTotemInfo, ns.MaxTotemSlots())
+    local colorBySlot = cfg.totems and cfg.totems.colorBySlot
+    for _, display in ipairs(displays) do
+      shown = shown + 1
+      local btn = AcquireButton(frame, shown)
+      SetButtonDisplay(btn, display, cfg, now) -- resets the border to black
+      local color = colorBySlot and ns.TotemSlotColors[display.slot]
+      if color then
+        btn.border:SetVertexColor(color[1], color[2], color[3], 1)
+      end
+      btn:Show()
+    end
+  end
+  if frame.buttons then
+    for i = shown + 1, #frame.buttons do
+      frame.buttons[i]:Hide()
+    end
+  end
+  LayoutRow(frame, cfg, shown)
+end
+
+-- /cdm totems: whether CoA's idols/wards/effigy occupy the standard slots
+-- cannot be checked offline -- this dumps what the client actually reports.
+function TotemRow:Diagnose()
+  local max = ns.MaxTotemSlots()
+  ns:Print(("MAX_TOTEMS = %s (using %d), TOTEM_PRIORITIES = %s"):format(
+    tostring(_G.MAX_TOTEMS), max,
+    _G.TOTEM_PRIORITIES and table.concat(_G.TOTEM_PRIORITIES, ",") or "nil"))
+  for slot = 1, max do
+    local haveTotem, name, startTime, duration, icon = GetTotemInfo(slot)
+    ns:Print(("slot %d: have=%s name=%s start=%s duration=%s icon=%s"):format(
+      slot, tostring(haveTotem), tostring(name), tostring(startTime),
+      tostring(duration), tostring(icon) ~= "" and tostring(icon) or "(empty)"))
+  end
+  ns:Print("Plant your idols / wards / effigy and run this again to see which slots they take.")
+end
