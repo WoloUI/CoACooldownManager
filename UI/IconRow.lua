@@ -299,4 +299,42 @@ function TotemRow:Diagnose()
     ns:Print(("%d slot(s) occupied, so a Totems bar should be showing %d icon(s)."):format(
       occupied, occupied))
   end
+
+  -- Render side: which bars use this style and what they actually drew. The
+  -- slots reading right while the bar stays empty is a different bug from the
+  -- bar not existing, so say which one it is.
+  local bars = 0
+  for _, viewer in ipairs(ns.profile and ns.profile.viewers or {}) do
+    if viewer.style == "totems" then
+      bars = bars + 1
+      local frame = ns.Viewer and ns.Viewer:GetFrame(viewer.name)
+      local off = {}
+      for slot = 1, max do
+        if viewer.totems and viewer.totems.slots and viewer.totems.slots[slot] == false then
+          off[#off + 1] = slot
+        end
+      end
+      local drew = 0
+      for _, btn in ipairs(frame and frame.buttons or {}) do
+        if btn:IsShown() then drew = drew + 1 end
+      end
+      local displays = ns.TotemDisplays(viewer.totems, GetTotemInfo, max)
+      ns:Print(("bar %q: enabled=%s frame=%s shown=%s visible=%s size=%dx%d displays=%d drew=%d slotsOff=%s"):format(
+        viewer.name, tostring(viewer.enabled), frame and "yes" or "|cffff5555MISSING|r",
+        frame and tostring(frame:IsShown()) or "-",
+        frame and tostring(frame:IsVisible()) or "-",
+        frame and math.floor(frame:GetWidth() or 0) or 0,
+        frame and math.floor(frame:GetHeight() or 0) or 0,
+        #displays, drew, #off > 0 and table.concat(off, ",") or "none"))
+      if frame then
+        local point, _, relPoint, x, y = frame:GetPoint()
+        ns:Print(("  anchored %s to %s at %d,%d  strata=%s alpha=%.2f"):format(
+          tostring(point), tostring(relPoint), math.floor(x or 0), math.floor(y or 0),
+          tostring(frame:GetFrameStrata()), frame:GetAlpha() or 1))
+      end
+    end
+  end
+  if bars == 0 then
+    ns:Print("|cffff5555No bar uses the Totems style|r - set a bar's Style to Totems, or make a new one with it.")
+  end
 end
