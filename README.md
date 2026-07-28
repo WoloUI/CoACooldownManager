@@ -138,10 +138,19 @@ slot — the icon and the totem's real name are learned the first time you plant
 until then the placeholder borrows whatever your totem bar has on that slot — or match by
 the totem's name instead.
 
-Being ordinary elements, they take the whole trigger builder: add a *Time left* or
-*This spell ready* condition to get a **glow or a sound** when a totem drops or is about to
-expire (*Time left* reads 0 for a totem that is down, and *This spell ready* means
-"planted", so `= false` is "while this totem is down").
+Totems with their own cooldown sweep it on the gray icon, so you can see when the re-plant
+is coming up rather than just that it's gone — which is the whole story for something like
+Stasis Ward, up for 2 seconds and cooling for 45. The planting spell is resolved
+automatically (your totem bar's spell for that slot, then the totem's own name); there's an
+optional field for it when the two names differ.
+
+Being ordinary elements, they take the whole trigger builder, so a **glow or a sound** is
+two dropdowns away:
+
+- *This spell ready* = **can be planted now** (down *and* off cooldown) — the actionable
+  alert. Not "while it's down", which on a 2s/45s totem would fire almost permanently.
+- *Time left* is the **totem's** own remaining time, 0 while it's down, never the
+  cooldown's.
 
 ### Class HUD hider
 

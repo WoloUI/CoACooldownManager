@@ -20,11 +20,12 @@ print("test_totems")
 stub.loadAddonFile("Core/Triggers.lua", ns)
 
 local NOW = 1000
-local function Ctx(totem, barIcon)
+local function Ctx(totem, barIcon, cd, barSpell)
   return {
     totemBarIcon = function() return barIcon end,
+    totemSpell = function() return barSpell end,
     now = function() return NOW end,
-    cooldown = function() return nil end,
+    cooldown = function(ref) cd = cd or {}; cd.asked = ref; return cd.state end,
     cooldownRemaining = function() return 0 end,
     aura = function() return nil end,
     power = function() return 0, 100 end,
@@ -93,16 +94,62 @@ check("showWhen missing shows only while down", d.shown and not d.desaturate)
 d = ns.Triggers:Evaluate(missingEl, Ctx(up))
 check("showWhen missing hides a planted totem", d.shown == false)
 
--- Glow while the totem is DOWN: "This spell ready" = planted, value false
-local downGlow = { kind = "totem", slot = 2, conditions = {
-  { ctype = "ready", value = false, action = "glow" } } }
-d = ns.Triggers:Evaluate(downGlow, Ctx(nil))
-check("ready=false glows while the totem is down", d.glow)
-d = ns.Triggers:Evaluate(downGlow, Ctx(up))
-check("ready=false does not glow while it stands", not d.glow)
+--------------------------------------------------------------------------------
+-- Re-plant cooldown: some totems have one, so the gray icon sweeps it
+--------------------------------------------------------------------------------
+local onCD = { state = { known = true, onCooldown = true, start = NOW - 4, duration = 20 } }
+local slotEl = { kind = "totem", slot = 2, name = "Totem slot 2",
+  totemName = "Shadow Effigy", conditions = {} }
+d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil, onCD))
+check("a downed totem sweeps its spell cooldown",
+  d.start == NOW - 4 and d.duration == 20 and d.expirationTime == NOW + 16)
+check("it is still gray while on cooldown", d.desaturate and d.missing)
 
--- Glow before it expires: "Time left" reads 0 when the totem is down, so the
--- same condition covers about-to-expire and already-down
+-- Ready to re-plant: gray, no sweep
+d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil,
+  { state = { known = true, onCooldown = false, start = 0, duration = 0 } }))
+check("ready to re-plant means no sweep", d.start == 0 and d.duration == 0)
+
+-- An unknown spell never fakes a cooldown
+d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil,
+  { state = { known = false, onCooldown = true, start = NOW, duration = 20 } }))
+check("an unknown spell shows no cooldown", d.start == 0)
+
+-- A planted totem keeps its OWN duration, never the spell cooldown
+d = ns.Triggers:Evaluate(slotEl, Ctx(up, nil, onCD))
+check("a planted totem shows its duration, not the cooldown", d.duration == 60)
+
+-- Which spell gets asked for, in order of trustworthiness
+local RF = ns.Triggers.TotemSpellRef
+local ctx = Ctx(nil, nil, nil, 12345)
+check("an explicit override wins",
+  RF({ slot = 2, cdSpell = "Custom", totemName = "Shadow Effigy" }, ctx) == "Custom")
+check("a by-name element uses its resolved spell",
+  RF({ spellID = 777, name = "Serpent Ward" }, ctx) == 777)
+check("a by-name element without an id uses the typed name",
+  RF({ name = "Serpent Ward" }, ctx) == "Serpent Ward")
+check("a slot element asks the totem bar",
+  RF({ slot = 2, totemName = "Shadow Effigy" }, ctx) == 12345)
+check("without a totem bar answer it falls back to the totem's name",
+  RF({ slot = 2, totemName = "Shadow Effigy" }, Ctx(nil, nil, nil, nil)) == "Shadow Effigy")
+check("a slot element NEVER uses its label as a spell",
+  RF({ slot = 2, name = "Totem slot 2" }, Ctx(nil, nil, nil, nil)) == nil)
+
+-- Glow when you CAN re-plant: "This spell ready" = down AND off cooldown.
+-- The Stasis Ward case (2s standing, 45s cooldown) is why this is not just
+-- "while it is down", which would glow 43 seconds out of every 45.
+local canPlant = { kind = "totem", slot = 2, totemName = "Stasis Ward", conditions = {
+  { ctype = "ready", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(canPlant, Ctx(nil, nil, onCD))
+check("no glow while the re-plant cooldown runs", not d.glow)
+d = ns.Triggers:Evaluate(canPlant, Ctx(nil, nil,
+  { state = { known = true, onCooldown = false } }))
+check("glows the moment it can be re-planted", d.glow)
+d = ns.Triggers:Evaluate(canPlant, Ctx(up, nil,
+  { state = { known = true, onCooldown = false } }))
+check("no glow while it is standing", not d.glow)
+
+-- Time left is the TOTEM's, never the re-plant cooldown's
 local expiring = { kind = "totem", slot = 2, conditions = {
   { ctype = "remaining", op = "<", value = 10, action = "glow" } } }
 d = ns.Triggers:Evaluate(expiring, Ctx({ slot = 2, name = "x", icon = "i",
@@ -110,7 +157,7 @@ d = ns.Triggers:Evaluate(expiring, Ctx({ slot = 2, name = "x", icon = "i",
 check("time left < 10 glows with 5s to go", d.glow)
 d = ns.Triggers:Evaluate(expiring, Ctx(up))
 check("time left < 10 stays quiet with 40s to go", not d.glow)
-d = ns.Triggers:Evaluate(expiring, Ctx(nil))
-check("time left reads 0 for a totem that is down", d.glow)
+d = ns.Triggers:Evaluate(expiring, Ctx(nil, nil, onCD))
+check("time left reads 0 for a downed totem, not its 16s cooldown", d.glow)
 
 return T

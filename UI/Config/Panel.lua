@@ -2618,8 +2618,8 @@ function Config:Render()
     local addHint
     if isTotem then
       addHint = totemByName
-        and "Type the TOTEM's name as /cdm totems prints it (it can differ from the spell's).\nGray when it is not planted; add a Time left or This spell ready condition for glow or sound."
-        or "Tracks whatever stands in that totem slot: sweep and time left while it is up,\ngray when it is not. The icon and name are learned the first time you plant one."
+        and "Type the TOTEM's name as /cdm totems prints it (it can differ from the spell's).\nGray while it is down, sweeping its re-plant cooldown if it has one."
+        or "Tracks whatever stands in that totem slot: time left while it is up, and while it is\ndown, gray plus its re-plant cooldown. Icon and name are learned when you plant one.\nSelect it below for a glow or sound when it can be re-planted (This spell ready)."
     elseif isTrinket then
       addHint = "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
     elseif c.addKind.value == "item" then

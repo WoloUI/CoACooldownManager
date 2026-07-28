@@ -348,6 +348,14 @@ function TriggerBuilder:Create(parent)
     builder.element.icd = tonumber(text) or nil
   end, "e.g. 45")
 
+  -- Totem kind: which spell plants it, for the re-plant cooldown sweep. Only
+  -- needed when the totem's name is not the spell's (Graven Effigy plants a
+  -- "Shadow Effigy"), which no API on this client can tell us.
+  builder.cdSpellLabel = W.CreateLabel(builder, "Planting spell (optional, for its cooldown)", 11, W.colors.inkDim)
+  builder.cdSpell = W.CreateEditBox(builder, 180, 20, function(self, text)
+    builder.element.cdSpell = (text and text ~= "") and text or nil
+  end, "spell name (blank = auto)")
+
   builder.showLabel = W.CreateLabel(builder, "show", 12, W.colors.inkDim)
   builder.show = W.CreateDropdown(builder, 180, function(_, value)
     builder.element.showWhen = value
@@ -458,11 +466,28 @@ function TriggerBuilder:Load(element, onChange)
     builder.icd:SetPoint("TOPLEFT", PAD + 210, y)
     builder.icd:SetText(element.icd and tostring(element.icd) or "")
     y = y - ROW_H - 4
+    builder.cdSpellLabel:Hide()
+    builder.cdSpell:Hide()
+  elseif kind == "totem" then
+    builder.cdSpellLabel:Show()
+    builder.cdSpellLabel:ClearAllPoints()
+    builder.cdSpellLabel:SetPoint("TOPLEFT", PAD, y - 5)
+    builder.cdSpell:Show()
+    builder.cdSpell:ClearAllPoints()
+    builder.cdSpell:SetPoint("TOPLEFT", PAD + 250, y)
+    builder.cdSpell:SetText(element.cdSpell or "")
+    y = y - ROW_H - 4
+    builder.procLabel:Hide()
+    builder.proc:Hide()
+    builder.icdLabel:Hide()
+    builder.icd:Hide()
   else
     builder.procLabel:Hide()
     builder.proc:Hide()
     builder.icdLabel:Hide()
     builder.icd:Hide()
+    builder.cdSpellLabel:Hide()
+    builder.cdSpell:Hide()
   end
 
   -- CONDITIONS header

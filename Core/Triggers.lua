@@ -23,12 +23,12 @@ local function ConditionValue(cond, element, display, ctx)
     if element.kind == "cooldown" then
       return ctx.cooldownRemaining(element.spellID)
     end
+    -- The TOTEM's own time left, 0 while it is down. Never the re-plant
+    -- cooldown, which display.expirationTime carries in that state.
+    if element.kind == "totem" then return display.totemRemaining or 0 end
     if display.expirationTime and display.expirationTime > 0 then
       return math.max(0, display.expirationTime - ctx.now())
     end
-    -- A totem that is not planted has zero left, so "Time left < 5" covers
-    -- both "about to expire" and "already down" -- the useful glow/sound rule
-    if element.kind == "totem" then return 0 end
     return nil
   elseif ctype == "stacks" then
     return display.stacks or 0
@@ -74,10 +74,12 @@ local function ConditionMatches(cond, element, display, ctx)
     local aura = ctx.aura(cond.unit or "player", cond.spellID, cond.onlyMine)
     return (aura ~= nil) == (cond.value ~= false)
   elseif ctype == "ready" then
-    -- For a totem, "ready" reads as PLANTED: value=false is the direct way to
-    -- say "glow/beep while this totem is down"
+    -- For a totem, "ready" reads as CAN PLANT NOW: it is down AND its spell is
+    -- off cooldown. That is the actionable alert -- "while it is down" would
+    -- glow almost permanently on something like Stasis Ward, which stands for
+    -- 2s and cools for 45. ("Is it down?" is Time left = 0.)
     if element.kind == "totem" then
-      return (not display.missing) == (cond.value ~= false)
+      return (display.totemCanPlant == true) == (cond.value ~= false)
     end
     -- THIS element's spell is ready (value=true) or on cooldown (value=false)
     local state = ctx.cooldown(element.name or element.spellID)
@@ -154,6 +156,29 @@ function Triggers.MergeGCD(display, gcdStart, gcdDuration)
   display.gcdStart = gcdStart
   display.gcdDuration = gcdDuration
   return display
+end
+
+--------------------------------------------------------------------------------
+-- Which spell plants a totem (pure over ctx)
+--------------------------------------------------------------------------------
+-- Needed to sweep the re-plant cooldown on a downed totem. The client offers no
+-- totem -> spell mapping, so this tries every honest source and gives up rather
+-- than guessing: an explicit override, the spell a by-name element resolved, the
+-- totem bar's spell for that slot, then the totem's own name (which IS the spell
+-- name for most of them, though not all -- Graven Effigy plants Shadow Effigy).
+-- A slot element's `name` is a label like "Totem slot 2" and must never be used.
+function Triggers.TotemSpellRef(element, ctx)
+  if element.cdSpell and element.cdSpell ~= "" then return element.cdSpell end
+  if not element.slot then
+    if element.spellID then return element.spellID end
+    if element.name and element.name ~= "" then return element.name end
+  end
+  if element.slot and ctx.totemSpell then
+    local ref = ctx.totemSpell(element.slot)
+    if ref then return ref end
+  end
+  if element.totemName and element.totemName ~= "" then return element.totemName end
+  return nil
 end
 
 --------------------------------------------------------------------------------
@@ -261,7 +286,12 @@ function Triggers:Evaluate(element, ctx)
     -- otherwise by the totem's name across every slot.
     local info = ctx.totem and ctx.totem(element.slot, element.name)
     local showWhen = element.showWhen or "always"
+    -- Kept apart from display.start/duration, which carry the re-plant cooldown
+    -- while the totem is down: a condition asking for the TOTEM's time left must
+    -- not read the cooldown's instead (Stasis Ward stands 2s and cools 45s).
+    display.totemRemaining = 0
     if info then
+      display.totemRemaining = math.max(0, info.start + info.duration - ctx.now())
       display.shown = showWhen == "always" or showWhen == "present"
       display.icon = info.icon or display.icon
       display.name = info.name or display.name
@@ -280,6 +310,18 @@ function Triggers:Evaluate(element, ctx)
       -- Without this a slot you have never planted shows a question mark.
       if not element.icon and element.slot and ctx.totemBarIcon then
         display.icon = ctx.totemBarIcon(element.slot) or display.icon
+      end
+      -- Some totems have their own cooldown, so a gray icon alone does not say
+      -- whether you CAN re-plant. Sweep the planting spell's cooldown on it.
+      local ref = Triggers.TotemSpellRef(element, ctx)
+      local state = ref and ctx.cooldown(ref)
+      if state and state.known and state.onCooldown then
+        display.start = state.start
+        display.duration = state.duration
+        display.expirationTime = state.start + state.duration
+        display.totemCanPlant = false
+      else
+        display.totemCanPlant = true -- down and off cooldown: plant it
       end
       if showWhen == "always" then
         display.shown = true -- gray: prompts a re-plant
@@ -464,6 +506,13 @@ function Triggers:LiveContext()
     -- both guarded: the live button texture, then the slot's totem spell list.
     -- Neither can be verified outside the game, and nil is a fine answer -- the
     -- icon simply stays unknown until you plant there once.
+    -- The spell the totem bar has on a slot, used for the re-plant cooldown
+    totemSpell = function(slot)
+      if not (slot and GetMultiCastTotemSpells) then return nil end
+      local ok, spellID = pcall(GetMultiCastTotemSpells, slot)
+      if ok and spellID and GetSpellInfo(spellID) then return spellID end
+      return nil
+    end,
     totemBarIcon = function(slot)
       if not slot then return nil end
       local tex = _G["MultiCastActionButton" .. slot .. "Icon"]
