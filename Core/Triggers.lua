@@ -68,6 +68,20 @@ local function ConditionMatches(cond, element, display, ctx)
     -- Whether a pet is out (value=true) or not (value=false). An optional
     -- cond.petName filters to a specific pet by name or npc id; empty = any pet.
     return ctx.petActive(cond.petName) == (cond.value ~= false)
+  elseif ctype == "totemname" then
+    -- WHICH totem is standing. A slot holds different totems over time, so this
+    -- is how a trigger gets aimed at one of them ("Stasis Ward" only). With the
+    -- "Show only if" action it also filters what the element displays at all.
+    -- An empty filter means "any totem", same as the pet-name filter.
+    local standing = display.totemStanding
+    local matches
+    if not cond.totemName or cond.totemName == "" then
+      matches = standing ~= nil
+    else
+      matches = standing ~= nil
+        and Triggers.SummonKey(standing) == Triggers.SummonKey(cond.totemName)
+    end
+    return matches == (cond.value ~= false)
   elseif ctype == "totemup" then
     -- THIS element's totem is standing (value=true) or down (value=false).
     -- Glow while it works, which "This spell ready" cannot say: that one means
@@ -297,6 +311,7 @@ function Triggers:Evaluate(element, ctx)
     display.totemRemaining = 0
     if info then
       display.totemRemaining = math.max(0, info.start + info.duration - ctx.now())
+      display.totemStanding = info.name -- what a "This totem is" filter compares
       display.shown = showWhen == "always" or showWhen == "present"
       display.icon = info.icon or display.icon
       display.name = info.name or display.name
@@ -324,10 +339,18 @@ function Triggers:Evaluate(element, ctx)
       -- a real cooldown. A running cooldown on the ref is proof enough.
       local ref = Triggers.TotemSpellRef(element, ctx)
       local state = ref and ctx.cooldown(ref)
+      local cdStart, cdDuration = 0, 0
       if state and state.onCooldown then
-        display.start = state.start
-        display.duration = state.duration
-        display.expirationTime = state.start + state.duration
+        cdStart, cdDuration = state.start or 0, state.duration or 0
+      elseif element.slot and ctx.totemBarCooldown then
+        -- The spell lookup can come back empty even for a totem that is very
+        -- much on cooldown, so fall back to what the totem bar button shows
+        cdStart, cdDuration = ctx.totemBarCooldown(element.slot)
+      end
+      if cdStart > 0 and cdDuration > 0 then
+        display.start = cdStart
+        display.duration = cdDuration
+        display.expirationTime = cdStart + cdDuration
         display.totemCanPlant = false
       else
         display.totemCanPlant = true -- down and off cooldown: plant it
@@ -515,12 +538,34 @@ function Triggers:LiveContext()
     -- both guarded: the live button texture, then the slot's totem spell list.
     -- Neither can be verified outside the game, and nil is a fine answer -- the
     -- icon simply stays unknown until you plant there once.
-    -- The spell the totem bar has on a slot, used for the re-plant cooldown
+    -- The spell the totem bar has on a slot, used for the re-plant cooldown.
+    -- Returned as a NAME whenever the client resolves one: the id the totem bar
+    -- reports is the base rank, whose cooldown reads 0/0 (real data: Stasis Ward
+    -- answers as 500960 with no cooldown), while the name follows the rank you
+    -- actually cast -- the same reason spell refs are names everywhere here.
     totemSpell = function(slot)
       if not (slot and GetMultiCastTotemSpells) then return nil end
       local ok, spellID = pcall(GetMultiCastTotemSpells, slot)
-      if ok and spellID and GetSpellInfo(spellID) then return spellID end
-      return nil
+      if not (ok and spellID) then return nil end
+      local name = GetSpellInfo(spellID)
+      return name or spellID
+    end,
+    -- The cooldown the TOTEM BAR button shows for a slot. ElvUI's totem bar
+    -- displays it because those are real action buttons, so the timer comes from
+    -- GetActionCooldown -- a different path from GetSpellCooldown, which answers
+    -- 0/0 for the base-rank id the bar reports. This is the source that works.
+    totemBarCooldown = function(slot)
+      if not (slot and GetActionCooldown) then return 0, 0 end
+      local btn = _G["MultiCastActionButton" .. slot]
+      local action = btn and (btn.action
+        or (btn.GetAttribute and btn:GetAttribute("action")))
+      if type(action) ~= "number" then return 0, 0 end
+      local ok, start, duration, enable = pcall(GetActionCooldown, action)
+      if not ok then return 0, 0 end
+      start, duration = start or 0, duration or 0
+      -- Never report the global cooldown as a re-plant timer
+      if enable == 0 or start <= 0 or duration <= 1.5 then return 0, 0 end
+      return start, duration
     end,
     totemBarIcon = function(slot)
       if not slot then return nil end

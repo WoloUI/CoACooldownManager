@@ -51,6 +51,7 @@ local CONDITION_TYPES = {
   { text = "Other spell ready", value = "othercd" },
   { text = "Pet active", value = "petactive" },
   { text = "This totem up", value = "totemup" },
+  { text = "This totem is", value = "totemname" },
 }
 local OP_OPTIONS = {
   { text = "<", value = "<" }, { text = ">", value = ">" },
@@ -94,7 +95,10 @@ local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true
 local NEEDS_POWER = { power = true, powerpct = true }
 local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true }
 local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true }
-local NEEDS_PET = { petactive = true } -- shows a pet name/id filter box
+-- Both share one name-filter box, re-labelled per type: a pet name/id, or which
+-- totem a totem condition applies to (a slot holds different totems over time)
+local NEEDS_PET = { petactive = true }
+local NEEDS_TOTEM_NAME = { totemname = true }
 local BOOL_OPTIONS = {
   ready = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
   otheraura = { { text = "Active", value = true }, { text = "Missing", value = false } },
@@ -103,6 +107,7 @@ local BOOL_OPTIONS = {
   hastarget = { { text = "Has target", value = true }, { text = "No target", value = false } },
   petactive = { { text = "Active", value = true }, { text = "Missing", value = false } },
   totemup = { { text = "Standing", value = true }, { text = "Down", value = false } },
+  totemname = { { text = "Standing", value = true }, { text = "Not standing", value = false } },
 }
 
 --------------------------------------------------------------------------------
@@ -136,6 +141,9 @@ local function CreateConditionRow(parent)
     if not NEEDS_PET[value] then
       row.cond.petName = nil
     end
+    if not NEEDS_TOTEM_NAME[value] then
+      row.cond.totemName = nil
+    end
     Rebuild()
   end)
   row.ctype:SetOptions(CONDITION_TYPES)
@@ -143,7 +151,13 @@ local function CreateConditionRow(parent)
   -- Pet name/id filter (petactive condition). Stored raw: a number matches the
   -- pet's npc id, text matches its name; empty means "any pet".
   row.pet = W.CreateEditBox(row, 90, 20, function(self, text)
-    row.cond.petName = (text and text ~= "") and text or nil
+    local value = (text and text ~= "") and text or nil
+    -- One box, two fields: which one depends on the row's condition type
+    if NEEDS_TOTEM_NAME[row.cond.ctype] then
+      row.cond.totemName = value
+    else
+      row.cond.petName = value
+    end
   end, "pet name / id")
 
   row.spell = W.CreateEditBox(row, 76, 20, function(self, text)
@@ -239,7 +253,12 @@ local function LayoutConditionRow(row, cond)
   end
 
   if NEEDS_PET[ctype] then
+    row.pet:SetPlaceholder("pet name / id")
     row.pet:SetText(cond.petName or "")
+    place(row.pet, 90)
+  elseif NEEDS_TOTEM_NAME[ctype] then
+    row.pet:SetPlaceholder("totem name")
+    row.pet:SetText(cond.totemName or "")
     place(row.pet, 90)
   else
     row.pet:Hide()

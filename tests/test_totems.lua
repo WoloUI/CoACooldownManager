@@ -20,10 +20,14 @@ print("test_totems")
 stub.loadAddonFile("Core/Triggers.lua", ns)
 
 local NOW = 1000
-local function Ctx(totem, barIcon, cd, barSpell)
+local function Ctx(totem, barIcon, cd, barSpell, barCD)
   return {
     totemBarIcon = function() return barIcon end,
     totemSpell = function() return barSpell end,
+    totemBarCooldown = function()
+      if not barCD then return 0, 0 end
+      return barCD[1], barCD[2]
+    end,
     now = function() return NOW end,
     cooldown = function(ref) cd = cd or {}; cd.asked = ref; return cd.state end,
     cooldownRemaining = function() return 0 end,
@@ -122,6 +126,26 @@ d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil,
   { state = { known = true, onCooldown = false, start = 0, duration = 0 } }))
 check("no cooldown running shows no sweep", d.start == 0)
 
+-- The totem bar's button is the fallback when the spell lookup comes back
+-- empty: those are action buttons, which is why ElvUI's totem bar shows the
+-- cooldown that GetSpellCooldown answers 0/0 for
+d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil, nil, nil, { NOW - 2, 45 }))
+check("the totem bar's cooldown is used when the spell has none",
+  d.start == NOW - 2 and d.duration == 45)
+check("it also means you cannot plant yet",
+  ns.Triggers:Evaluate({ kind = "totem", slot = 2, conditions = {
+    { ctype = "ready", value = true, action = "glow" } } },
+    Ctx(nil, nil, nil, nil, { NOW - 2, 45 })).glow == false)
+
+-- The spell's own cooldown still wins when it answers
+d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil, onCD, nil, { NOW - 2, 45 }))
+check("a spell cooldown wins over the bar's", d.duration == 20)
+
+-- Neither source: gray, no sweep, ready to plant
+d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil, nil, nil, nil))
+check("no cooldown from either source leaves it plantable",
+  d.start == 0 and d.totemCanPlant == true)
+
 -- A planted totem keeps its OWN duration, never the spell cooldown
 d = ns.Triggers:Evaluate(slotEl, Ctx(up, nil, onCD))
 check("a planted totem shows its duration, not the cooldown", d.duration == 60)
@@ -184,6 +208,44 @@ check("the sound fires once while it keeps standing", #played == 1)
 ns.Triggers:Evaluate(upSound, Ctx(nil, nil, onCD))
 ns.Triggers:Evaluate(upSound, Ctx(up))
 check("it re-arms after the totem drops", #played == 2)
+
+-- Aiming a trigger at ONE totem: a slot holds different ones over time
+local named = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemname", totemName = "Shadow Effigy", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(named, Ctx(up))
+check("the name filter glows for the named totem", d.glow)
+d = ns.Triggers:Evaluate(named, Ctx({ slot = 2, name = "Serpent Ward", icon = "i",
+  start = NOW - 5, duration = 60 }))
+check("the name filter ignores a different totem", not d.glow)
+d = ns.Triggers:Evaluate(named, Ctx(nil))
+check("the name filter is quiet with nothing standing", not d.glow)
+
+-- Case and padding are irrelevant, like every other name match in the addon
+local sloppy = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemname", totemName = "  shadow effigy ", value = true, action = "glow" } } }
+check("the name match ignores case and padding",
+  ns.Triggers:Evaluate(sloppy, Ctx(up)).glow)
+
+-- An empty filter means any totem
+local anyName = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemname", totemName = "", value = true, action = "glow" } } }
+check("an empty filter matches any standing totem",
+  ns.Triggers:Evaluate(anyName, Ctx(up)).glow)
+
+-- ...and inverted, it fires while that particular totem is NOT the one up
+local notNamed = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemname", totemName = "Shadow Effigy", value = false, action = "glow" } } }
+check("inverted, it fires for a different totem",
+  ns.Triggers:Evaluate(notNamed, Ctx({ slot = 2, name = "Serpent Ward", icon = "i",
+    start = NOW, duration = 60 })).glow)
+
+-- As a display filter: the element only shows for the totem you named
+local onlyIf = { kind = "totem", slot = 2, conditions = {
+  { ctype = "totemname", totemName = "Shadow Effigy", value = true, action = "show" } } }
+check("Show only if displays the named totem", ns.Triggers:Evaluate(onlyIf, Ctx(up)).shown)
+check("Show only if hides a different totem",
+  ns.Triggers:Evaluate(onlyIf, Ctx({ slot = 2, name = "Serpent Ward", icon = "i",
+    start = NOW, duration = 60 })).shown == false)
 
 -- Time left is the TOTEM's, never the re-plant cooldown's
 local expiring = { kind = "totem", slot = 2, conditions = {

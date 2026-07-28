@@ -240,11 +240,21 @@ function ns.DiagnoseTotems()
         local multi = el.slot and ctx and ctx.totemSpell(el.slot)
         local cdStart, cdDur = 0, 0
         if ref then cdStart, cdDur = GetSpellCooldown(ref) end
-        ns:Print(("    cd spell: ref=%s resolves=%s cooldown=%s/%s  (totem bar spell=%s, override=%s)"):format(
+        ns:Print(("    by spell: ref=%s resolves=%s cooldown=%s/%s  (bar spell=%s, override=%s)"):format(
           tostring(ref) ~= "nil" and tostring(ref) or "|cffff5555none|r",
           ref and tostring(GetSpellInfo(ref) ~= nil) or "-",
           tostring(cdStart), tostring(cdDur),
           tostring(multi), tostring(el.cdSpell)))
+        -- The action-button path, which is the one ElvUI's totem bar displays
+        if el.slot then
+          local btn = _G["MultiCastActionButton" .. el.slot]
+          local action = btn and (btn.action
+            or (btn.GetAttribute and btn:GetAttribute("action")))
+          local barStart, barDur = ctx and ctx.totemBarCooldown(el.slot)
+          ns:Print(("    by totem bar: button=%s action=%s cooldown=%s/%s"):format(
+            btn and "yes" or "|cffff5555missing|r", tostring(action),
+            tostring(barStart), tostring(barDur)))
+        end
       end
     end
   end

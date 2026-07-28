@@ -149,6 +149,9 @@ two dropdowns away:
 
 - *This totem up* = **standing / down**, so you can glow or beep for the whole time the
   totem is doing its job.
+- *This totem is* = **which** totem is standing, by name. A slot holds different totems over
+  time, so this is how you aim a trigger at one of them — or, with the *Show only if*
+  action, make the element show up for that totem only.
 - *This spell ready* = **can be planted now** (down *and* off cooldown) — the actionable
   re-plant alert. Not "while it's down", which on a 2s/45s totem would fire almost
   permanently.

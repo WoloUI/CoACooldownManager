@@ -98,6 +98,12 @@ function W.CreateEditBox(parent, width, height, onEnter, placeholder)
     end
     box:HookScript("OnTextChanged", refresh)
     refresh()
+    box.hint = hint
+  end
+  -- Shared boxes get reused for different fields (the condition rows reuse one
+  -- name filter for pets and totems), so the hint has to be re-labelable.
+  function box:SetPlaceholder(text)
+    if self.hint then self.hint:SetText(text) end
   end
   return box
 end
