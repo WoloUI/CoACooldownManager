@@ -126,6 +126,8 @@ icons, but only while the GCD outlasts the spell's own cooldown — the same rul
 uses, so icons stay readable instead of flickering on every cast. **GCD time** adds the
 countdown on top of it.
 
+![The GCD sweep running on an icon row](.github/screenshots/gcd-sweep.gif)
+
 ### Pseudo-resources, two auras at a time
 
 CoA resources often come as a pair of auras. The Reaper is the clean example: **Reaped Soul**
@@ -138,6 +140,8 @@ sliver empties right to left as the fragment buff runs out — so souls about to
 visibly leaving. **Subdivide** draws the sub-stack divider lines inside every segment for
 anyone who prefers counting cells to reading a sliver, and the optional **gradient** ramps
 the filled segments from pale to saturated so the count reads without counting at all.
+
+![Reaped Souls and Soul Fragments on one bar](.github/screenshots/soul-fragments.gif)
 
 ### Totem tracker
 
@@ -173,6 +177,8 @@ two dropdowns away:
 
 If the totem's *effect* outlives the totem itself, track that buff with an
 *Other aura active* condition instead.
+
+![Totem elements: planted, gray, and sweeping the re-plant cooldown](.github/screenshots/totem-tracker.gif)
 
 ### Class HUD hider
 
