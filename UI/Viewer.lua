@@ -127,6 +127,7 @@ local function HideStyleWidgets(frame)
     seg:Hide()
     if seg.border then seg.border:Hide() end
     if seg.fill then seg.fill:Hide() end
+    for _, line in ipairs(seg.dividers or {}) do line:Hide() end
   end
   if frame.barHolder then frame.barHolder:Hide() end            -- stacks (bar mode)
   if frame.countText then frame.countText:Hide() end            -- stacks

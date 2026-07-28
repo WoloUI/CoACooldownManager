@@ -689,8 +689,12 @@ function Config:BuildControls()
     SelectedViewer().stack.subDrain = checked
     Touch()
   end)
+  c.stackSubdivide = W.CreateCheckbox(parent, "Subdivide", function(_, checked)
+    SelectedViewer().stack.subdivide = checked or nil
+    Touch()
+  end)
   c.stackSubHint = W.CreateLabel(parent,
-    "A second aura fills the segment in progress: at 'per seg' stacks it becomes a whole one.\nWith Drain on expiry the sliver empties right to left as that buff runs out.", 10, W.colors.inkDim)
+    "A second aura fills the segment in progress: at 'per seg' stacks it becomes a whole one.\nWith Drain on expiry the sliver empties right to left as that buff runs out.\nSubdivide draws the sub-stack divider lines inside every segment.", 10, W.colors.inkDim)
   c.stackDisplayLabel = W.CreateLabel(parent, "Display", 12, W.colors.inkDim)
   c.stackDisplay = W.CreateDropdown(parent, 150, function(_, value)
     SelectedViewer().stack.display = value
@@ -2453,6 +2457,10 @@ function Config:Render()
       c.stackSubDrain:SetPoint("TOPLEFT", C3 - 20, y)
       c.stackSubDrain:SetChecked(viewer.stack.subDrain ~= false)
       c.stackSubDrain:Show()
+      y = y - 24
+      c.stackSubdivide:SetPoint("TOPLEFT", C1, y)
+      c.stackSubdivide:SetChecked(viewer.stack.subdivide == true)
+      c.stackSubdivide:Show()
     end
     y = y - 24
     c.stackSubHint:SetPoint("TOPLEFT", L1, y); c.stackSubHint:Show()

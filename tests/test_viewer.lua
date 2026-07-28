@@ -157,6 +157,18 @@ check("a duration-less aura keeps its sliver",
 check("per-segment defaults to 3 when unset",
   math.abs(SF(1, nil, 0, 0, true) - 1/3) < 0.001)
 
+-- Optional divider lines, so a big segment can be read as its sub-stacks
+local SO = ns.SubdivideOffsets
+local thirds = SO(30, 3)
+check("three parts need two lines", #thirds == 2)
+check("the lines sit on the thirds", thirds[1] == 10 and thirds[2] == 20)
+check("two parts need one line at the middle",
+  #SO(30, 2) == 1 and SO(30, 2)[1] == 15)
+check("one part needs no lines", #SO(30, 1) == 0)
+check("zero or nil parts need no lines", #SO(30, 0) == 0 and #SO(30, nil) == 0)
+check("a zero-width segment needs no lines", #SO(0, 3) == 0)
+check("absurd subdivisions are capped", #SO(30, 500) <= 9)
+
 -- Short number formatting for absorb amounts
 check("short numbers: plain", ns.FormatShortNumber(897) == "897")
 check("short numbers: 1k-10k keeps a decimal", ns.FormatShortNumber(2500) == "2.5k")

@@ -135,8 +135,9 @@ Soul — and *expires* on its own.
 A Stacks bar shows both at once. Whole segments come from the main aura; a second "filling
 aura" paints the segment in progress, a third at a time, and with **Drain on expiry** that
 sliver empties right to left as the fragment buff runs out — so souls about to be lost are
-visibly leaving. The optional **gradient** ramps the filled segments from pale to saturated,
-so the count reads without counting.
+visibly leaving. **Subdivide** draws the sub-stack divider lines inside every segment for
+anyone who prefers counting cells to reading a sliver, and the optional **gradient** ramps
+the filled segments from pale to saturated so the count reads without counting at all.
 
 ### Totem tracker
 

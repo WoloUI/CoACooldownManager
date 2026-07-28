@@ -65,8 +65,36 @@ local function AcquireSegments(frame, count)
     local fill = frame:CreateTexture(nil, "OVERLAY")
     fill:SetTexture("Interface\\Buttons\\WHITE8X8")
     frame.segments[i].fill = fill
+
+    -- Optional divider lines splitting a segment into its sub-stacks. Created
+    -- after the fill so they draw on top of it (same layer, later wins).
+    frame.segments[i].dividers = {}
   end
   return frame.segments
+end
+
+local MAX_SUBDIVISIONS = 10 -- past this the lines are thicker than the cells
+
+-- x offsets of the divider lines inside a segment, so a big cell can be read as
+-- its sub-stacks (3 Soul Fragments to a Reaped Soul). Pure: geometry only.
+function ns.SubdivideOffsets(segW, parts)
+  local out = {}
+  parts = math.min(math.floor(parts or 0), MAX_SUBDIVISIONS)
+  if parts < 2 or not segW or segW <= 0 then return out end
+  for k = 1, parts - 1 do
+    out[k] = segW * k / parts
+  end
+  return out
+end
+
+local function AcquireDividers(frame, seg, count)
+  seg.dividers = seg.dividers or {}
+  for i = #seg.dividers + 1, count do
+    local line = frame:CreateTexture(nil, "OVERLAY")
+    line:SetTexture("Interface\\Buttons\\WHITE8X8")
+    seg.dividers[i] = line
+  end
+  return seg.dividers
 end
 
 local function EnsureBarHolder(frame)
@@ -175,11 +203,29 @@ local function UpdateSegments(frame, cfg, stack, maxStacks, current, color, subF
         seg.fill:Hide()
       end
     end
+
+    -- Divider lines: drawn on every segment so the grid reads consistently,
+    -- whether that cell is full, filling or empty
+    local offsets = stack.subdivide
+      and ns.SubdivideOffsets(segW, stack.subMax or 3) or {}
+    local dividers = AcquireDividers(frame, seg, #offsets)
+    for k, offset in ipairs(offsets) do
+      local line = dividers[k]
+      line:SetSize(1, segH)
+      line:ClearAllPoints()
+      line:SetPoint("LEFT", seg, "LEFT", offset, 0)
+      line:SetVertexColor(0, 0, 0, 0.9)
+      line:Show()
+    end
+    for k = #offsets + 1, #(seg.dividers or {}) do
+      seg.dividers[k]:Hide()
+    end
   end
   for i = maxStacks + 1, #frame.segments do
     frame.segments[i]:Hide()
     frame.segments[i].border:Hide()
     if frame.segments[i].fill then frame.segments[i].fill:Hide() end
+    for _, line in ipairs(frame.segments[i].dividers or {}) do line:Hide() end
   end
 end
 
