@@ -10,11 +10,33 @@ ns.StackBar = StackBar
 local DEFAULT_COLOR = { 0.88, 0.64, 0.29 }
 local EMPTY_COLOR = { 0.12, 0.09, 0.05, 0.85 }
 
--- Optional gradient across the filled segments: pale at the first, saturated at
--- the last, so the count reads at a glance without counting (the Reaper's Soul
--- Fragments, which stack to 3 and then convert). Pure: takes and returns colors.
-local GRADIENT_LIGHT = 0.55 -- how far the first segment is blended toward white
-local GRADIENT_DEEP = 0.55  -- how far the last one is darkened
+-- The gradient covers the INDIVIDUAL sub-resources only: a COMPLETE resource is
+-- always the configured colour, flat, because every whole segment is the same
+-- thing. Shading the one in progress by how many sub-resources it holds is what
+-- carries information (pale at one Soul Fragment, saturated at the third).
+local GRADIENT_LIGHT = 0.55 -- how far the palest shade is blended toward white
+local GRADIENT_DEEP = 0.55  -- how far the deepest one is darkened
+
+-- Position on that ramp, clamped. Pure: takes and returns colours.
+function ns.GradientShade(color, index, total)
+  local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
+  if not total or total < 2 or not index then return r, g, b end
+  local t = (math.min(math.max(index, 1), total) - 1) / (total - 1)
+  local lr = r + (1 - r) * GRADIENT_LIGHT
+  local lg = g + (1 - g) * GRADIENT_LIGHT
+  local lb = b + (1 - b) * GRADIENT_LIGHT
+  return lr + (r * GRADIENT_DEEP - lr) * t,
+         lg + (g * GRADIENT_DEEP - lg) * t,
+         lb + (b * GRADIENT_DEEP - lb) * t
+end
+
+-- Colour of the segment in progress. Pure.
+function ns.SubFillColor(color, subStacks, subMax, gradient)
+  if not gradient then return color[1], color[2], color[3] end
+  subMax = (subMax and subMax > 0) and subMax or 3
+  return ns.GradientShade(color, math.min(subStacks or 1, subMax), subMax)
+end
+
 -- How much of the NEXT segment a secondary aura has earned, 0..1. Pure.
 -- The Reaper needs two auras working together: Reaped Soul fills whole segments,
 -- while Soul Fragment (3 stacks, and it EXPIRES) fills the one in progress. The
@@ -30,19 +52,6 @@ function ns.SubSegmentFill(subStacks, subMax, remaining, duration, drain)
     fraction = fraction * (left / duration)
   end
   return math.max(0, math.min(fraction, 1))
-end
-
-function ns.GradientShade(color, index, total)
-  local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
-  if not total or total < 2 or not index then return r, g, b end
-  local t = (math.min(math.max(index, 1), total) - 1) / (total - 1)
-  -- Blend from a washed-out version of the colour to a darkened one
-  local lr = r + (1 - r) * GRADIENT_LIGHT
-  local lg = g + (1 - g) * GRADIENT_LIGHT
-  local lb = b + (1 - b) * GRADIENT_LIGHT
-  return lr + (r * GRADIENT_DEEP - lr) * t,
-         lg + (g * GRADIENT_DEEP - lg) * t,
-         lb + (b * GRADIENT_DEEP - lb) * t
 end
 
 --------------------------------------------------------------------------------
@@ -159,7 +168,7 @@ local function CurrentSubFill(stack)
     remaining, duration, stack.subDrain), math.max(aura.count or 0, 1)
 end
 
-local function UpdateSegments(frame, cfg, stack, maxStacks, current, color, subFill)
+local function UpdateSegments(frame, cfg, stack, maxStacks, current, color, subFill, subStacks)
   if frame.barHolder then frame.barHolder:Hide() end
   local segW = cfg.iconSize or 16
   local segH = cfg.segHeight or segW
@@ -176,12 +185,8 @@ local function UpdateSegments(frame, cfg, stack, maxStacks, current, color, subF
     seg.border:SetPoint("TOPLEFT", seg, "TOPLEFT", -1, 1)
     seg.border:SetPoint("BOTTOMRIGHT", seg, "BOTTOMRIGHT", 1, -1)
     if i <= current then
-      if stack.gradient then
-        local r, g, b = ns.GradientShade(color, i, maxStacks)
-        seg:SetVertexColor(r, g, b, 1)
-      else
-        seg:SetVertexColor(color[1], color[2], color[3], 1)
-      end
+      -- A complete resource: always the configured colour, flat
+      seg:SetVertexColor(color[1], color[2], color[3], 1)
     else
       seg:SetVertexColor(EMPTY_COLOR[1], EMPTY_COLOR[2], EMPTY_COLOR[3], EMPTY_COLOR[4])
     end
@@ -192,8 +197,8 @@ local function UpdateSegments(frame, cfg, stack, maxStacks, current, color, subF
     -- will take once it fills, so it reads as the same segment filling up
     if seg.fill then
       if i == current + 1 and (subFill or 0) > 0 then
-        local r, g, b = color[1], color[2], color[3]
-        if stack.gradient then r, g, b = ns.GradientShade(color, i, maxStacks) end
+        -- Individual sub-resources: this is where the gradient lives
+        local r, g, b = ns.SubFillColor(color, subStacks, stack.subMax, stack.gradient)
         seg.fill:SetVertexColor(r, g, b, 1)
         seg.fill:SetSize(math.max(1, segW * subFill), segH)
         seg.fill:ClearAllPoints()
@@ -244,13 +249,10 @@ local function UpdateBar(frame, cfg, stack, maxStacks, current, color)
   holder:Show()
 
   holder.bar:SetStatusBarTexture(ns.GetTexture())
-  if stack.gradient then
-    -- One continuous bar has no segments to shade, so the whole fill deepens as
-    -- it fills: pale at one stack, saturated when full
-    holder.bar:SetStatusBarColor(ns.GradientShade(color, current, maxStacks))
-  else
-    holder.bar:SetStatusBarColor(color[1], color[2], color[3])
-  end
+  -- A continuous bar shows the complete resource, so it keeps the configured
+  -- colour: the gradient belongs to the individual sub-resources, which only
+  -- the segment display can draw
+  holder.bar:SetStatusBarColor(color[1], color[2], color[3])
   holder.bar:SetMinMaxValues(0, maxStacks)
   ns.SetBarValueSmooth(holder.bar, current)
 
@@ -289,7 +291,7 @@ function StackBar:Update(frame, cfg)
   maxStacks = math.min(maxStacks, MAX_SEGMENTS)
   current = math.min(current, maxStacks)
   local subFill, subStacks = CurrentSubFill(stack)
-  UpdateSegments(frame, cfg, stack, maxStacks, current, color, subFill)
+  UpdateSegments(frame, cfg, stack, maxStacks, current, color, subFill, subStacks)
   if stack.showCount ~= false then
     frame.countText:Show()
     frame.countText:ClearAllPoints()

@@ -105,8 +105,9 @@ ns.Viewer:ApplyStrata()
 check("ApplyStrata pushes the value onto frames", strataFrame.applied == "BACKGROUND")
 ns.Viewer.frames.__test = nil
 
--- Stack-bar gradient: pale at the first segment, saturated at the last, so a
--- Reaper's Soul Fragments read at a glance without counting them
+-- Stack-bar gradient: it covers the INDIVIDUAL sub-resources, so a complete
+-- segment stays the configured colour and the one in progress is shaded by how
+-- many sub-stacks it holds
 stub.loadAddonFile("UI/StackBar.lua", ns)
 local PURPLE = { 0.62, 0.35, 0.85 }
 local function shade(i, n) return ns.GradientShade(PURPLE, i, n) end
@@ -114,14 +115,26 @@ local function shade(i, n) return ns.GradientShade(PURPLE, i, n) end
 local r1 = shade(1, 3)
 local r2 = shade(2, 3)
 local r3 = shade(3, 3)
-check("the first segment is paler than the base colour", r1 > PURPLE[1])
-check("the last segment is deeper than the base colour", r3 < PURPLE[1])
+check("one sub-stack is paler than the base colour", r1 > PURPLE[1])
+check("the last sub-stack is deeper than the base colour", r3 < PURPLE[1])
 check("the ramp is monotonic", r1 > r2 and r2 > r3)
 
 local g1, _, b1 = shade(1, 3)
 check("every channel takes part", g1 > PURPLE[2] and b1 > PURPLE[3])
 
--- A single segment has nowhere to ramp: the colour stays as configured
+-- A complete resource keeps the configured colour, flat: only the partial fill
+-- ever gets shaded
+local FC = ns.SubFillColor
+local f1, f2, f3 = FC(PURPLE, 2, 3, false)
+check("gradient off keeps the configured colour",
+  f1 == PURPLE[1] and f2 == PURPLE[2] and f3 == PURPLE[3])
+check("gradient on shades by the sub-stack count", FC(PURPLE, 1, 3, true) == r1)
+check("the last sub-stack takes the deepest shade", FC(PURPLE, 3, 3, true) == r3)
+check("more sub-stacks than fit clamp to the deepest", FC(PURPLE, 9, 3, true) == r3)
+check("a nil count falls back to the palest", FC(PURPLE, nil, 3, true) == r1)
+check("per-segment defaults to 3", FC(PURPLE, 3, nil, true) == r3)
+
+-- A single sub-stack per segment has nowhere to ramp: the colour stays as configured
 local s1, s2, s3 = shade(1, 1)
 check("one segment keeps the base colour",
   s1 == PURPLE[1] and s2 == PURPLE[2] and s3 == PURPLE[3])

@@ -56,7 +56,7 @@ Eight display styles per bar:
 | **Icons** | Cooldown sweep, charge counts, keybind text, desaturate-when-unusable |
 | **Bars** | Duration status bars that drain smoothly |
 | **Power** | 1–2 auto-detected resources, energy ticks, combo points |
-| **Stacks** | CoA pseudo-resources as segments or a continuous bar: optional gradient, and two auras combined (see below) |
+| **Stacks** | CoA pseudo-resources as segments or a continuous bar, two auras combined (see below) |
 | **Shield** | A vertical curved segment column that drains with your absorb shields |
 | **Swing** | Swing timer |
 | **Cast** | Cast bar |
@@ -137,9 +137,11 @@ Soul — and *expires* on its own.
 A Stacks bar shows both at once. Whole segments come from the main aura; a second "filling
 aura" paints the segment in progress, a third at a time, and with **Drain on expiry** that
 sliver empties right to left as the fragment buff runs out — so souls about to be lost are
-visibly leaving. **Subdivide** draws the sub-stack divider lines inside every segment for
-anyone who prefers counting cells to reading a sliver, and the optional **gradient** ramps
-the filled segments from pale to saturated so the count reads without counting at all.
+visibly leaving. The optional **gradient** shades that sliver by how many sub-resources it
+holds — pale at one fragment, saturated at the last one before it converts — while whole
+segments always keep the configured colour, since every one of them is the same thing.
+**Subdivide** draws the sub-stack divider lines inside every segment for anyone who would
+rather count cells than read a sliver.
 
 ![Reaped Souls and Soul Fragments on one bar](.github/screenshots/soul-fragments.gif)
 

@@ -663,7 +663,7 @@ function Config:BuildControls()
     SelectedViewer().stack.showCount = checked
     Touch()
   end)
-  c.stackGradient = W.CreateCheckbox(parent, "Gradient", function(_, checked)
+  c.stackGradient = W.CreateCheckbox(parent, "Gradient (partial)", function(_, checked)
     SelectedViewer().stack.gradient = checked or nil
     Touch()
   end)
@@ -694,7 +694,7 @@ function Config:BuildControls()
     Touch()
   end)
   c.stackSubHint = W.CreateLabel(parent,
-    "A second aura fills the segment in progress: at 'per seg' stacks it becomes a whole one.\nWith Drain on expiry the sliver empties right to left as that buff runs out.\nSubdivide draws the sub-stack divider lines inside every segment.", 10, W.colors.inkDim)
+    "A second aura fills the segment in progress: at 'per seg' stacks it becomes a whole one.\nWith Drain on expiry the sliver empties right to left as that buff runs out, and Gradient\nshades it by how many it holds. Whole segments always keep the configured colour.\nSubdivide draws the sub-stack divider lines inside every segment.", 10, W.colors.inkDim)
   c.stackDisplayLabel = W.CreateLabel(parent, "Display", 12, W.colors.inkDim)
   c.stackDisplay = W.CreateDropdown(parent, 150, function(_, value)
     SelectedViewer().stack.display = value
