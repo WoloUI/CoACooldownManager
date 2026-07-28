@@ -14,6 +14,26 @@ end
 
 print("test_totems")
 
+-- Slot count comes from the client, never hardcoded
+_G.MAX_TOTEMS = nil
+check("max slots falls back to 4", ns.MaxTotemSlots() == 4)
+_G.MAX_TOTEMS = 5
+check("max slots follows the client", ns.MaxTotemSlots() == 5)
+_G.MAX_TOTEMS = nil
+
+-- The totem bar's buttons are indexed by PRIORITY. On this server
+-- TOTEM_PRIORITIES = 2,1,3,4, so slots 1 and 2 swap buttons while 3 and 4 do
+-- not -- which is exactly why Stasis Ward (slot 1) put its cooldown on the
+-- slot 2 element while Spirit Idol (slot 3) was right.
+_G.TOTEM_PRIORITIES = { 2, 1, 3, 4 }
+check("slot 1 lives on button 2", ns.TotemBarButtonIndex(1) == 2)
+check("slot 2 lives on button 1", ns.TotemBarButtonIndex(2) == 1)
+check("slot 3 is unchanged", ns.TotemBarButtonIndex(3) == 3)
+check("slot 4 is unchanged", ns.TotemBarButtonIndex(4) == 4)
+_G.TOTEM_PRIORITIES = nil
+check("without priorities it falls back to the slot", ns.TotemBarButtonIndex(2) == 2)
+check("no slot means no button", ns.TotemBarButtonIndex(nil) == nil)
+
 --------------------------------------------------------------------------------
 -- Totem ELEMENTS: sweep while planted, gray while not, conditions for glow/sound
 --------------------------------------------------------------------------------

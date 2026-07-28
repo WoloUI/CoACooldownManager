@@ -555,8 +555,8 @@ function Triggers:LiveContext()
     -- GetActionCooldown -- a different path from GetSpellCooldown, which answers
     -- 0/0 for the base-rank id the bar reports. This is the source that works.
     totemBarCooldown = function(slot)
-      if not (slot and GetActionCooldown) then return 0, 0 end
-      local btn = _G["MultiCastActionButton" .. slot]
+      if not (slot and GetActionCooldown and ns.TotemBarButton) then return 0, 0 end
+      local btn = ns.TotemBarButton(slot) -- indexed by PRIORITY, not by slot
       local action = btn and (btn.action
         or (btn.GetAttribute and btn:GetAttribute("action")))
       if type(action) ~= "number" then return 0, 0 end
@@ -569,7 +569,8 @@ function Triggers:LiveContext()
     end,
     totemBarIcon = function(slot)
       if not slot then return nil end
-      local tex = _G["MultiCastActionButton" .. slot .. "Icon"]
+      local index = ns.TotemBarButtonIndex and ns.TotemBarButtonIndex(slot)
+      local tex = index and _G["MultiCastActionButton" .. index .. "Icon"]
       local icon = tex and tex.GetTexture and tex:GetTexture()
       if icon and icon ~= "" then return icon end
       if GetMultiCastTotemSpells then

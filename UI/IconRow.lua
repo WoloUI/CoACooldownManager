@@ -200,6 +200,24 @@ function ns.MaxTotemSlots()
   return _G.MAX_TOTEMS or 4
 end
 
+-- The totem bar's buttons are indexed by PRIORITY, not by totem slot: this
+-- server reports TOTEM_PRIORITIES = 2,1,3,4, so slot 1 lives on button 2. Same
+-- mapping ElvUI uses (Modules/Misc/TotemBar.lua). Reading MultiCastActionButton
+-- <slot> instead put slot 1's cooldown on the slot 2 element.
+function ns.TotemBarButtonIndex(slot)
+  if not slot then return nil end
+  local priorities = _G.TOTEM_PRIORITIES
+  if type(priorities) == "table" and priorities[slot] then
+    return priorities[slot]
+  end
+  return slot
+end
+
+function ns.TotemBarButton(slot)
+  local index = ns.TotemBarButtonIndex(slot)
+  return index and _G["MultiCastActionButton" .. index], index
+end
+
 -- /cdm totems: dumps what the client reports per slot. Verified on a CoA Witch
 -- Doctor (2026-07-28): its wards, idols and effigies DO take the standard totem
 -- slots (Serpent Ward 1, Shadow Effigy 2, Cleansing Idol 3), and a FREE slot
@@ -247,12 +265,13 @@ function ns.DiagnoseTotems()
           tostring(multi), tostring(el.cdSpell)))
         -- The action-button path, which is the one ElvUI's totem bar displays
         if el.slot then
-          local btn = _G["MultiCastActionButton" .. el.slot]
+          local btn, index = ns.TotemBarButton(el.slot)
           local action = btn and (btn.action
             or (btn.GetAttribute and btn:GetAttribute("action")))
           local barStart, barDur = ctx and ctx.totemBarCooldown(el.slot)
-          ns:Print(("    by totem bar: button=%s action=%s cooldown=%s/%s"):format(
-            btn and "yes" or "|cffff5555missing|r", tostring(action),
+          ns:Print(("    by totem bar: slot %s -> button %s (%s) action=%s cooldown=%s/%s"):format(
+            tostring(el.slot), tostring(index),
+            btn and "found" or "|cffff5555missing|r", tostring(action),
             tostring(barStart), tostring(barDur)))
         end
       end
