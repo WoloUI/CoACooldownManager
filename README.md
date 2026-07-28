@@ -49,7 +49,7 @@ Everything you see is a *viewer* anchored in a hierarchy off the root Power bar.
 Essential / Defensives / Utility / Buffs / Target DoTs / Reminders / Alerts, plus
 **unlimited custom bars** of your own.
 
-Nine display styles per bar:
+Eight display styles per bar:
 
 | Style | What it shows |
 |---|---|
@@ -60,7 +60,6 @@ Nine display styles per bar:
 | **Shield** | A vertical curved segment column that drains with your absorb shields |
 | **Swing** | Swing timer |
 | **Cast** | Cast bar |
-| **Totems** | One icon per occupied totem slot, with its duration sweep |
 | **Reminders** | Text alert rows |
 
 Each bar tracks five kinds of element: **spells**, **items** (consumables),
@@ -133,16 +132,16 @@ Totems are read from the *slots* rather than a spell list, so whatever this serv
 there — a shaman's four totems, a Witch Doctor's idols, wards and effigies — shows up with
 its own icon, name and timer. `/cdm totems` prints what the client reports per slot.
 
-Two ways to use it:
+Add a **Totem** element to any icon bar: sweep and time left while the totem stands, and a
+**gray icon while it does not**, so an empty slot still tells you what to re-plant. Pick a
+slot — the icon and the totem's real name are learned the first time you plant one, and
+until then the placeholder borrows whatever your totem bar has on that slot — or match by
+the totem's name instead.
 
-- **Totem elements** on any icon bar: sweep and time left while the totem stands, and a
-  **gray icon while it does not**, so an empty slot still tells you what to re-plant. Pick
-  a slot (the icon and the totem's real name are learned the first time you plant one) or
-  match by name. Being ordinary elements, they take the whole trigger builder — add a
-  *Time left* or *This spell ready* condition to get a **glow or a sound** when a totem
-  drops or is about to expire.
-- The **Totems** bar style: a whole bar that fills itself from the occupied slots, with a
-  checkbox per slot and no elements to configure. Empty slots are hidden.
+Being ordinary elements, they take the whole trigger builder: add a *Time left* or
+*This spell ready* condition to get a **glow or a sound** when a totem drops or is about to
+expire (*Time left* reads 0 for a totem that is down, and *This spell ready* means
+"planted", so `= false` is "while this totem is down").
 
 ### Class HUD hider
 

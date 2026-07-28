@@ -20,7 +20,6 @@ local function Styles()
       shield = ns.ShieldBar,
       swing = ns.SwingBar,
       cast = ns.CastBar,
-      totems = ns.TotemRow,
     }
   end
   return STYLE_MODULES

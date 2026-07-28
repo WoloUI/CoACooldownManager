@@ -305,4 +305,18 @@ do
   check("import drops legacy group reminders", foundGroup == false)
 end
 
+-- The retired "totems" bar style: such a bar would draw nothing at all, so it
+-- comes back as an icon bar (where a Totem element belongs)
+local retire = { viewers = {
+  { name = "Totems", style = "totems", totems = { slots = { [1] = false } } },
+  { name = "Essential", style = "icons", elements = {} },
+} }
+check("retiring converts totems bars", ns.DB.RetireTotemStyle(retire) == 1)
+check("converted bar is an icon bar", retire.viewers[1].style == "icons")
+check("converted bar can take elements", type(retire.viewers[1].elements) == "table")
+check("old style config is dropped", retire.viewers[1].totems == nil)
+check("other bars are untouched", retire.viewers[2].style == "icons")
+check("running it again converts nothing", ns.DB.RetireTotemStyle(retire) == 0)
+check("a junk profile is tolerated", ns.DB.RetireTotemStyle(nil) == 0)
+
 return T

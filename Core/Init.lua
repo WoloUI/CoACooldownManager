@@ -1459,8 +1459,8 @@ SlashCmdList["COACDM"] = function(input)
   elseif msg == "gcd" then
     ns.Cooldowns:DiagnoseGCD()
   elseif msg == "totems" then
-    if ns.TotemRow then
-      ns.TotemRow:Diagnose()
+    if ns.DiagnoseTotems then
+      ns.DiagnoseTotems()
     else
       ns:Print("totem tracking is not loaded (restart the client after updating).")
     end

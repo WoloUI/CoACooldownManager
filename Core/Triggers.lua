@@ -275,6 +275,12 @@ function Triggers:Evaluate(element, ctx)
     else
       display.missing = true
       display.name = element.totemName or display.name
+      -- Placeholder icon, best first: what we saw standing here, then whatever
+      -- the totem bar has assigned to this slot, then the element's own spell.
+      -- Without this a slot you have never planted shows a question mark.
+      if not element.icon and element.slot and ctx.totemBarIcon then
+        display.icon = ctx.totemBarIcon(element.slot) or display.icon
+      end
       if showWhen == "always" then
         display.shown = true -- gray: prompts a re-plant
         display.desaturate = true
@@ -449,6 +455,25 @@ function Triggers:LiveContext()
             return { slot = i, name = tname, icon = icon,
               start = start or 0, duration = duration or 0 }
           end
+        end
+      end
+      return nil
+    end,
+    -- The icon the TOTEM BAR (multi-cast bar) has on a slot, so a slot you have
+    -- never planted shows the right art instead of a question mark. Two probes,
+    -- both guarded: the live button texture, then the slot's totem spell list.
+    -- Neither can be verified outside the game, and nil is a fine answer -- the
+    -- icon simply stays unknown until you plant there once.
+    totemBarIcon = function(slot)
+      if not slot then return nil end
+      local tex = _G["MultiCastActionButton" .. slot .. "Icon"]
+      local icon = tex and tex.GetTexture and tex:GetTexture()
+      if icon and icon ~= "" then return icon end
+      if GetMultiCastTotemSpells then
+        local ok, first = pcall(GetMultiCastTotemSpells, slot)
+        if ok and first then
+          local _, _, spellIcon = GetSpellInfo(first)
+          if spellIcon then return spellIcon end
         end
       end
       return nil

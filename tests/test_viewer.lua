@@ -200,11 +200,6 @@ ns.IconRow._SetButtonDisplay(btn, { icon = "tex", start = 0, duration = 0,
   expirationTime = 0, stacks = 0 }, { iconSize = 32, showGCD = true }, 920)
 check("no gcd fields -> no sweep on a ready spell", btn.cooldown.start == nil)
 
--- The border is reset on every draw, so a totem slot tint cannot stick around
-btn = FakeButton()
-ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920)
-check("border resets to black", btn.border.color and btn.border.color[1] == 0)
-
 local function FakeHolder()
   local holder = {
     nameText = FakeText(), timeText = FakeText(), icon = FakeIcon(),

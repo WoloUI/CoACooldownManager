@@ -1,4 +1,4 @@
--- Totem row slot reading (pure: GetTotemInfo is injected).
+-- Totem elements: slot reading, gray placeholder, glow/sound conditions.
 local stub = dofile("tests/wow_stub.lua")
 stub.install(_G)
 
@@ -14,60 +14,15 @@ end
 
 print("test_totems")
 
--- A slot table shaped like GetTotemInfo's returns: [slot] = {have, name, start, duration, icon}
-local function Info(slots)
-  return function(slot)
-    local t = slots[slot]
-    if not t then return false, "", 0, 0, "" end
-    return t[1], t[2], t[3], t[4], t[5]
-  end
-end
-
--- Nothing planted
-local d = ns.TotemDisplays({}, Info({}), 4)
-check("no totems -> no displays", #d == 0)
-
--- Occupied and empty slots mixed, ordered by slot
-local planted = {
-  [1] = { true, "Graven Effigy", 100, 60, "icon_effigy" },
-  [3] = { true, "Spirit Ward", 110, 30, "icon_ward" },
-}
-d = ns.TotemDisplays({}, Info(planted), 4)
-check("only occupied slots show", #d == 2)
-check("ordered by slot", d[1].slot == 1 and d[2].slot == 3)
-check("carries name and icon", d[1].name == "Graven Effigy" and d[2].icon == "icon_ward")
-check("timer comes from the slot", d[1].start == 100 and d[1].duration == 60
-  and d[1].expirationTime == 160)
-check("displays are shown and not desaturated", d[1].shown and not d[1].desaturate)
-
--- Per-slot disable: only false hides it, an absent entry stays on
-d = ns.TotemDisplays({ slots = { [1] = false } }, Info(planted), 4)
-check("slot turned off is dropped", #d == 1 and d[1].slot == 3)
-d = ns.TotemDisplays({ slots = { [1] = true } }, Info(planted), 4)
-check("slot explicitly on still shows", #d == 2)
-
--- haveTotem true with a blank icon is an empty slot on this client
-d = ns.TotemDisplays({}, Info({ [2] = { true, "", 0, 0, "" } }), 4)
-check("blank icon counts as empty", #d == 0)
-
--- Slot count comes from the client, never hardcoded past it
-d = ns.TotemDisplays({}, Info({ [4] = { true, "Idol", 5, 10, "icon_idol" } }), 3)
-check("slots past maxSlots are not read", #d == 0)
-
-_G.MAX_TOTEMS = nil
-check("max slots falls back to 4", ns.MaxTotemSlots() == 4)
-_G.MAX_TOTEMS = 5
-check("max slots follows the client", ns.MaxTotemSlots() == 5)
-_G.MAX_TOTEMS = nil
-
 --------------------------------------------------------------------------------
 -- Totem ELEMENTS: sweep while planted, gray while not, conditions for glow/sound
 --------------------------------------------------------------------------------
 stub.loadAddonFile("Core/Triggers.lua", ns)
 
 local NOW = 1000
-local function Ctx(totem)
+local function Ctx(totem, barIcon)
   return {
+    totemBarIcon = function() return barIcon end,
     now = function() return NOW end,
     cooldown = function() return nil end,
     cooldownRemaining = function() return 0 end,
@@ -104,6 +59,26 @@ d = ns.Triggers:Evaluate(el, Ctx(nil))
 check("missing totem still shows", d.shown and d.missing and d.desaturate)
 check("missing totem keeps the learned icon", d.icon == "icon_effigy")
 check("missing totem has no sweep", d.start == 0 and d.duration == 0)
+
+-- A slot never planted yet: fall back to the icon the totem bar has on it,
+-- so the placeholder is not a question mark
+local fresh = { kind = "totem", slot = 3, conditions = {} }
+d = ns.Triggers:Evaluate(fresh, Ctx(nil, "icon_from_totembar"))
+check("unplanted slot borrows the totem bar's icon", d.icon == "icon_from_totembar")
+
+-- Once learned, the real icon wins over the totem bar's
+local learned = { kind = "totem", slot = 3, icon = "icon_learned", conditions = {} }
+d = ns.Triggers:Evaluate(learned, Ctx(nil, "icon_from_totembar"))
+check("learned icon beats the totem bar's", d.icon == "icon_learned")
+
+-- Neither available: no crash, just no icon (the row draws the question mark)
+d = ns.Triggers:Evaluate({ kind = "totem", slot = 3, conditions = {} }, Ctx(nil, nil))
+check("no icon anywhere is tolerated", d.icon == nil and d.shown)
+
+-- Name-matched elements have no slot, so the bar probe cannot apply
+local byName = { kind = "totem", name = "Serpent Ward", conditions = {} }
+d = ns.Triggers:Evaluate(byName, Ctx(nil, "icon_from_totembar"))
+check("a name-matched totem does not borrow a slot icon", d.icon == nil)
 
 -- The aura show modes apply: present / always (gray) / missing
 local presentEl = { kind = "totem", slot = 2, showWhen = "present", conditions = {} }

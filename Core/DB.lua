@@ -122,6 +122,25 @@ end
 -- Drops every reminder row of a retired type. Without an evaluator such a row
 -- would sit in the element list forever doing nothing, so the sweep runs over
 -- stored profiles, templates and imported strings alike. Idempotent.
+-- The self-populating "totems" bar style was retired in favour of Totem
+-- ELEMENTS (a free slot reports no name or icon, so only an element that knows
+-- which totem you expected can gray out while it is down). Bars saved with the
+-- old style would render nothing at all, so they come back as icon bars, which
+-- is where a Totem element belongs anyway.
+function DB.RetireTotemStyle(profile)
+  local converted = 0
+  if type(profile) ~= "table" then return converted end
+  for _, viewer in ipairs(profile.viewers or {}) do
+    if viewer.style == "totems" then
+      viewer.style = "icons"
+      viewer.elements = viewer.elements or {}
+      viewer.totems = nil
+      converted = converted + 1
+    end
+  end
+  return converted
+end
+
 function DB.StripReminderType(profile, rtype)
   local removed = 0
   if type(profile) ~= "table" then return removed end
@@ -312,6 +331,7 @@ function DB:ActivateProfile()
   DB.SeedSkipTabs(profile.scanner)
   -- Profiles created before the Tracking tab existed
   profile.tracking = profile.tracking or DefaultTracking()
+  DB.RetireTotemStyle(profile)
   self.char.lastSpec = specKey
   self.profile = profile
   ns.profile = profile
@@ -468,10 +488,6 @@ function DB:AddViewer(name, style)
     -- Player cast bar with channel ticks (event-driven, no elements)
     viewer.cast = { width = 220, height = 22, showIcon = true, showTime = true,
       showTicks = true, tickSeconds = 1.0 }
-  elseif style == "totems" then
-    -- One icon per occupied totem slot, read live (no elements). Empty `slots`
-    -- means every slot is on; the config writes false to switch one off.
-    viewer.totems = { slots = {}, colorBySlot = false }
   end
   table.insert(self.profile.viewers, viewer)
   ns:Fire("VIEWERS_CHANGED")

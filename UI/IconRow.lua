@@ -78,10 +78,6 @@ local function SetButtonDisplay(btn, display, cfg, now)
     btn.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
   end
 
-  -- Back to the default border: the totem style tints it per slot on top of
-  -- this, so a bar switched back to plain icons does not keep the tint.
-  btn.border:SetVertexColor(0, 0, 0, 0.9)
-
   btn.icon:SetDesaturated(display.desaturate)
   if display.desaturate then
     btn.icon:SetVertexColor(0.75, 0.75, 0.75)
@@ -194,93 +190,22 @@ IconRow._SetButtonDisplay = SetButtonDisplay
 IconRow._AcquireButton = AcquireButton
 
 --------------------------------------------------------------------------------
--- Totem row: one icon per occupied totem slot
+-- Totem slots
 --------------------------------------------------------------------------------
--- Reads SLOTS, never a spell list: Ascension is classless and its totem-likes
--- are not the vanilla four (the Witch Doctor plants idols, wards and a Graven
--- Effigy), so whatever the server parks in a slot shows up under its own name
--- and icon. Lives in this file to reuse the button pool -- and because a new
--- file in the .toc costs a full client restart.
-local TotemRow = {}
-ns.TotemRow = TotemRow
-
--- Vanilla slot tints, opt-in: on this server the slots do not reliably map to
--- fire/earth/water/air, so the default is the plain black border.
-ns.TotemSlotColors = {
-  [1] = { 0.58, 0.23, 0.10 }, -- fire
-  [2] = { 0.23, 0.45, 0.13 }, -- earth
-  [3] = { 0.19, 0.48, 0.60 }, -- water
-  [4] = { 0.42, 0.18, 0.74 }, -- air
-}
-
+-- Totems are tracked as ELEMENTS (kind "totem", evaluated in Core/Triggers.lua),
+-- not as a self-populating bar style: a free slot answers with a blank name and
+-- icon, so only an element that knows which totem you expected can gray out
+-- while it is down. What lives here is the shared slot count and the diagnostic.
 function ns.MaxTotemSlots()
   return _G.MAX_TOTEMS or 4
 end
 
--- Pure: `info(slot)` returns the GetTotemInfo tuple, so slot filtering and
--- ordering are testable without the client. Ordered by slot; empty slots and
--- slots the user unchecked are dropped.
-function ns.TotemDisplays(cfg, info, maxSlots)
-  local out = {}
-  local slots = cfg and cfg.slots or nil
-  for slot = 1, maxSlots or 4 do
-    if not slots or slots[slot] ~= false then
-      local haveTotem, name, startTime, duration, icon = info(slot)
-      -- An empty slot answers with a blank icon even when haveTotem lies
-      if haveTotem and icon and icon ~= "" then
-        startTime, duration = startTime or 0, duration or 0
-        out[#out + 1] = {
-          shown = true, desaturate = false, glow = false, missing = false,
-          stacks = 0, slot = slot, icon = icon, name = name,
-          start = startTime, duration = duration,
-          expirationTime = startTime + duration,
-        }
-      end
-    end
-  end
-  return out
-end
-
-function TotemRow:Build(frame, cfg)
-  frame.buttons = frame.buttons or {}
-  for _, btn in ipairs(frame.buttons) do btn:Hide() end
-end
-
-function TotemRow:Update(frame, cfg)
-  local now = GetTime()
-  local shown = 0
-  -- With nothing planted the row would be empty and impossible to grab, so
-  -- edit/test mode borrows the sample icons like every other style.
-  if (ns.TestMode and ns.TestMode.active) or (ns.EditMode and ns.EditMode.active) then
-    shown = ns.TestMode:FillIcons(frame, cfg, AcquireButton, SetButtonDisplay)
-  else
-    local displays = ns.TotemDisplays(cfg.totems, GetTotemInfo, ns.MaxTotemSlots())
-    local colorBySlot = cfg.totems and cfg.totems.colorBySlot
-    for _, display in ipairs(displays) do
-      shown = shown + 1
-      local btn = AcquireButton(frame, shown)
-      SetButtonDisplay(btn, display, cfg, now) -- resets the border to black
-      local color = colorBySlot and ns.TotemSlotColors[display.slot]
-      if color then
-        btn.border:SetVertexColor(color[1], color[2], color[3], 1)
-      end
-      btn:Show()
-    end
-  end
-  if frame.buttons then
-    for i = shown + 1, #frame.buttons do
-      frame.buttons[i]:Hide()
-    end
-  end
-  LayoutRow(frame, cfg, shown)
-end
-
 -- /cdm totems: dumps what the client reports per slot. Verified on a CoA Witch
--- Doctor (2026-07-28): its wards, idols and effigies DO take the standard four
+-- Doctor (2026-07-28): its wards, idols and effigies DO take the standard totem
 -- slots (Serpent Ward 1, Shadow Effigy 2, Cleansing Idol 3), and a FREE slot
--- answers haveTotem=true with an empty name and icon -- hence the icon check
--- in TotemDisplays rather than trusting haveTotem.
-function TotemRow:Diagnose()
+-- answers haveTotem=true with an empty name and icon -- hence every read here
+-- gates on the icon instead of trusting haveTotem.
+function ns.DiagnoseTotems()
   local max = ns.MaxTotemSlots()
   ns:Print(("MAX_TOTEMS = %s (using %d), TOTEM_PRIORITIES = %s"):format(
     tostring(_G.MAX_TOTEMS), max,
@@ -295,46 +220,23 @@ function TotemRow:Diagnose()
   end
   if occupied == 0 then
     ns:Print("No slot is occupied - plant your idols / wards / effigy and run this again.")
-  else
-    ns:Print(("%d slot(s) occupied, so a Totems bar should be showing %d icon(s)."):format(
-      occupied, occupied))
+    return
   end
-
-  -- Render side: which bars use this style and what they actually drew. The
-  -- slots reading right while the bar stays empty is a different bug from the
-  -- bar not existing, so say which one it is.
-  local bars = 0
+  -- Which Totem elements are watching what, so a gray icon can be told apart
+  -- from a mis-set element
+  local tracked = 0
   for _, viewer in ipairs(ns.profile and ns.profile.viewers or {}) do
-    if viewer.style == "totems" then
-      bars = bars + 1
-      local frame = ns.Viewer and ns.Viewer:GetFrame(viewer.name)
-      local off = {}
-      for slot = 1, max do
-        if viewer.totems and viewer.totems.slots and viewer.totems.slots[slot] == false then
-          off[#off + 1] = slot
-        end
-      end
-      local drew = 0
-      for _, btn in ipairs(frame and frame.buttons or {}) do
-        if btn:IsShown() then drew = drew + 1 end
-      end
-      local displays = ns.TotemDisplays(viewer.totems, GetTotemInfo, max)
-      ns:Print(("bar %q: enabled=%s frame=%s shown=%s visible=%s size=%dx%d displays=%d drew=%d slotsOff=%s"):format(
-        viewer.name, tostring(viewer.enabled), frame and "yes" or "|cffff5555MISSING|r",
-        frame and tostring(frame:IsShown()) or "-",
-        frame and tostring(frame:IsVisible()) or "-",
-        frame and math.floor(frame:GetWidth() or 0) or 0,
-        frame and math.floor(frame:GetHeight() or 0) or 0,
-        #displays, drew, #off > 0 and table.concat(off, ",") or "none"))
-      if frame then
-        local point, _, relPoint, x, y = frame:GetPoint()
-        ns:Print(("  anchored %s to %s at %d,%d  strata=%s alpha=%.2f"):format(
-          tostring(point), tostring(relPoint), math.floor(x or 0), math.floor(y or 0),
-          tostring(frame:GetFrameStrata()), frame:GetAlpha() or 1))
+    for _, el in ipairs(viewer.elements or {}) do
+      if el.kind == "totem" then
+        tracked = tracked + 1
+        ns:Print(("  %s: %s -> %s"):format(viewer.name,
+          el.slot and ("slot " .. el.slot) or ("name " .. tostring(el.name)),
+          el.totemName or "|cffff5555nothing learned yet|r"))
       end
     end
   end
-  if bars == 0 then
-    ns:Print("|cffff5555No bar uses the Totems style|r - set a bar's Style to Totems, or make a new one with it.")
+  ns:Print(("%d slot(s) occupied, %d Totem element(s) configured."):format(occupied, tracked))
+  if tracked == 0 then
+    ns:Print("Add one on an icon bar: element kind Totem, then pick a slot.")
   end
 end
