@@ -15,6 +15,23 @@ local EMPTY_COLOR = { 0.12, 0.09, 0.05, 0.85 }
 -- Fragments, which stack to 3 and then convert). Pure: takes and returns colors.
 local GRADIENT_LIGHT = 0.55 -- how far the first segment is blended toward white
 local GRADIENT_DEEP = 0.55  -- how far the last one is darkened
+-- How much of the NEXT segment a secondary aura has earned, 0..1. Pure.
+-- The Reaper needs two auras working together: Reaped Soul fills whole segments,
+-- while Soul Fragment (3 stacks, and it EXPIRES) fills the one in progress. The
+-- fill drains with the buff's remaining time, so fragments about to be lost are
+-- visibly leaving -- the square empties right to left.
+function ns.SubSegmentFill(subStacks, subMax, remaining, duration, drain)
+  subStacks = subStacks or 0
+  subMax = (subMax and subMax > 0) and subMax or 3
+  if subStacks <= 0 then return 0 end
+  local fraction = math.min(subStacks / subMax, 1)
+  if drain ~= false and duration and duration > 0 then
+    local left = math.max(0, math.min(remaining or 0, duration))
+    fraction = fraction * (left / duration)
+  end
+  return math.max(0, math.min(fraction, 1))
+end
+
 function ns.GradientShade(color, index, total)
   local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
   if not total or total < 2 or not index then return r, g, b end
@@ -42,6 +59,12 @@ local function AcquireSegments(frame, count)
     border:SetTexture("Interface\\Buttons\\WHITE8X8")
     border:SetVertexColor(0, 0, 0, 0.9)
     frame.segments[i].border = border
+
+    -- Partial fill drawn over the empty cell, anchored LEFT so it empties right
+    -- to left: the secondary aura's progress toward the next whole segment.
+    local fill = frame:CreateTexture(nil, "OVERLAY")
+    fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+    frame.segments[i].fill = fill
   end
   return frame.segments
 end
@@ -92,7 +115,23 @@ local function CurrentStacks(stack, maxStacks)
   return aura and math.max(aura.count, 1) or 0
 end
 
-local function UpdateSegments(frame, cfg, stack, maxStacks, current, color)
+-- Secondary aura: how full the segment in progress is (see ns.SubSegmentFill)
+local function CurrentSubFill(stack)
+  if ns.TestMode and ns.TestMode.active then
+    return stack.subSpellID and 0.66 or 0 -- something to position in edit mode
+  end
+  if not stack.subSpellID then return 0 end
+  local aura = ns.Auras:GetAura(stack.unit or "player", stack.subSpellID, stack.onlyMine ~= false)
+  if not aura then return 0 end
+  local remaining, duration = 0, aura.duration or 0
+  if aura.expirationTime and aura.expirationTime > 0 then
+    remaining = aura.expirationTime - GetTime()
+  end
+  return ns.SubSegmentFill(math.max(aura.count or 0, 1), stack.subMax,
+    remaining, duration, stack.subDrain), math.max(aura.count or 0, 1)
+end
+
+local function UpdateSegments(frame, cfg, stack, maxStacks, current, color, subFill)
   if frame.barHolder then frame.barHolder:Hide() end
   local segW = cfg.iconSize or 16
   local segH = cfg.segHeight or segW
@@ -120,10 +159,27 @@ local function UpdateSegments(frame, cfg, stack, maxStacks, current, color)
     end
     seg:Show()
     seg.border:Show()
+
+    -- The segment in progress: a left-anchored sliver of the colour this cell
+    -- will take once it fills, so it reads as the same segment filling up
+    if seg.fill then
+      if i == current + 1 and (subFill or 0) > 0 then
+        local r, g, b = color[1], color[2], color[3]
+        if stack.gradient then r, g, b = ns.GradientShade(color, i, maxStacks) end
+        seg.fill:SetVertexColor(r, g, b, 1)
+        seg.fill:SetSize(math.max(1, segW * subFill), segH)
+        seg.fill:ClearAllPoints()
+        seg.fill:SetPoint("LEFT", seg, "LEFT", 0, 0)
+        seg.fill:Show()
+      else
+        seg.fill:Hide()
+      end
+    end
   end
   for i = maxStacks + 1, #frame.segments do
     frame.segments[i]:Hide()
     frame.segments[i].border:Hide()
+    if frame.segments[i].fill then frame.segments[i].fill:Hide() end
   end
 end
 
@@ -186,12 +242,15 @@ function StackBar:Update(frame, cfg)
   -- Segments stay sane for large resources (use Bar display for those)
   maxStacks = math.min(maxStacks, MAX_SEGMENTS)
   current = math.min(current, maxStacks)
-  UpdateSegments(frame, cfg, stack, maxStacks, current, color)
+  local subFill, subStacks = CurrentSubFill(stack)
+  UpdateSegments(frame, cfg, stack, maxStacks, current, color, subFill)
   if stack.showCount ~= false then
     frame.countText:Show()
     frame.countText:ClearAllPoints()
     frame.countText:SetPoint("LEFT", frame, "RIGHT", 5, 0)
-    frame.countText:SetText(current .. "/" .. maxStacks)
+    local text = current .. "/" .. maxStacks
+    if (subStacks or 0) > 0 then text = text .. " +" .. subStacks end
+    frame.countText:SetText(text)
   else
     frame.countText:Hide()
   end

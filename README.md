@@ -56,7 +56,7 @@ Eight display styles per bar:
 | **Icons** | Cooldown sweep, charge counts, keybind text, desaturate-when-unusable |
 | **Bars** | Duration status bars that drain smoothly |
 | **Power** | 1–2 auto-detected resources, energy ticks, combo points |
-| **Stacks** | CoA pseudo-resources (Reaper Soul Fragments, Occultist Sanity) as segments or a continuous bar, with an optional gradient |
+| **Stacks** | CoA pseudo-resources as segments or a continuous bar: optional gradient, and two auras combined (see below) |
 | **Shield** | A vertical curved segment column that drains with your absorb shields |
 | **Swing** | Swing timer |
 | **Cast** | Cast bar |
@@ -125,6 +125,18 @@ colour picker.
 icons, but only while the GCD outlasts the spell's own cooldown — the same rule WeakAuras
 uses, so icons stay readable instead of flickering on every cast. **GCD time** adds the
 countdown on top of it.
+
+### Pseudo-resources, two auras at a time
+
+CoA resources often come as a pair of auras. The Reaper is the clean example: **Reaped Soul**
+is the resource you spend, and **Soul Fragment** stacks to 3 — then converts into one Reaped
+Soul — and *expires* on its own.
+
+A Stacks bar shows both at once. Whole segments come from the main aura; a second "filling
+aura" paints the segment in progress, a third at a time, and with **Drain on expiry** that
+sliver empties right to left as the fragment buff runs out — so souls about to be lost are
+visibly leaving. The optional **gradient** ramps the filled segments from pale to saturated,
+so the count reads without counting.
 
 ### Totem tracker
 

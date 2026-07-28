@@ -131,6 +131,32 @@ check("a nil total keeps the base colour", ns.GradientShade(PURPLE, 1, nil) == P
 check("index 0 clamps to the first shade", shade(0, 3) == r1)
 check("an index past the end clamps to the last", shade(9, 3) == r3)
 
+-- Two auras working together: whole segments from one, the segment in progress
+-- from another that expires (Reaped Soul + Soul Fragment)
+local SF = ns.SubSegmentFill
+check("no stacks means no sliver", SF(0, 3, 21, 21, true) == 0)
+check("one of three fills a third", math.abs(SF(1, 3, 21, 21, true) - 1/3) < 0.001)
+check("two of three fills two thirds", math.abs(SF(2, 3, 21, 21, true) - 2/3) < 0.001)
+check("a full sub aura fills the whole cell", SF(3, 3, 21, 21, true) == 1)
+check("more than full is clamped", SF(9, 3, 21, 21, true) == 1)
+
+-- Draining: the sliver empties as the buff runs out, and is gone at expiry
+check("half the time left halves the sliver",
+  math.abs(SF(2, 3, 10.5, 21, true) - 1/3) < 0.001)
+check("an expired buff leaves nothing", SF(2, 3, 0, 21, true) == 0)
+check("negative remaining leaves nothing", SF(2, 3, -5, 21, true) == 0)
+check("remaining over duration does not overfill",
+  math.abs(SF(2, 3, 99, 21, true) - 2/3) < 0.001)
+
+-- Drain off: the sliver is the count alone
+check("with drain off time is ignored",
+  math.abs(SF(2, 3, 1, 21, false) - 2/3) < 0.001)
+-- An aura with no duration cannot drain, so it must not vanish
+check("a duration-less aura keeps its sliver",
+  math.abs(SF(2, 3, 0, 0, true) - 2/3) < 0.001)
+check("per-segment defaults to 3 when unset",
+  math.abs(SF(1, nil, 0, 0, true) - 1/3) < 0.001)
+
 -- Short number formatting for absorb amounts
 check("short numbers: plain", ns.FormatShortNumber(897) == "897")
 check("short numbers: 1k-10k keeps a decimal", ns.FormatShortNumber(2500) == "2.5k")

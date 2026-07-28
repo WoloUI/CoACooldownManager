@@ -667,6 +667,30 @@ function Config:BuildControls()
     SelectedViewer().stack.gradient = checked or nil
     Touch()
   end)
+  -- Second aura filling the segment in progress (Reaper: Reaped Soul fills whole
+  -- segments, Soul Fragment fills the next one a third at a time)
+  c.stackSubLabel = W.CreateLabel(parent, "Filling aura", 12, W.colors.inkDim)
+  c.stackSub = W.CreateEditBox(parent, 90, 20, function(_, text)
+    local stack = SelectedViewer().stack
+    if not text or text == "" then
+      stack.subSpellID = nil
+    else
+      local id, name = ns.ResolveSpell(text)
+      stack.subSpellID = id or name or text
+    end
+    Touch()
+  end, "aura name / id")
+  c.stackSubMaxLabel = W.CreateLabel(parent, "per seg", 12, W.colors.inkDim)
+  c.stackSubMax = W.CreateEditBox(parent, 40, 20, function(_, text)
+    SelectedViewer().stack.subMax = math.max(tonumber(text) or 3, 1)
+    Touch()
+  end, "3")
+  c.stackSubDrain = W.CreateCheckbox(parent, "Drain on expiry", function(_, checked)
+    SelectedViewer().stack.subDrain = checked
+    Touch()
+  end)
+  c.stackSubHint = W.CreateLabel(parent,
+    "A second aura fills the segment in progress: at 'per seg' stacks it becomes a whole one.\nWith Drain on expiry the sliver empties right to left as that buff runs out.", 10, W.colors.inkDim)
   c.stackDisplayLabel = W.CreateLabel(parent, "Display", 12, W.colors.inkDim)
   c.stackDisplay = W.CreateDropdown(parent, 150, function(_, value)
     SelectedViewer().stack.display = value
@@ -2415,6 +2439,24 @@ function Config:Render()
     c.stackGradient:SetPoint("TOPLEFT", C3 - 20, y)
     c.stackGradient:SetChecked(viewer.stack.gradient == true)
     c.stackGradient:Show()
+    y = y - 26
+    -- Row: Filling aura [box]   per seg [box]   [x] Drain on expiry
+    c.stackSubLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackSubLabel:Show()
+    c.stackSub:SetPoint("TOPLEFT", C1, y)
+    c.stackSub:SetText(viewer.stack.subSpellID and tostring(viewer.stack.subSpellID) or "")
+    c.stackSub:Show()
+    if viewer.stack.subSpellID then
+      c.stackSubMaxLabel:SetPoint("TOPLEFT", L2 + 30, y - 4); c.stackSubMaxLabel:Show()
+      c.stackSubMax:SetPoint("TOPLEFT", C2 + 20, y)
+      c.stackSubMax:SetText(tostring(viewer.stack.subMax or 3))
+      c.stackSubMax:Show()
+      c.stackSubDrain:SetPoint("TOPLEFT", C3 - 20, y)
+      c.stackSubDrain:SetChecked(viewer.stack.subDrain ~= false)
+      c.stackSubDrain:Show()
+    end
+    y = y - 24
+    c.stackSubHint:SetPoint("TOPLEFT", L1, y); c.stackSubHint:Show()
+    y = y - 10
     y = y - 26
     -- Row: sizes per display mode
     if viewer.stack.display == "bar" then
