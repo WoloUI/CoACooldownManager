@@ -110,10 +110,17 @@ d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil,
   { state = { known = true, onCooldown = false, start = 0, duration = 0 } }))
 check("ready to re-plant means no sweep", d.start == 0 and d.duration == 0)
 
--- An unknown spell never fakes a cooldown
+-- A running cooldown counts even when the client cannot confirm the spell is
+-- "known": by-name known is just GetSpellInfo resolving, which fails whenever
+-- the spell is not named after the totem it plants
 d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil,
-  { state = { known = false, onCooldown = true, start = NOW, duration = 20 } }))
-check("an unknown spell shows no cooldown", d.start == 0)
+  { state = { known = false, onCooldown = true, start = NOW - 1, duration = 45 } }))
+check("a cooldown is shown even if the spell reads as unknown", d.duration == 45)
+
+-- No cooldown running: nothing invented
+d = ns.Triggers:Evaluate(slotEl, Ctx(nil, nil,
+  { state = { known = true, onCooldown = false, start = 0, duration = 0 } }))
+check("no cooldown running shows no sweep", d.start == 0)
 
 -- A planted totem keeps its OWN duration, never the spell cooldown
 d = ns.Triggers:Evaluate(slotEl, Ctx(up, nil, onCD))

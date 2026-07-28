@@ -225,6 +225,7 @@ function ns.DiagnoseTotems()
   -- Which Totem elements are watching what, so a gray icon can be told apart
   -- from a mis-set element
   local tracked = 0
+  local ctx = ns.Triggers and ns.Triggers:LiveContext()
   for _, viewer in ipairs(ns.profile and ns.profile.viewers or {}) do
     for _, el in ipairs(viewer.elements or {}) do
       if el.kind == "totem" then
@@ -232,6 +233,18 @@ function ns.DiagnoseTotems()
         ns:Print(("  %s: %s -> %s"):format(viewer.name,
           el.slot and ("slot " .. el.slot) or ("name " .. tostring(el.name)),
           el.totemName or "|cffff5555nothing learned yet|r"))
+        -- The re-plant cooldown needs the PLANTING SPELL, which no API maps
+        -- from a totem. Show every step so a missing sweep can be pinned on
+        -- the resolution or on the cooldown read.
+        local ref = ctx and ns.Triggers.TotemSpellRef(el, ctx)
+        local multi = el.slot and ctx and ctx.totemSpell(el.slot)
+        local cdStart, cdDur = 0, 0
+        if ref then cdStart, cdDur = GetSpellCooldown(ref) end
+        ns:Print(("    cd spell: ref=%s resolves=%s cooldown=%s/%s  (totem bar spell=%s, override=%s)"):format(
+          tostring(ref) ~= "nil" and tostring(ref) or "|cffff5555none|r",
+          ref and tostring(GetSpellInfo(ref) ~= nil) or "-",
+          tostring(cdStart), tostring(cdDur),
+          tostring(multi), tostring(el.cdSpell)))
       end
     end
   end

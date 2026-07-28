@@ -318,9 +318,13 @@ function Triggers:Evaluate(element, ctx)
       end
       -- Some totems have their own cooldown, so a gray icon alone does not say
       -- whether you CAN re-plant. Sweep the planting spell's cooldown on it.
+      -- No `state.known` gate on purpose: we have seen this totem stand, so it
+      -- exists, and by-name "known" is just GetSpellInfo resolving -- which
+      -- fails whenever the spell is not named after the totem, silently hiding
+      -- a real cooldown. A running cooldown on the ref is proof enough.
       local ref = Triggers.TotemSpellRef(element, ctx)
       local state = ref and ctx.cooldown(ref)
-      if state and state.known and state.onCooldown then
+      if state and state.onCooldown then
         display.start = state.start
         display.duration = state.duration
         display.expirationTime = state.start + state.duration
