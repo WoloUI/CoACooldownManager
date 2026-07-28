@@ -96,11 +96,12 @@ local function SetButtonDisplay(btn, display, cfg, now)
   -- Cooldown sweep: only re-fire SetCooldown when the spell's timer changed.
   -- "Timer" off hides the NUMBER only: the sweep is the point of the icon.
   local showTimer = cfg.showTimer ~= false
-  -- Optional GCD sweep (Appearance -> Show GCD on icons). Triggers only sets
-  -- these fields when the GCD outlasts the spell's own cooldown, so it wins
-  -- here; its number is never drawn, a 1.5s countdown is just noise.
+  -- Optional GCD sweep, per bar ("GCD sweep" in its Appearance section).
+  -- Triggers only sets these fields when the GCD outlasts the spell's own
+  -- cooldown, so it wins here; its number is never drawn, a 1.5s countdown
+  -- is just noise.
   local start, duration, isGCD = display.start, display.duration, false
-  if display.gcdStart and display.gcdDuration then
+  if cfg.showGCD and display.gcdStart and display.gcdDuration then
     start, duration, isGCD = display.gcdStart, display.gcdDuration, true
   end
   if start > 0 and duration > 0 then

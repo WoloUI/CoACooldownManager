@@ -241,8 +241,9 @@ function Triggers:Evaluate(element, ctx)
     if not state.usable and not state.onCooldown then
       display.desaturate = true
     end
-    -- Opt-in global cooldown sweep (Appearance tab), spells only
-    if display.shown and ctx.gcd and ns.ShowGCD and ns.ShowGCD() then
+    -- Global cooldown, spells only. Always computed (the probe is cached per
+    -- frame) into its own fields; each BAR decides whether to draw it.
+    if display.shown and ctx.gcd then
       Triggers.MergeGCD(display, ctx.gcd())
     end
   elseif element.kind == "summon" then

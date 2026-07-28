@@ -370,6 +370,10 @@ function Config:BuildControls()
     SelectedViewer().reverseSweep = checked
     Touch()
   end)
+  c.showGCD = W.CreateCheckbox(parent, "GCD sweep", function(_, checked)
+    SelectedViewer().showGCD = checked or nil
+    Touch()
+  end)
 
   c.visLabel = W.CreateLabel(parent, "Show bar", 12, W.colors.inkDim)
   c.visibility = W.CreateDropdown(parent, 110, function(_, value)
@@ -508,12 +512,6 @@ function Config:BuildControls()
   c.genStrata:SetOptions(ns.FrameStrataOptions)
   c.genStrataHint = W.CreateLabel(parent, "Lower this so game windows (map, character, bags) appear above the bars.", 10, W.colors.inkDim)
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
-  c.genShowGCD = W.CreateCheckbox(parent, "Show GCD on icons", function(_, ck)
-    AppearanceCfg().showGCD = ck or nil
-    Touch()
-  end)
-  c.genGCDHint = W.CreateLabel(parent,
-    "Runs the global cooldown sweep on spell icons, but only while it lasts longer\nthan the spell's own cooldown (same rule as WeakAuras). /cdm gcd diagnoses it.", 10, W.colors.inkDim)
 
   -- Screen-space alert overlays, rendered at the bottom of the Tracking page
   c.alertsHeader = W.CreateSection(parent, "ALERTS (screen overlays)")
@@ -1678,12 +1676,6 @@ function Config:Render()
     y2 = y2 - 24
     c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
     y2 = y2 - 40
-    c2.genShowGCD:SetPoint("TOPLEFT", 0, y2)
-    c2.genShowGCD:SetChecked(ns.ShowGCD())
-    c2.genShowGCD:Show()
-    y2 = y2 - 22
-    c2.genGCDHint:SetPoint("TOPLEFT", 0, y2); c2.genGCDHint:Show()
-    y2 = y2 - 40
     c2.genStrataLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genStrataLabel:Show()
     c2.genStrata:SetPoint("TOPLEFT", 80, y2)
     c2.genStrata:SetValue(ns.GetFrameStrata())
@@ -2587,6 +2579,10 @@ function Config:Render()
     else
       y = y - 26
       c.showTimer:SetPoint("TOPLEFT", C1, y)
+      -- Only icons render the GCD sweep; duration bars ignore it entirely
+      c.showGCD:SetPoint("TOPLEFT", C2, y)
+      c.showGCD:SetChecked(viewer.showGCD == true)
+      c.showGCD:Show()
     end
     c.showTimer:SetChecked(viewer.showTimer ~= false)
     c.showTimer:Show()

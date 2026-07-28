@@ -122,9 +122,9 @@ Drag every bar with 12px magnet snapping to other bars and to screen centre. A m
 selector, and five glow styles — proc flipbook, pixel, pulse, shine, solid — with a
 colour picker.
 
-**Show GCD on icons** (off by default) runs the global cooldown sweep on your spell icons,
-but only while the GCD outlasts the spell's own cooldown — the same rule WeakAuras uses,
-so icons stay readable instead of flickering on every cast.
+**GCD sweep** (per icon bar, off by default) runs the global cooldown sweep on that bar's
+icons, but only while the GCD outlasts the spell's own cooldown — the same rule WeakAuras
+uses, so icons stay readable instead of flickering on every cast.
 
 ### Totem tracker
 

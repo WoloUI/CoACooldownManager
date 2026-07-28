@@ -58,7 +58,12 @@ function Cooldowns:DiagnoseGCD()
   end
   local gs, gd, source = ProbeGCD()
   ns:Print(("resolved: start=%.3f duration=%.3f via %s"):format(gs, gd, source or "|cffff5555nothing|r"))
-  ns:Print("Show GCD on icons is " .. (ns.ShowGCD() and "ON" or "off") .. " (Appearance tab).")
+  local on = {}
+  for _, viewer in ipairs(ns.profile and ns.profile.viewers or {}) do
+    if viewer.showGCD then on[#on + 1] = viewer.name end
+  end
+  ns:Print("GCD sweep is on for: " .. (#on > 0 and table.concat(on, ", ")
+    or "no bars (tick 'GCD sweep' in a bar's Appearance section)"))
 end
 
 -- Charges API (backported on the Ascension client; absent on plain 3.3.5)

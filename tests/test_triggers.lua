@@ -376,17 +376,21 @@ check("no gcd running writes nothing", g.gcdStart == nil)
 g = MergeGCD({ start = 990, duration = 10.5 }, 1000, 1.5)
 check("merge never touches start/duration", g.start == 990 and g.duration == 10.5)
 
--- Evaluate wires it through ctx.gcd, but only with the toggle on
+-- Evaluate wires it through ctx.gcd. The fields are always computed; whether
+-- they get DRAWN is each bar's own "GCD sweep" setting, checked in IconRow.
 local gcdEl = { kind = "cooldown", spellID = 20, showWhen = "always" }
 local gcdCtx = Ctx({ cooldown = function() return readyState end,
   gcd = function() return NOW, 1.5 end })
-local realShowGCD = ns.ShowGCD
-ns.ShowGCD = function() return false end
 d = ns.Triggers:Evaluate(gcdEl, gcdCtx)
-check("toggle off -> no gcd fields", d.gcdStart == nil)
-ns.ShowGCD = function() return true end
-d = ns.Triggers:Evaluate(gcdEl, gcdCtx)
-check("toggle on -> gcd fields set", d.gcdStart == NOW and d.gcdDuration == 1.5)
-ns.ShowGCD = realShowGCD
+check("evaluate fills the gcd fields from ctx", d.gcdStart == NOW and d.gcdDuration == 1.5)
+
+-- A context without a gcd probe (older callers) must not error
+d = ns.Triggers:Evaluate(gcdEl, Ctx({ cooldown = function() return readyState end }))
+check("no ctx.gcd -> no gcd fields", d.gcdStart == nil)
+
+-- Hidden elements are not worth merging
+local hiddenEl = { kind = "cooldown", spellID = 21, showWhen = "cooldown" }
+d = ns.Triggers:Evaluate(hiddenEl, gcdCtx)
+check("hidden element gets no gcd fields", d.shown == false and d.gcdStart == nil)
 
 return T

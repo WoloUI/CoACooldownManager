@@ -244,12 +244,6 @@ function ns.FontSize(base)
   return math.max(math.floor((base or 12) * (Appearance().fontScale or 1) + 0.5), 6)
 end
 
--- Off by default: cooldown tracking filters the GCD out on purpose, so icons
--- do not flicker on every cast. Turning it on mirrors the WeakAuras "showgcd"
--- option (the GCD sweep shows only when it outlasts the spell's own cooldown).
-function ns.ShowGCD()
-  return Appearance().showGCD == true
-end
 
 ns.GlowOptions = {
   { text = "Proc (WeakAuras style)", value = "proc" },

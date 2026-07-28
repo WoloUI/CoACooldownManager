@@ -161,19 +161,25 @@ check("icons hide the timer when off", btn.timeText.text == "")
 check("icons keep stacks when the timer is off", btn.stacksText.text == 3)
 check("icons keep the cooldown sweep when the timer is off", btn.cooldown.sweeps == 1)
 
--- GCD sweep: only set when Triggers decided the GCD outlasts the spell's own
--- cooldown, so here it always wins the sweep -- and never draws a number
+-- GCD sweep: Triggers only sets these fields when the GCD outlasts the spell's
+-- own cooldown, so with the bar's "GCD sweep" on it wins -- and draws no number
+local gcdDisplay = { icon = "tex", start = 0, duration = 0, expirationTime = 0,
+  stacks = 0, gcdStart = 919, gcdDuration = 1.5 }
 btn = FakeButton()
-ns.IconRow._SetButtonDisplay(btn, { icon = "tex", start = 0, duration = 0,
-  expirationTime = 0, stacks = 0, gcdStart = 919, gcdDuration = 1.5 },
-  { iconSize = 32 }, 920)
-check("gcd fields drive the sweep", btn.cooldown.start == 919 and btn.cooldown.duration == 1.5)
+ns.IconRow._SetButtonDisplay(btn, gcdDisplay, { iconSize = 32, showGCD = true }, 920)
+check("gcd fields drive the sweep when the bar wants it",
+  btn.cooldown.start == 919 and btn.cooldown.duration == 1.5)
 check("gcd sweep draws no number", btn.timeText.text == "")
+
+-- Per bar: the same display on a bar without the setting draws nothing
+btn = FakeButton()
+ns.IconRow._SetButtonDisplay(btn, gcdDisplay, { iconSize = 32 }, 920)
+check("bar without GCD sweep ignores the gcd fields", btn.cooldown.start == nil)
 
 -- Without the GCD fields nothing changes for a ready spell
 btn = FakeButton()
 ns.IconRow._SetButtonDisplay(btn, { icon = "tex", start = 0, duration = 0,
-  expirationTime = 0, stacks = 0 }, { iconSize = 32 }, 920)
+  expirationTime = 0, stacks = 0 }, { iconSize = 32, showGCD = true }, 920)
 check("no gcd fields -> no sweep on a ready spell", btn.cooldown.start == nil)
 
 -- The border is reset on every draw, so a totem slot tint cannot stick around
