@@ -110,6 +110,28 @@ local function ConditionMatches(cond, element, display, ctx)
     local state = ctx.cooldown(cond.spellID)
     local ready = (state and state.known and not state.onCooldown) and true or false
     return ready == (cond.value ~= false)
+  elseif ctype == "usable" or ctype == "otherusable" then
+    -- IsUsableSpell, a DIFFERENT question from "off cooldown". A spell gated by
+    -- a proc or a state (CoA's Desecrate) reads unusable until the gate opens
+    -- while its cooldown says ready the whole time, which is why "This spell
+    -- ready" glows permanently on those. Pair with "Silence on cooldown" when
+    -- the spell also has a real cooldown.
+    local ref
+    if ctype == "usable" then
+      ref = element.name or element.spellID
+    else
+      ref = cond.spellID
+      if not ref then return false end
+    end
+    local state = ctx.cooldown(ref)
+    local usable = (state and state.known and state.usable) and true or false
+    -- "Usable (ignore power)": only the resource is missing, so the gate this
+    -- trigger actually watches IS open -- still worth glowing for.
+    if not usable and cond.value == "nopower"
+      and state and state.known and state.noPower then
+      usable = true
+    end
+    return usable == (cond.value ~= false)
   end
   local value = ConditionValue(cond, element, display, ctx)
   return Compare(cond.op or "<", value, tonumber(cond.value))

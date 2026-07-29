@@ -83,6 +83,16 @@ above N", "only when that other spell is off cooldown", "only while my pet is ou
 Actions include **glow** and **play sound**, edge-triggered so a sound fires once on
 false→true and re-arms cleanly. Pet buffs are trackable as first-class units.
 
+*This spell usable* / *Other spell usable* read `IsUsableSpell`, which is a different
+question from *ready*: a spell gated by a proc or a state (CoA's Desecrate) is off
+cooldown permanently and only becomes **usable** while its gate is open — so *ready*
+would glow forever. Third dropdown value **Usable (ignore power)** treats "I only lack
+the resource" as usable, since the gate the trigger watches is still open. Pair either
+with **Silence on cooldown** when the spell also has a real cooldown. `/cdm usable
+<spell>` prints what the client actually reports, including `IsUsableAction` for
+comparison — run it with the gate open and closed; if nothing changes, the client can't
+see that gate and you want *Other aura active* on the enabling buff instead.
+
 ### HoT / buff tracking on your existing unit frames
 
 Draws your **own** heal-over-time and buff indicators directly onto your ElvUI or Blizzard
@@ -251,6 +261,7 @@ Optional but recommended: ElvUI (unit-frame tracking + skinning) and LibSharedMe
 | `/cdm debug` | Dump unit-frame mapping and cached auras (tracking triage) |
 | `/cdm range` | Print melee-range probe candidates and raw results |
 | `/cdm gcd` | Show which global-cooldown probe answers on this server |
+| `/cdm usable <spell>` | Print `IsUsableSpell` / `IsUsableAction` for a spell (proc-gate triage) |
 | `/cdm totems` | Dump every totem slot's raw contents |
 | `/cdm trinket` | Trinket diagnostic |
 | `/cdm minimap` | Toggle the minimap button |

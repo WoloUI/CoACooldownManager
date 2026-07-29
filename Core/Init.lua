@@ -1458,6 +1458,8 @@ SlashCmdList["COACDM"] = function(input)
     ns.RangeAlert:Diagnose()
   elseif msg == "gcd" then
     ns.Cooldowns:DiagnoseGCD()
+  elseif msg == "usable" then
+    ns.Cooldowns:DiagnoseUsable(arg)
   elseif msg == "totems" then
     if ns.DiagnoseTotems then
       ns.DiagnoseTotems()

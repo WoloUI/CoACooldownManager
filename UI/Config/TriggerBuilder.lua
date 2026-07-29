@@ -38,6 +38,7 @@ local SHOW_AURA = {
 }
 local CONDITION_TYPES = {
   { text = "This spell ready", value = "ready" },
+  { text = "This spell usable", value = "usable" },
   { text = "Time left (sec)", value = "remaining" },
   { text = "Stacks", value = "stacks" },
   { text = "Power (value)", value = "power" },
@@ -49,6 +50,7 @@ local CONDITION_TYPES = {
   { text = "Other aura stacks", value = "otherstacks" },
   { text = "Other aura time left", value = "otherremaining" },
   { text = "Other spell ready", value = "othercd" },
+  { text = "Other spell usable", value = "otherusable" },
   { text = "Pet active", value = "petactive" },
   { text = "This totem up", value = "totemup" },
   { text = "This totem is", value = "totemname" },
@@ -93,14 +95,25 @@ local POWER_OPTIONS = {
 local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true,
   targethp = true, otherstacks = true, otherremaining = true }
 local NEEDS_POWER = { power = true, powerpct = true }
-local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true }
+local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true,
+  otherusable = true }
 local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true }
 -- Both share one name-filter box, re-labelled per type: a pet name/id, or which
 -- totem a totem condition applies to (a slot holds different totems over time)
 local NEEDS_PET = { petactive = true }
 local NEEDS_TOTEM_NAME = { totemname = true }
+-- "Usable (ignore power)" counts a spell you only lack the resource for as
+-- usable: IsUsableSpell answers usable=false, noPower=true in that case, and the
+-- gate the trigger is really watching (a proc, a state) is still open.
+local USABLE_OPTIONS = {
+  { text = "Usable", value = true },
+  { text = "Not usable", value = false },
+  { text = "Usable (ignore power)", value = "nopower" },
+}
 local BOOL_OPTIONS = {
   ready = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
+  usable = USABLE_OPTIONS,
+  otherusable = USABLE_OPTIONS,
   otheraura = { { text = "Active", value = true }, { text = "Missing", value = false } },
   othercd = { { text = "Ready", value = true }, { text = "On cooldown", value = false } },
   combat = { { text = "In combat", value = true }, { text = "Out of combat", value = false } },
@@ -281,8 +294,16 @@ local function LayoutConditionRow(row, cond)
     row.op:Hide()
     row.value:Hide()
     row.bool:SetOptions(BOOL_OPTIONS[ctype])
-    row.bool:SetValue(cond.value ~= false)
-    place(row.bool, 100)
+    -- Most bool conditions store true/false; the usable ones add a third value
+    -- ("nopower"), which must pass through uncoerced or the dropdown would show
+    -- the wrong label for it
+    local boolValue = cond.value
+    if type(boolValue) ~= "string" then boolValue = boolValue ~= false end
+    row.bool:SetValue(boolValue)
+    -- The usable dropdown carries a longer label than the true/false pairs
+    local boolW = BOOL_OPTIONS[ctype] == USABLE_OPTIONS and 128 or 100
+    row.bool:SetWidth(boolW)
+    place(row.bool, boolW)
   else
     row.op:Hide()
     row.value:Hide()

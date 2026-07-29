@@ -66,6 +66,52 @@ function Cooldowns:DiagnoseGCD()
     or "no bars (tick 'GCD sweep' in a bar's Appearance section)"))
 end
 
+-- `/cdm usable <name|id>`: what the client actually reports for IsUsableSpell.
+-- The "This spell usable" condition rides on this, and whether a proc/state gate
+-- (CoA's Desecrate) reaches the client at all cannot be checked outside the
+-- game. Also compares against IsUsableAction, which sometimes knows a
+-- requirement IsUsableSpell does not -- the same split that made us read totem
+-- cooldowns off the action button instead of the spell.
+function Cooldowns:DiagnoseUsable(text)
+  if not text or text == "" then
+    ns:Print("usage: /cdm usable <spell name or id>")
+    return
+  end
+  local ref = text
+  local asId = tonumber(text)
+  if asId then ref = GetSpellInfo(asId) or asId end
+  local usableRef = type(ref) == "string" and ref or (GetSpellInfo(ref) or ref)
+  local usable, noPower = IsUsableSpell(usableRef)
+  local start, duration, enabled = GetSpellCooldown(ref)
+  ns:Print(("usable check for %s -- %s"):format(tostring(ref),
+    ns.IsSpellKnownByPlayer(ref) and "known" or "|cffff5555not known to the client|r"))
+  ns:Print(("  IsUsableSpell -> usable=%s  noPower=%s"):format(
+    tostring(usable), tostring(noPower)))
+  ns:Print(("  GetSpellCooldown -> start=%s duration=%s enabled=%s"):format(
+    tostring(start), tostring(duration), tostring(enabled)))
+  if GetActionInfo and IsUsableAction then
+    local wanted = (type(ref) == "string" and ref or GetSpellInfo(ref) or ""):lower()
+    local found = false
+    for slot = 1, 120 do
+      local atype, aid = GetActionInfo(slot)
+      if atype == "spell" and aid then
+        local aname = GetSpellInfo(aid)
+        if aname and aname:lower() == wanted then
+          local au, an = IsUsableAction(slot)
+          ns:Print(("  action slot %d -> usable=%s noPower=%s"):format(
+            slot, tostring(au), tostring(an)))
+          found = true
+        end
+      end
+    end
+    if not found then
+      ns:Print("  not on any action bar (put it on a bar to compare IsUsableAction)")
+    end
+  end
+  ns:Print("Run this with the gate OPEN and CLOSED. If usable never changes, the"
+    .. " client cannot see the gate -- use 'Other aura active' on the enabling buff instead.")
+end
+
 -- Charges API (backported on the Ascension client; absent on plain 3.3.5)
 local function ChargesFor(ref)
   if not GetSpellCharges then return nil end

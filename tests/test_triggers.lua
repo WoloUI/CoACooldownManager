@@ -176,6 +176,69 @@ rEl.conditions[1].value = false -- inverted: glow while on cooldown
 d = ns.Triggers:Evaluate(rEl, Ctx({ cooldown = function() return cdState end }))
 check("inverted: glow while on cooldown", d.glow)
 
+-- "This spell usable" condition: IsUsableSpell, NOT the cooldown. A proc-gated
+-- spell (CoA's Desecrate) sits off cooldown permanently and only becomes usable
+-- while its gate is open, which is exactly what "ready" cannot express.
+local gatedOpen = { start = 0, duration = 0, onCooldown = false, usable = true, known = true }
+local gatedShut = { start = 0, duration = 0, onCooldown = false, usable = false, known = true }
+local noMana = { start = 0, duration = 0, onCooldown = false, usable = false, noPower = true,
+  known = true }
+local uEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "usable", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function() return gatedOpen end }))
+check("glow when this spell is usable", d.glow)
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function() return gatedShut end }))
+check("no glow while unusable but off cooldown", not d.glow)
+-- The distinction that motivated this: "ready" is true in BOTH states
+local readyOnGated = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "ready", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(readyOnGated, Ctx({ cooldown = function() return gatedShut end }))
+check("'ready' still glows on a gated spell (the bug being fixed)", d.glow)
+uEl.conditions[1].value = false -- inverted: glow while unusable
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function() return gatedShut end }))
+check("inverted: glow while unusable", d.glow)
+-- Out of mana is unusable to the client, but the gate is open
+uEl.conditions[1].value = true
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function() return noMana end }))
+check("strict usable is false when out of power", not d.glow)
+uEl.conditions[1].value = "nopower"
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function() return noMana end }))
+check("ignore-power usable glows when only the resource is missing", d.glow)
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function() return gatedShut end }))
+check("ignore-power usable stays off when the gate is shut", not d.glow)
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function() return gatedOpen end }))
+check("ignore-power usable glows when plainly usable", d.glow)
+-- Unknown spells never count as usable
+uEl.conditions[1].value = true
+d = ns.Triggers:Evaluate(uEl, Ctx({ cooldown = function()
+  return { onCooldown = false, usable = true, known = false } end }))
+check("unknown spell is not usable", not d.glow)
+
+-- "Other spell usable": same read, aimed at a different spell
+local usableStates = { [42] = gatedShut, [43] = gatedOpen }
+local oEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "otherusable", spellID = 43, value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(oEl, Ctx({ cooldown = function(id)
+  return usableStates[id] or readyState end }))
+check("glow when the other spell is usable", d.glow)
+oEl.conditions[1].spellID = 42
+d = ns.Triggers:Evaluate(oEl, Ctx({ cooldown = function(id)
+  return usableStates[id] or readyState end }))
+check("no glow when the other spell is unusable", not d.glow)
+oEl.conditions[1].spellID = nil -- no spell picked yet: never matches
+d = ns.Triggers:Evaluate(oEl, Ctx({ cooldown = function() return gatedOpen end }))
+check("otherusable without a spell never matches", not d.glow)
+
+-- Silence on cooldown composes with it: a gated spell that also has a real CD
+-- must not shout "use me" mid-cooldown, and re-arms the moment it is ready.
+local gatedOnCd = { start = NOW - 5, duration = 30, onCooldown = true, usable = true, known = true }
+local muteEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "usable", value = true, action = "glow", muteOnCooldown = true } } }
+d = ns.Triggers:Evaluate(muteEl, Ctx({ cooldown = function() return gatedOnCd end }))
+check("usable glow silenced while on cooldown", not d.glow)
+d = ns.Triggers:Evaluate(muteEl, Ctx({ cooldown = function() return gatedOpen end }))
+check("usable glow fires once off cooldown", d.glow)
+
 -- Pet-active condition: glow when a (specific) pet is missing
 local petEl = { kind = "cooldown", spellID = 1, showWhen = "always",
   conditions = { { ctype = "petactive", value = false, action = "glow" } } }
