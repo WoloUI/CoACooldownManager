@@ -67,6 +67,7 @@ local POWER_TYPE_OPTIONS = {
   { text = "Rage", value = 1 },
   { text = "Energy", value = 3 },
   { text = "Runic Power", value = 6 },
+  { text = "Health", value = -2 },
   { text = "None", value = "none" },
 }
 local POWER_TEXT_OPTIONS = {

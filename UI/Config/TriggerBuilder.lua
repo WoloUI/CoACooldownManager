@@ -89,6 +89,7 @@ local POWER_OPTIONS = {
   { text = "Focus", value = 2 },
   { text = "Energy", value = 3 },
   { text = "Runic Power", value = 6 },
+  { text = "Health", value = -2 },
 }
 
 -- Which extra widgets each condition type needs

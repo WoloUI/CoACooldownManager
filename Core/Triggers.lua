@@ -619,6 +619,12 @@ function Triggers:LiveContext()
     aura = function(unit, ref, onlyMine) return ns.Auras:GetAura(unit, ref, onlyMine) end,
     power = function(ptype)
       ptype = ptype or UnitPowerType("player")
+      -- Health rides the same selector as the real resources under a negative
+      -- sentinel (Core/Power.lua), so it has to be split off here: UnitPower
+      -- knows nothing about type -2 and would answer 0 for "my HP is below 35".
+      if ptype == ns.Power.HEALTH then
+        return UnitHealth("player"), UnitHealthMax("player")
+      end
       return UnitPower("player", ptype), UnitPowerMax("player", ptype)
     end,
     inCombat = function() return UnitAffectingCombat("player") and true or false end,
