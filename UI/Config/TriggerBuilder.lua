@@ -429,6 +429,7 @@ function TriggerBuilder:Load(element, onChange)
     builder:Hide()
     return
   end
+  ns.Triggers.MigrateGroups(element)
   builder:Show()
 
   local kind = element.kind or "cooldown"

@@ -137,6 +137,97 @@ local function ConditionMatches(cond, element, display, ctx)
   return Compare(cond.op or "<", value, tonumber(cond.value))
 end
 
+--------------------------------------------------------------------------------
+-- Condition groups
+--------------------------------------------------------------------------------
+-- Conditions used to be evaluated one at a time, each applying its own action,
+-- which made the logic between them implicit: two glow conditions OR'd (either
+-- match sets the flag) while two "show only if" conditions AND'd (each unmatched
+-- one clears `shown`). Neither could be chosen. Conditions are now bucketed by
+-- action and each bucket carries an explicit join.
+--
+-- The defaults below are exactly the old implicit behaviour, which is why an
+-- existing config needs no migration and writes nothing until the user changes a
+-- join.
+local DEFAULT_JOIN = { show = "AND" } -- every other action defaults to OR
+
+-- Fixed application order. `show` and `hide` both write display.shown, and their
+-- old order was whatever order the user happened to add them in. Filters first,
+-- then appearance, then alerts -- and hide runs after show so a firing hide wins,
+-- which is how "hide" reads.
+local ACTION_ORDER = { "show", "hide", "desaturate", "glow", "sound" }
+Triggers.ACTION_ORDER = ACTION_ORDER -- test seam
+
+function Triggers.GroupJoin(element, action)
+  local group = element.condGroups and element.condGroups[action]
+  return (group and group.join) or DEFAULT_JOIN[action] or "OR"
+end
+
+function Triggers.Group(element, action)
+  return element.condGroups and element.condGroups[action] or nil
+end
+
+-- Lifts per-condition `sound` and `muteOnCooldown` onto their action's group.
+--
+-- Both used to belong to a single condition, and the sound was edge-triggered on
+-- that one condition flipping true. Once an AND group is the unit of truth,
+-- "which of these three conditions plays the sound" has no sensible answer -- the
+-- group becoming true is the event -- so the properties belong to the group.
+--
+-- Returns true when it wrote something. Idempotent: a migrated element has no
+-- per-condition sound left to find, so the second pass is a no-op.
+--
+-- The lossy case is real and therefore announced: two conditions on the same
+-- action carrying DIFFERENT sounds can only keep one. A silent drop would look
+-- like the addon forgetting a setting.
+function Triggers.MigrateGroups(element)
+  local conditions = element.conditions
+  if type(conditions) ~= "table" or #conditions == 0 then return false end
+
+  local sounds, mutes, dropped = {}, {}, nil
+  for _, cond in ipairs(conditions) do
+    local action = cond.action or "glow"
+    if cond.sound and cond.sound ~= "" then
+      if sounds[action] == nil then
+        sounds[action] = cond.sound
+      elseif sounds[action] ~= cond.sound then
+        dropped = dropped or {}
+        dropped[action] = sounds[action]
+      end
+      cond.sound = nil
+    end
+    if cond.muteOnCooldown then
+      mutes[action] = true
+      cond.muteOnCooldown = nil
+    end
+  end
+
+  local wrote = false
+  for action, sound in pairs(sounds) do
+    element.condGroups = element.condGroups or {}
+    element.condGroups[action] = element.condGroups[action] or {}
+    if element.condGroups[action].sound == nil then
+      element.condGroups[action].sound = sound
+    end
+    wrote = true
+  end
+  for action in pairs(mutes) do
+    element.condGroups = element.condGroups or {}
+    element.condGroups[action] = element.condGroups[action] or {}
+    element.condGroups[action].muteOnCooldown = true
+    wrote = true
+  end
+
+  if dropped then
+    for action, kept in pairs(dropped) do
+      ns:Print(("%s: the %s alert had more than one sound; kept \"%s\". Set the"
+        .. " one you want on the group."):format(
+        element.name or tostring(element.spellID or "?"), action, kept))
+    end
+  end
+  return wrote
+end
+
 local function ApplyCondition(cond, matched, display)
   local action = cond.action or "glow"
   if action == "show" then
@@ -154,10 +245,13 @@ local function ApplyCondition(cond, matched, display)
   end
 end
 
--- Edge-triggered alert sounds: a condition with a sound plays it once when it
--- flips false -> true and re-arms when it turns false again. State is keyed
--- by the condition table itself (weak: dropped configs release their entry)
--- and never written into SavedVariables.
+-- Edge-triggered alert sounds: a group with a sound plays it once when its
+-- combined truth flips false -> true and re-arms when it turns false again.
+--
+-- State is keyed by the ELEMENT (weak: dropped configs release their entry) with
+-- the action as a sub-key, not by the condition table: with an AND group the
+-- event is the whole group becoming true, so no single condition owns the edge.
+-- Never written into SavedVariables.
 local soundState = setmetatable({}, { __mode = "k" })
 
 -- Trinket internal-cooldown tracking: remembers when each trinket element last
@@ -167,17 +261,19 @@ local soundState = setmetatable({}, { __mode = "k" })
 local trinketState = setmetatable({}, { __mode = "k" })
 Triggers._trinketState = trinketState
 
-local function CheckSound(cond, matched)
-  local action = cond.action or "glow"
+local function CheckSound(element, action, group, matched)
   if action ~= "glow" and action ~= "sound" then return end
-  if not cond.sound or cond.sound == "" then
-    soundState[cond] = nil
+  local state = soundState[element]
+  local sound = group and group.sound
+  if not sound or sound == "" then
+    if state then state[action] = nil end
     return
   end
-  local was = soundState[cond]
-  soundState[cond] = matched or nil
+  if not state then state = {}; soundState[element] = state end
+  local was = state[action]
+  state[action] = matched or nil
   if matched and not was and ns.PlayAlertSound then
-    ns.PlayAlertSound(cond.sound)
+    ns.PlayAlertSound(sound)
   end
 end
 Triggers._CheckSound = CheckSound -- test seam
@@ -275,6 +371,9 @@ end)
 -- { shown, desaturate, glow, missing, stacks, start, duration, expirationTime, icon, name }
 function Triggers:Evaluate(element, ctx)
   ctx = ctx or self:LiveContext()
+  -- Idempotent and cheap after the first pass: a migrated element has no
+  -- per-condition sound left to find.
+  if element.conditions then Triggers.MigrateGroups(element) end
   local display = {
     shown = false, desaturate = false, glow = false, missing = false,
     stacks = 0, start = 0, duration = 0, expirationTime = 0,
@@ -518,19 +617,49 @@ function Triggers:Evaluate(element, ctx)
     end
   end
 
-  if display.shown and element.conditions then
+  if display.shown and element.conditions and #element.conditions > 0 then
+    -- Bucket by action, preserving the user's order inside each bucket
+    local buckets = {}
     for _, cond in ipairs(element.conditions) do
-      local matched = ConditionMatches(cond, element, display, ctx)
-      -- Opt-in: silence the alert actions (glow/sound) while the spell is on
-      -- cooldown. Flashing "use me" for an unusable spell is just noise; the
-      -- alert re-arms and fires the moment it comes off cooldown. Other actions
-      -- (hide/desaturate/show) still apply so the icon can gray out normally.
-      if matched and onCooldown and cond.muteOnCooldown then
-        local action = cond.action or "glow"
-        if action == "glow" or action == "sound" then matched = false end
+      local action = cond.action or "glow"
+      local bucket = buckets[action]
+      if not bucket then bucket = {}; buckets[action] = bucket end
+      bucket[#bucket + 1] = cond
+    end
+
+    for _, action in ipairs(ACTION_ORDER) do
+      local bucket = buckets[action]
+      if bucket then
+        local join = Triggers.GroupJoin(element, action)
+        -- AND starts true and is falsified; OR starts false and is satisfied.
+        -- An empty bucket cannot reach here, so neither seed leaks out as an
+        -- action firing from nothing.
+        local combined = (join == "AND")
+        for _, cond in ipairs(bucket) do
+          local matched = ConditionMatches(cond, element, display, ctx)
+          if join == "AND" then
+            combined = combined and matched
+          else
+            combined = combined or matched
+          end
+        end
+
+        -- Opt-in: silence the alert actions (glow/sound) while the spell is on
+        -- cooldown. Flashing "use me" for an unusable spell is just noise; the
+        -- alert re-arms the moment it comes off cooldown. The filter and
+        -- appearance actions still apply so the icon can gray out normally.
+        local group = Triggers.Group(element, action)
+        local muted = group and group.muteOnCooldown
+        if combined and onCooldown and muted
+          and (action == "glow" or action == "sound") then
+          combined = false
+        end
+
+        -- ApplyCondition reads only cond.action, so any condition in the bucket
+        -- stands in for the group; the first one keeps the order honest.
+        ApplyCondition(bucket[1], combined, display)
+        CheckSound(element, action, group, combined)
       end
-      ApplyCondition(cond, matched, display)
-      CheckSound(cond, matched)
     end
   end
 

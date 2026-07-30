@@ -542,4 +542,153 @@ end
 d = ns.Triggers:Evaluate(HidePair(), peaceCtx)
 check("two hide conditions OR: second alone hides", d.shown == false)
 
+--------------------------------------------------------------------------------
+-- Explicit joins per action
+--------------------------------------------------------------------------------
+-- The default join reproduces the old implicit behaviour
+check("glow defaults to OR", ns.Triggers.GroupJoin({}, "glow") == "OR")
+check("hide defaults to OR", ns.Triggers.GroupJoin({}, "hide") == "OR")
+check("desaturate defaults to OR", ns.Triggers.GroupJoin({}, "desaturate") == "OR")
+check("sound defaults to OR", ns.Triggers.GroupJoin({}, "sound") == "OR")
+check("show defaults to AND", ns.Triggers.GroupJoin({}, "show") == "AND")
+check("an explicit join wins",
+  ns.Triggers.GroupJoin({ condGroups = { glow = { join = "AND" } } }, "glow") == "AND")
+
+-- glow as AND: both must match
+local function GlowAnd()
+  local element = GlowPair()
+  element.condGroups = { glow = { join = "AND" } }
+  return element
+end
+d = ns.Triggers:Evaluate(GlowAnd(), combatCtx)
+check("glow AND: both matched glows", d.glow == true)
+d = ns.Triggers:Evaluate(GlowAnd(), peaceCtx)
+check("glow AND: one matched does not glow", not d.glow)
+
+-- show as OR: either is enough
+local function ShowOr()
+  local element = ShowPair()
+  element.condGroups = { show = { join = "OR" } }
+  return element
+end
+d = ns.Triggers:Evaluate(ShowOr(), peaceCtx)
+check("show OR: second alone shows", d.shown == true)
+d = ns.Triggers:Evaluate(ShowOr(), Ctx({
+  inCombat = function() return false end, hasTarget = function() return false end }))
+check("show OR: neither matched hides", d.shown == false)
+
+-- hide as AND: both must match
+local function HideAnd()
+  local element = HidePair()
+  element.condGroups = { hide = { join = "AND" } }
+  return element
+end
+d = ns.Triggers:Evaluate(HideAnd(), peaceCtx)
+check("hide AND: one matched does not hide", d.shown == true)
+d = ns.Triggers:Evaluate(HideAnd(), combatCtx)
+check("hide AND: both matched hides", d.shown == false)
+
+-- Groups are independent of each other on the same element
+local mixed = {
+  kind = "buff", name = "Any Buff", showWhen = "always",
+  condGroups = { glow = { join = "AND" }, show = { join = "OR" } },
+  conditions = {
+    { ctype = "combat", value = true, action = "glow" },
+    { ctype = "hastarget", value = true, action = "glow" },
+    { ctype = "combat", value = true, action = "show" },
+    { ctype = "hastarget", value = true, action = "show" },
+  },
+}
+d = ns.Triggers:Evaluate(mixed, peaceCtx)
+check("independent groups: show OR shows while glow AND stays dark",
+  d.shown == true and not d.glow)
+
+-- hide beats show when both fire: hide is the stronger instruction
+local clash = {
+  kind = "buff", name = "Any Buff", showWhen = "always",
+  conditions = {
+    { ctype = "hastarget", value = true, action = "show" },
+    { ctype = "hastarget", value = true, action = "hide" },
+  },
+}
+d = ns.Triggers:Evaluate(clash, combatCtx)
+check("hide beats show when both fire", d.shown == false)
+
+-- An empty group never fires an action from nothing
+local noConds = { kind = "buff", name = "Any Buff", showWhen = "always",
+  condGroups = { glow = { join = "AND" } }, conditions = {} }
+d = ns.Triggers:Evaluate(noConds, combatCtx)
+check("an actionless element does not glow", not d.glow)
+check("an actionless element stays shown", d.shown == true)
+
+--------------------------------------------------------------------------------
+-- Migration: per-condition sound/mute move onto the group
+--------------------------------------------------------------------------------
+local warned = {}
+local realPrint = ns.Print
+ns.Print = function(_, msg) warned[#warned + 1] = msg end
+
+-- One sound: lifted onto the group, condition cleared
+local one = { kind = "buff", name = "B", conditions = {
+  { ctype = "combat", value = true, action = "glow", sound = "chime" },
+} }
+check("migration reports it wrote", ns.Triggers.MigrateGroups(one) == true)
+check("the sound moved to the group", one.condGroups.glow.sound == "chime")
+check("the condition no longer carries a sound", one.conditions[1].sound == nil)
+check("one sound warns about nothing", #warned == 0)
+
+-- Idempotent: a second pass changes nothing and writes nothing
+check("migration is idempotent", ns.Triggers.MigrateGroups(one) == false)
+check("the group sound survived", one.condGroups.glow.sound == "chime")
+
+-- muteOnCooldown from ANY condition lands on the group
+local mute = { kind = "cooldown", spellID = 1, conditions = {
+  { ctype = "combat", value = true, action = "glow" },
+  { ctype = "hastarget", value = true, action = "glow", muteOnCooldown = true },
+} }
+ns.Triggers.MigrateGroups(mute)
+check("mute lifts from any condition", mute.condGroups.glow.muteOnCooldown == true)
+
+-- Two DIFFERENT sounds on one action: first wins, and it says so
+warned = {}
+local clashy = { kind = "buff", name = "Clashy", conditions = {
+  { ctype = "combat", value = true, action = "glow", sound = "first" },
+  { ctype = "hastarget", value = true, action = "glow", sound = "second" },
+} }
+ns.Triggers.MigrateGroups(clashy)
+check("the first sound wins", clashy.condGroups.glow.sound == "first")
+check("a dropped sound is announced", #warned == 1)
+check("the notice names the element", warned[1]:find("Clashy") ~= nil)
+check("the notice names the kept sound", warned[1]:find("first") ~= nil)
+
+-- Two conditions with the SAME sound is not a collision
+warned = {}
+local same = { kind = "buff", name = "Samey", conditions = {
+  { ctype = "combat", value = true, action = "glow", sound = "chime" },
+  { ctype = "hastarget", value = true, action = "glow", sound = "chime" },
+} }
+ns.Triggers.MigrateGroups(same)
+check("identical sounds do not warn", #warned == 0)
+check("identical sounds still migrate", same.condGroups.glow.sound == "chime")
+
+-- Different actions with different sounds are independent, not a collision
+warned = {}
+local twoActions = { kind = "buff", name = "Two", conditions = {
+  { ctype = "combat", value = true, action = "glow", sound = "a" },
+  { ctype = "hastarget", value = true, action = "sound", sound = "b" },
+} }
+ns.Triggers.MigrateGroups(twoActions)
+check("separate actions keep their own sounds",
+  twoActions.condGroups.glow.sound == "a" and twoActions.condGroups.sound.sound == "b")
+check("separate actions do not warn", #warned == 0)
+
+-- An element with nothing to migrate is left completely alone
+local clean = { kind = "buff", name = "Clean", conditions = {
+  { ctype = "combat", value = true, action = "glow" },
+} }
+check("nothing to migrate writes nothing", ns.Triggers.MigrateGroups(clean) == false)
+check("no condGroups table is created", clean.condGroups == nil)
+
+ns.Print = realPrint
+
 return T
