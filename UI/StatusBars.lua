@@ -67,7 +67,29 @@ local function SetBarDisplay(holder, display, element, cfg, now)
   local w = cfg.barWidth or 250
   local h = cfg.barHeight or 20
   holder:SetSize(w, h)
-  holder.iconFrame:SetSize(h, h)
+
+  -- The bar is normally anchored to the right edge of the square icon. With the
+  -- icon hidden it is re-anchored to the holder instead, so it spans the whole
+  -- row rather than leaving a gap where the icon used to be. Re-anchoring
+  -- rather than sizing the icon frame to zero keeps the intent readable.
+  --
+  -- Only on a CHANGE: this runs for every row on every tick, and re-anchoring a
+  -- frame that is already where it belongs is wasted work. `nil` on a fresh
+  -- holder never equals either boolean, so the first pass always anchors.
+  local showIcon = cfg.showIcon ~= false
+  if holder._iconShown ~= showIcon then
+    holder._iconShown = showIcon
+    holder.bar:ClearAllPoints()
+    holder.bar:SetPoint("BOTTOMRIGHT")
+    if showIcon then
+      holder.iconFrame:Show()
+      holder.bar:SetPoint("TOPLEFT", holder.iconFrame, "TOPRIGHT", 1, 0)
+    else
+      holder.iconFrame:Hide()
+      holder.bar:SetPoint("TOPLEFT")
+    end
+  end
+  if showIcon then holder.iconFrame:SetSize(h, h) end
   local font = ns.GetFont()
   local fontSize = ns.FontSize(cfg.fontSize or 11)
   holder.nameText:SetFont(font, fontSize, "OUTLINE")

@@ -280,10 +280,22 @@ check("no gcd fields -> no sweep on a ready spell", btn.cooldown.start == nil)
 local function FakeHolder()
   local holder = {
     nameText = FakeText(), timeText = FakeText(), icon = FakeIcon(),
-    iconFrame = { SetSize = function() end },
     bar = {},
   }
+  -- The icon toggle re-anchors the fill and shows/hides the icon frame, so both
+  -- are recorded: holder.bar.points is the anchor list SetBarDisplay left behind.
+  holder.iconFrame = {
+    shown = true,
+    SetSize = function() end,
+    Show = function(self) self.shown = true end,
+    Hide = function(self) self.shown = false end,
+  }
   holder.SetSize = function() end
+  holder.bar.points = {}
+  holder.bar.ClearAllPoints = function(self) self.points = {} end
+  holder.bar.SetPoint = function(self, point, relativeTo)
+    self.points[point] = relativeTo or "holder"
+  end
   holder.bar.SetStatusBarTexture = function() end
   holder.bar.SetStatusBarColor = function() end
   holder.bar.SetMinMaxValues = function() end
@@ -313,5 +325,28 @@ holder = FakeHolder()
 ns.StatusBars._SetBarDisplay(holder, { icon = "tex", name = "Corruption", missing = true },
   element, { barWidth = 210 }, 920)
 check("bars keep the missing dashes by default", holder.timeText.text == "--")
+
+-- The per-bar Icon toggle: with the icon off the fill spans the whole row
+-- instead of leaving a gap where the icon used to be.
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element, { barWidth = 210 }, 920)
+check("the icon shows by default", holder.iconFrame.shown)
+check("by default the fill starts at the icon's right edge",
+  holder.bar.points.TOPLEFT == holder.iconFrame)
+
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element,
+  { barWidth = 210, showIcon = false }, 920)
+check("showIcon false hides the icon frame", not holder.iconFrame.shown)
+check("with no icon the fill spans the whole row",
+  holder.bar.points.TOPLEFT == "holder" and holder.bar.points.BOTTOMRIGHT == "holder")
+
+-- Re-anchoring is guarded on a CHANGE, so a live bar has to follow a toggle
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element,
+  { barWidth = 210, showIcon = false }, 920)
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element, { barWidth = 210 }, 920)
+check("turning the icon back on re-anchors the fill",
+  holder.iconFrame.shown and holder.bar.points.TOPLEFT == holder.iconFrame)
 
 return T

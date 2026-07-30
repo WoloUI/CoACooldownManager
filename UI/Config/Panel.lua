@@ -375,6 +375,10 @@ function Config:BuildControls()
     SelectedViewer().showTimer = checked
     Touch()
   end)
+  c.showBarIcon = W.CreateCheckbox(parent, "Icon", function(_, checked)
+    SelectedViewer().showIcon = checked
+    Touch()
+  end)
   c.reverseSweep = W.CreateCheckbox(parent, "Reverse sweep", function(_, checked)
     SelectedViewer().reverseSweep = checked
     Touch()
@@ -2622,6 +2626,10 @@ function Config:Render()
     -- control columns on that row, so it gets its own line there
     if style == "bars" then
       c.showTimer:SetPoint("TOPLEFT", C3 - 60, y)
+      y = y - 26
+      c.showBarIcon:SetPoint("TOPLEFT", C1, y)
+      c.showBarIcon:SetChecked(viewer.showIcon ~= false)
+      c.showBarIcon:Show()
     else
       y = y - 26
       c.showTimer:SetPoint("TOPLEFT", C1, y)
