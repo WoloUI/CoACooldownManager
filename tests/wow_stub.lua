@@ -112,6 +112,25 @@ function M.install(env)
   env.UnitPower = function() return 40 end
   env.UnitPowerMax = function() return 100 end
   env.UnitPowerType = function() return 0 end
+  -- Auras per unit: env.__auras = { player = { { name, icon, count, duration,
+  -- expirationTime, unitCaster, spellId, filter } } }. `filter` matches the
+  -- HELPFUL/HARMFUL argument; entries with no filter answer both.
+  env.UnitAura = function(unit, index, filter)
+    local list = env.__auras and env.__auras[unit]
+    if not list then return nil end
+    local matched = 0
+    for _, aura in ipairs(list) do
+      if not aura.filter or aura.filter == filter then
+        matched = matched + 1
+        if matched == index then
+          return aura.name, aura.rank, aura.icon, aura.count, aura.debuffType,
+            aura.duration, aura.expirationTime, aura.unitCaster, aura.isStealable,
+            aura.shouldConsolidate, aura.spellId
+        end
+      end
+    end
+    return nil
+  end
   env.GetNumRaidMembers = function() return env.__raidCount or 0 end
   env.GetNumPartyMembers = function() return env.__partyCount or 0 end
   env.GetComboPoints = function() return 0 end

@@ -907,6 +907,20 @@ function Config:BuildControls()
         return
       end
       name = input -- aura unknown to the client now: match by name at runtime
+      -- ...but the aura itself carries an icon. If it is up on the player or the
+      -- target right now, take it, so the bar does not show a question mark in
+      -- the "always" show mode. Only the icon: the cache also has a spellId, but
+      -- names are preferred here on purpose (they survive Ascension id changes).
+      icon = ns.Auras:FindIconByName(name)
+      if not icon then
+        -- Nothing can resolve the icon in this state: the name is not in the
+        -- client's spell cache and no watched unit carries the aura. Say so
+        -- rather than letting a question mark look like a bug, and point at the
+        -- one input that does resolve it immediately.
+        ns:Print("\"" .. name .. "\" added by name, so it has no icon until the"
+          .. " aura is seen once. Add it by spell ID instead to get the icon"
+          .. " right away.")
+      end
     end
     local isDots = viewer.name == "Target DoTs"
     table.insert(viewer.elements, {
@@ -921,7 +935,7 @@ function Config:BuildControls()
     Touch()
     Config:Render()
   end)
-  c.addHint = W.CreateLabel(parent, "Type a name or spell ID, or drag a spell from your spellbook.", 10, W.colors.inkDim)
+  c.addHint = W.CreateLabel(parent, "Type a name or spell ID, or drag a spell from your spellbook. IDs resolve the icon right away.", 10, W.colors.inkDim)
   c.addLabel = W.CreateLabel(parent, "Add spell", 12, W.colors.inkDim)
   -- Summon elements: manual countdown started by casting the spell
   c.elDurLabel = W.CreateLabel(parent, "Summon duration (s)", 12, W.colors.inkDim)

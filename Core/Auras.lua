@@ -95,6 +95,24 @@ function Auras:GetAura(unit, spellRef, onlyMine)
   return aura
 end
 
+-- The icon of an aura found by NAME on any watched unit.
+--
+-- This exists because GetSpellInfo(name) cannot answer for an aura that is not
+-- a castable player spell -- an Ascension talent buff like an oath -- so the
+-- config panel has no icon at add time. The aura itself carries one, though:
+-- if it is up on anyone we watch right now, this finds it. Player first, since
+-- a buff being added is usually one the user is looking at on themselves.
+local ICON_SEARCH_UNITS = { "player", "target", "focus", "pet" }
+
+function Auras:FindIconByName(name)
+  if type(name) ~= "string" or name == "" then return nil end
+  for _, unit in ipairs(ICON_SEARCH_UNITS) do
+    local aura = self:GetAura(unit, name)
+    if aura and aura.icon then return aura.icon end
+  end
+  return nil
+end
+
 -- True when the unit carries any listed buff of rank >= minRank. The rank
 -- comes from the aura actually on the unit (a manual entry.rank overrides).
 function Auras:HasAnyOf(unit, spellIDs, minRank)

@@ -456,4 +456,36 @@ local hiddenEl = { kind = "cooldown", spellID = 21, showWhen = "cooldown" }
 d = ns.Triggers:Evaluate(hiddenEl, gcdCtx)
 check("hidden element gets no gcd fields", d.shown == false and d.gcdStart == nil)
 
+--------------------------------------------------------------------------------
+-- Icon learning: an aura added by NAME has no icon until it is seen live
+--------------------------------------------------------------------------------
+local auraWithIcon = { count = 1, duration = 20, expirationTime = NOW + 12,
+  icon = "Interface\\Icons\\Spell_Holy_Oath" }
+local withIcon = Ctx({ aura = function() return auraWithIcon end })
+local noAura = Ctx({ aura = function() return nil end })
+
+-- Seen live: the icon is copied onto the element so the missing state has one
+local named = { kind = "buff", name = "Oath of the Templar", showWhen = "always" }
+d = ns.Triggers:Evaluate(named, withIcon)
+check("live aura still renders its icon", d.icon == auraWithIcon.icon)
+check("name-added element learns the icon", named.icon == auraWithIcon.icon)
+
+-- The whole point: missing + "always" now draws the learned icon, not a "?"
+d = ns.Triggers:Evaluate(named, noAura)
+check("learned icon survives the aura falling off", d.icon == auraWithIcon.icon)
+check("missing aura is still flagged missing", d.missing and d.shown)
+
+-- An element added by ID keeps the icon its ID resolved; never overwritten
+local byId = { kind = "buff", spellID = 4242, name = "Oath of the Templar",
+  icon = "Interface\\Icons\\Original_From_ID", showWhen = "always" }
+d = ns.Triggers:Evaluate(byId, withIcon)
+check("id-added element keeps its own icon", byId.icon == "Interface\\Icons\\Original_From_ID")
+
+-- Test mode injects synthetic icons; learning those would corrupt the config
+local fresh = { kind = "buff", name = "Oath of the Templar", showWhen = "always" }
+ns.TestMode = { active = true }
+ns.Triggers:Evaluate(fresh, withIcon)
+check("test mode never writes to the element", fresh.icon == nil)
+ns.TestMode = nil
+
 return T

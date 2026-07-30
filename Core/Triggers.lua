@@ -493,7 +493,19 @@ function Triggers:Evaluate(element, ctx)
       display.duration = aura.duration or 0
       display.expirationTime = aura.expirationTime or 0
       display.start = (aura.expirationTime or 0) - (aura.duration or 0)
-      if aura.icon then display.icon = aura.icon end
+      if aura.icon then
+        display.icon = aura.icon
+        -- An aura added by NAME carries no icon: GetSpellInfo(name) only answers
+        -- for spells the client knows, and an Ascension oath or proc buff is not
+        -- a castable player spell (Core/Init.lua:400). Learn it off the live
+        -- aura so show mode "always" draws the real icon while the aura is
+        -- missing, instead of the question-mark fallback. `element` is the
+        -- SavedVariables table itself, so this persists on logout.
+        if not element.spellID and element.icon ~= aura.icon
+          and not (ns.TestMode and ns.TestMode.active) then
+          element.icon = aura.icon
+        end
+      end
       display.shown = showWhen == "always" or showWhen == "present"
     else
       display.missing = true
