@@ -220,6 +220,13 @@ ns.CastBar = CastBar
 local castState = { active = false }
 CastBar._state = castState -- test seam
 
+-- Public read of what is being cast right now. `_state` above is a test seam;
+-- this is the supported accessor, used by the history bar to draw a sweep on the
+-- in-progress cast rather than duplicating all the UNIT_SPELLCAST plumbing.
+function CastBar:Current()
+  return castState
+end
+
 local COLOR_CAST = { 0.25, 0.55, 0.85 }
 local COLOR_CHANNEL = { 0.30, 0.70, 0.45 }
 local COLOR_UNINTERRUPTIBLE = { 0.6, 0.6, 0.6 }
