@@ -45,6 +45,48 @@ check("a nil name returns nil rather than erroring",
   ns.Auras:FindIconByName(nil) == nil)
 check("an empty name returns nil", ns.Auras:FindIconByName("") == nil)
 
+--------------------------------------------------------------------------------
+-- Name suggestions: the real "Scattered Star(s)" case
+--------------------------------------------------------------------------------
+-- Aura matching is exact (then case-insensitive) on purpose, so a name off by
+-- one letter silently never matches and the bar sits desaturated forever. The
+-- add path needs to catch that at type-in time, which means asking what IS up
+-- that looks like what was typed.
+_G.__auras.target[#_G.__auras.target + 1] = {
+  name = "Scattered Stars", icon = "Interface\\Icons\\Spell_Arcane_Star",
+  count = 2, duration = 20, expirationTime = 20, unitCaster = "player",
+  filter = "HARMFUL",
+}
+ns.Auras:ForceScan("target")
+
+local function joined(list) return table.concat(list or {}, ",") end
+
+check("a singular typo suggests the real plural name",
+  joined(ns.Auras:SuggestNames("Scattered Star")) == "Scattered Stars")
+check("suggestions are case-insensitive",
+  joined(ns.Auras:SuggestNames("scattered star")) == "Scattered Stars")
+check("an extra trailing letter still suggests the real name",
+  joined(ns.Auras:SuggestNames("Scattered Starss")) == "Scattered Stars")
+check("surrounding whitespace is ignored",
+  joined(ns.Auras:SuggestNames("  scattered star  ")) == "Scattered Stars")
+check("an exact name suggests itself",
+  joined(ns.Auras:SuggestNames("Scattered Stars")) == "Scattered Stars")
+check("an unrelated name suggests nothing",
+  #ns.Auras:SuggestNames("Fireball") == 0)
+check("a nil query suggests nothing rather than erroring",
+  #ns.Auras:SuggestNames(nil) == 0)
+check("an empty query suggests nothing", #ns.Auras:SuggestNames("") == 0)
+
+-- The same aura on two units must not be offered twice
+_G.__auras.player[#_G.__auras.player + 1] = {
+  name = "Scattered Stars", icon = "Interface\\Icons\\Spell_Arcane_Star",
+  count = 1, duration = 20, expirationTime = 20, unitCaster = "player",
+  filter = "HELPFUL",
+}
+ns.Auras:ForceScan("player")
+check("the same name on two units is offered once",
+  joined(ns.Auras:SuggestNames("Scattered Star")) == "Scattered Stars")
+
 -- /cdm aura <name>: a diagnostic is worthless if it errors while you are using
 -- it to chase a bug, so it gets a smoke pass over every branch it can reach --
 -- a cached unit, an uncached one, a name nobody has, and an element that

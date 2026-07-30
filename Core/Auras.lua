@@ -113,6 +113,45 @@ function Auras:FindIconByName(name)
   return nil
 end
 
+-- Cached aura names that LOOK like `query` but are not it. Matching auras is
+-- exact (then case-insensitive) on purpose -- a fuzzy runtime match would fire
+-- on the wrong aura -- so a name off by one letter never matches and the bar
+-- sits desaturated forever with no hint why. Real case: the client calls it
+-- "Scattered Stars" and the user typed "Scattered Star".
+--
+-- Substring in EITHER direction, which covers the ways a hand-typed name misses
+-- by a suffix (missing plural, extra letter). Deliberately not edit distance:
+-- offering "Fireball" for "Firebolt" would be noise, and the point is to name
+-- the aura that is actually up.
+local MAX_SUGGESTIONS = 4
+
+function Auras:SuggestNames(query, limit)
+  local out = {}
+  if type(query) ~= "string" then return out end
+  local needle = query:lower():gsub("^%s+", ""):gsub("%s+$", "")
+  if needle == "" then return out end
+  local seen = {}
+  for _, unit in ipairs(ICON_SEARCH_UNITS) do
+    local store = cache[unit]
+    if store then
+      for name in pairs(store.byName) do
+        local lower = name:lower()
+        if not seen[lower]
+          and (lower:find(needle, 1, true) or needle:find(lower, 1, true)) then
+          seen[lower] = true
+          out[#out + 1] = name
+          if #out >= (limit or MAX_SUGGESTIONS) then
+            table.sort(out)
+            return out
+          end
+        end
+      end
+    end
+  end
+  table.sort(out) -- pairs() order is undefined; a stable list reads better
+  return out
+end
+
 -- Why an element is or is not seeing its aura. Prints, per unit, whether the
 -- cache exists at all, what the raw UnitAura sweep reports for a matching name,
 -- and the GetAura verdict BOTH with and without the ownership filter -- those
@@ -125,6 +164,7 @@ function Auras:Diagnose(query)
     return
   end
   local needle = query:lower():gsub("^%s+", ""):gsub("%s+$", "")
+  local anyExact = false -- did ANY unit match the name as typed?
   ns:Print('aura diagnose: "' .. query .. '"')
 
   for _, unit in ipairs({ "player", "target", "focus", "pet" }) do
@@ -155,6 +195,7 @@ function Auras:Diagnose(query)
 
         local strict = self:GetAura(unit, query, true)
         local loose = self:GetAura(unit, query, false)
+        if loose then anyExact = true end
         ns:Print(("    GetAura onlyMine=true  -> %s"):format(
           strict and "found" or "|cffff5555nil|r"))
         ns:Print(("    GetAura onlyMine=false -> %s"):format(
@@ -165,6 +206,17 @@ function Auras:Diagnose(query)
             loose.icon and "yes" or "|cffff5555nil|r", tostring(loose.spellId)))
         end
       end
+    end
+  end
+
+  -- The single most common cause, called out rather than left to be spotted in
+  -- the raw sweep above: the name is close but not exact, so nothing ever
+  -- matches and the bar stays gray.
+  if not anyExact then
+    local suggestions = self:SuggestNames(query)
+    if #suggestions > 0 then
+      ns:Print("  |cffffd100no exact match|r -- did you mean: "
+        .. table.concat(suggestions, ", ") .. "?  (matching is exact)")
     end
   end
 

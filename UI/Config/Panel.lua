@@ -959,12 +959,25 @@ function Config:BuildControls()
       icon = ns.Auras:FindIconByName(name)
       if not icon then
         -- Nothing can resolve the icon in this state: the name is not in the
-        -- client's spell cache and no watched unit carries the aura. Say so
-        -- rather than letting a question mark look like a bug, and point at the
-        -- one input that does resolve it immediately.
-        ns:Print("\"" .. name .. "\" added by name, so it has no icon until the"
-          .. " aura is seen once. Add it by spell ID instead to get the icon"
-          .. " right away.")
+        -- client's spell cache and no watched unit carries the aura. That has
+        -- two very different causes, so say which one this is.
+        local suggestions = ns.Auras:SuggestNames(name)
+        if #suggestions > 0 then
+          -- A near-miss name is up right now. Matching is exact, so this
+          -- element would never fire -- the reason a bar sits gray forever.
+          -- Real case: the client calls it "Scattered Stars", not "Star".
+          ns:Print("\"" .. name .. "\" does not match any aura up right now."
+            .. " Did you mean: |cffffd100" .. table.concat(suggestions, "|r, |cffffd100")
+            .. "|r? Names must match exactly. Added as typed -- fix the name or"
+            .. " re-add it.")
+        else
+          -- Nothing like it is up either, so this is probably just an aura that
+          -- is not active yet; the icon arrives the first time it is seen.
+          ns:Print("\"" .. name .. "\" added by name, so it has no icon until the"
+            .. " aura is seen once. Add it by spell ID instead to get the icon"
+            .. " right away. If the bar stays gray, check the name with"
+            .. " /cdm aura " .. name)
+        end
       end
     end
     local isDots = viewer.name == "Target DoTs"
