@@ -45,6 +45,31 @@ check("a nil name returns nil rather than erroring",
   ns.Auras:FindIconByName(nil) == nil)
 check("an empty name returns nil", ns.Auras:FindIconByName("") == nil)
 
+-- /cdm aura <name>: a diagnostic is worthless if it errors while you are using
+-- it to chase a bug, so it gets a smoke pass over every branch it can reach --
+-- a cached unit, an uncached one, a name nobody has, and an element that
+-- references the name (which drives Triggers:Evaluate).
+stub.loadAddonFile("Core/Triggers.lua", ns)
+ns.profile = { viewers = { { name = "Target DoTs", elements = {
+  { kind = "debuff", name = "Deadly Poison", unit = "target", onlyMine = true,
+    showWhen = "always", conditions = {} },
+} } } }
+
+local function diagnoseOk(query)
+  local ok = pcall(function() ns.Auras:Diagnose(query) end)
+  return ok
+end
+
+check("diagnose runs for a cached aura", diagnoseOk("Deadly Poison"))
+check("diagnose runs for an aura nobody has", diagnoseOk("Nonexistent Buff"))
+check("diagnose rejects an empty query instead of erroring", diagnoseOk(""))
+check("diagnose survives a nil query", diagnoseOk(nil))
+
+-- An uncached but existing unit is the "scan is not running" branch
+_G.__units.focus = true
+check("diagnose reports an uncached unit without erroring", diagnoseOk("Deadly Poison"))
+
+ns.profile = nil
 _G.__auras = nil
 _G.__units = nil
 

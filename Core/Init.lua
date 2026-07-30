@@ -1454,6 +1454,8 @@ SlashCmdList["COACDM"] = function(input)
     ns:Print("ExtraActionBar position reset to default.")
   elseif msg == "debug" then
     if ns.Tracking then ns.Tracking:Debug() end
+  elseif msg == "aura" then
+    ns.Auras:Diagnose(arg)
   elseif msg == "range" then
     ns.RangeAlert:Diagnose()
   elseif msg == "gcd" then

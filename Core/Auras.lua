@@ -113,6 +113,79 @@ function Auras:FindIconByName(name)
   return nil
 end
 
+-- Why an element is or is not seeing its aura. Prints, per unit, whether the
+-- cache exists at all, what the raw UnitAura sweep reports for a matching name,
+-- and the GetAura verdict BOTH with and without the ownership filter -- those
+-- three answers separate the causes that all look identical on screen (a
+-- desaturated icon): no scan, a name that does not match, or an aura that is
+-- simply not yours.
+function Auras:Diagnose(query)
+  if type(query) ~= "string" or query == "" then
+    ns:Print("usage: /cdm aura <buff or debuff name>")
+    return
+  end
+  local needle = query:lower():gsub("^%s+", ""):gsub("%s+$", "")
+  ns:Print('aura diagnose: "' .. query .. '"')
+
+  for _, unit in ipairs({ "player", "target", "focus", "pet" }) do
+    if UnitExists(unit) then
+      local store = cache[unit]
+      if not store then
+        ns:Print(("  %s: |cffff5555NOT CACHED|r (never scanned, or the scan is not running)")
+          :format(unit))
+      else
+        local count = 0
+        for _ in pairs(store.byName) do count = count + 1 end
+        ns:Print(("  %s (%s): cached %d aura(s), scanned %.1fs ago"):format(
+          unit, UnitName(unit) or "?", count, GetTime() - (store.scannedAt or 0)))
+
+        -- Raw sweep: catches a name the cache keyed differently from what was
+        -- typed (trailing space, punctuation, a rank suffix).
+        for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
+          for index = 1, 40 do
+            local name, _, icon, cnt, _, _, _, caster = UnitAura(unit, index, filter)
+            if not name then break end
+            if name:lower():find(needle, 1, true) then
+              ns:Print(('    raw %s [%d]: "%s" caster=%s stacks=%s icon=%s'):format(
+                filter, index, name, tostring(caster), tostring(cnt),
+                icon and "yes" or "|cffff5555nil|r"))
+            end
+          end
+        end
+
+        local strict = self:GetAura(unit, query, true)
+        local loose = self:GetAura(unit, query, false)
+        ns:Print(("    GetAura onlyMine=true  -> %s"):format(
+          strict and "found" or "|cffff5555nil|r"))
+        ns:Print(("    GetAura onlyMine=false -> %s"):format(
+          loose and "found" or "|cffff5555nil|r"))
+        if loose then
+          ns:Print(("    mine=%s hasCaster=%s icon=%s spellId=%s"):format(
+            tostring(loose.mine), tostring(loose.hasCaster),
+            loose.icon and "yes" or "|cffff5555nil|r", tostring(loose.spellId)))
+        end
+      end
+    end
+  end
+
+  -- What each configured element that references this name actually evaluates
+  -- to, so a desaturated bar can be traced to missing vs. a condition action.
+  for _, viewer in ipairs(ns.profile and ns.profile.viewers or {}) do
+    for i, el in ipairs(viewer.elements or {}) do
+      if el.name and el.name:lower():find(needle, 1, true) then
+        local d = ns.Triggers:Evaluate(el, ns.Triggers:LiveContext())
+        ns:Print(('  element "%s"[%d] on %s: kind=%s spellID=%s unit=%s onlyMine=%s showWhen=%s')
+          :format(el.name, i, viewer.name, tostring(el.kind), tostring(el.spellID),
+            tostring(el.unit), tostring(el.onlyMine), tostring(el.showWhen)))
+        ns:Print(('    -> shown=%s missing=%s desaturate=%s stacks=%s icon=%s conditions=%d')
+          :format(tostring(d.shown), tostring(d.missing), tostring(d.desaturate),
+            tostring(d.stacks), d.icon and "yes" or "|cffff5555nil|r",
+            #(el.conditions or {})))
+      end
+    end
+  end
+end
+
 -- True when the unit carries any listed buff of rank >= minRank. The rank
 -- comes from the aura actually on the unit (a manual entry.rank overrides).
 function Auras:HasAnyOf(unit, spellIDs, minRank)
