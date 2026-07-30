@@ -87,6 +87,70 @@ function Viewer:ApplyAllAnchors()
 end
 
 --------------------------------------------------------------------------------
+-- Width resolution
+--------------------------------------------------------------------------------
+-- A bar can follow another bar's width instead of carrying its own number: a
+-- power bar under a 6-icon rotation row should be exactly as wide as that row,
+-- and should follow it when a spell is added.
+--
+-- The width followed is the CONFIGURED one, not the live one. IconRow re-sizes
+-- its frame every tick from the count of currently VISIBLE icons
+-- (UI/IconRow.lua:186), so following the live width would make a power bar
+-- shrink and grow as trigger conditions hide and show icons. Configured width
+-- only changes when the bar is edited, and every edit already fires
+-- VIEWERS_CHANGED -> BuildAll, so this costs nothing per tick.
+local DEFAULT_WIDTH_MIN = 200
+
+-- The width a bar would have with every element shown. nil for styles whose
+-- width is not a single number: stacks and shield derive it from segment counts,
+-- reminders from per-alert content.
+function ns.ConfiguredWidth(cfg)
+  if not cfg then return nil end
+  local style = cfg.style
+  if style == "icons" then
+    -- Mirrors LayoutRow: an empty row still reserves one icon
+    local count = math.max(#(cfg.elements or {}), 1)
+    local size = cfg.iconSize or 32
+    local spacing = cfg.spacing or 5
+    return count * size + (count - 1) * spacing
+  elseif style == "bars" then
+    return cfg.barWidth or 250
+  elseif style == "power" then
+    return (cfg.power and cfg.power.width) or 340
+  elseif style == "cast" then
+    return (cfg.cast and cfg.cast.width) or 220
+  elseif style == "swing" then
+    return (cfg.swing and cfg.swing.width) or 200
+  end
+  return nil
+end
+
+-- The width a bar should render at. `fallback` is the width it would use on its
+-- own, returned whenever matching cannot be honoured: fixed mode, a deleted
+-- source, a source whose style has no width, or a cycle.
+local resolvingWidth = {}
+function ns.ResolveWidth(cfg, fallback)
+  if not cfg or cfg.widthMode ~= "match" or not cfg.widthSource then return fallback end
+  if resolvingWidth[cfg.widthSource] then return fallback end -- cycle
+  local source = ns.DB:GetViewer(cfg.widthSource)
+  if not source then return fallback end
+
+  resolvingWidth[cfg.widthSource] = true
+  local width = ns.ConfiguredWidth(source)
+  -- A source that is itself a follower resolves through its own chain
+  if width and source.widthMode == "match" then
+    width = ns.ResolveWidth(source, width)
+  end
+  resolvingWidth[cfg.widthSource] = nil
+
+  if not width then return fallback end
+  -- Floor of 1, never 0: a zero-width bar vanishes with no way to grab it again
+  -- in edit mode.
+  local minimum = math.max(cfg.widthMin or DEFAULT_WIDTH_MIN, 1)
+  return math.max(width, minimum)
+end
+
+--------------------------------------------------------------------------------
 -- Visibility
 --------------------------------------------------------------------------------
 local function VisibilityAllows(cfg)

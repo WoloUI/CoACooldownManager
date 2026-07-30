@@ -349,4 +349,102 @@ ns.StatusBars._SetBarDisplay(holder, barDisplay, element, { barWidth = 210 }, 92
 check("turning the icon back on re-anchors the fill",
   holder.iconFrame.shown and holder.bar.points.TOPLEFT == holder.iconFrame)
 
+--------------------------------------------------------------------------------
+-- Width resolution: a bar can follow another bar's CONFIGURED width
+--------------------------------------------------------------------------------
+-- ConfiguredWidth/ResolveWidth read viewer configs through ns.DB:GetViewer, so
+-- a minimal stub stands in for the real profile here.
+local viewers = {}
+ns.DB = { GetViewer = function(_, name) return viewers[name] end }
+
+local function Viewers(list)
+  viewers = {}
+  for _, v in ipairs(list) do viewers[v.name] = v end
+end
+
+-- An icon row's width is a function of how many spells sit in it
+local row6 = { name = "Rotation", style = "icons", iconSize = 32, spacing = 5,
+  elements = { {}, {}, {}, {}, {}, {} } }
+Viewers({ row6 })
+check("6 icons at 32/5 measure 217", ns.ConfiguredWidth(row6) == 217)
+
+local row1 = { name = "Solo", style = "icons", iconSize = 32, spacing = 5, elements = { {} } }
+Viewers({ row1 })
+check("a single icon measures its own size", ns.ConfiguredWidth(row1) == 32)
+
+local rowEmpty = { name = "Empty", style = "icons", iconSize = 32, spacing = 5, elements = {} }
+Viewers({ rowEmpty })
+check("an empty row measures one icon, like LayoutRow", ns.ConfiguredWidth(rowEmpty) == 32)
+
+-- Other styles report the width they already store
+check("duration bars report barWidth",
+  ns.ConfiguredWidth({ style = "bars", barWidth = 300 }) == 300)
+check("a power bar reports power.width",
+  ns.ConfiguredWidth({ style = "power", power = { width = 340 } }) == 340)
+check("a cast bar reports cast.width",
+  ns.ConfiguredWidth({ style = "cast", cast = { width = 220 } }) == 220)
+check("a swing bar reports swing.width",
+  ns.ConfiguredWidth({ style = "swing", swing = { width = 200 } }) == 200)
+
+-- Styles whose width is not a single number take no part
+check("stacks has no configured width", ns.ConfiguredWidth({ style = "stacks" }) == nil)
+check("shield has no configured width", ns.ConfiguredWidth({ style = "shield" }) == nil)
+check("reminders has no configured width", ns.ConfiguredWidth({ style = "reminders" }) == nil)
+
+-- Fixed mode is the default and ignores widthSource entirely
+local fixed = { name = "P", style = "power", power = { width = 340 },
+  widthSource = "Rotation" }
+Viewers({ row6, fixed })
+check("fixed mode returns the fallback", ns.ResolveWidth(fixed, 340) == 340)
+
+-- Match mode follows the source
+local follower = { name = "P", style = "power", power = { width = 340 },
+  widthMode = "match", widthSource = "Rotation" }
+Viewers({ row6, follower })
+check("match mode follows the source width", ns.ResolveWidth(follower, 340) == 217)
+
+-- The minimum defaults to 200 and is editable per bar
+local row3 = { name = "Rotation", style = "icons", iconSize = 32, spacing = 5,
+  elements = { {}, {}, {} } }
+Viewers({ row3, follower })
+check("a 3-icon source measures 106", ns.ConfiguredWidth(row3) == 106)
+check("the default floor of 200 wins over a short source",
+  ns.ResolveWidth(follower, 340) == 200)
+
+follower.widthMin = 100
+check("a lowered floor lets the follower track the source", ns.ResolveWidth(follower, 340) == 106)
+
+follower.widthMin = 0
+check("a zero floor lets the source width through", ns.ResolveWidth(follower, 340) == 106)
+
+local tiny = { name = "Rotation", style = "icons", iconSize = 1, spacing = 0, elements = {} }
+Viewers({ tiny, follower })
+check("a zero floor still clamps to 1, never 0", ns.ResolveWidth(follower, 340) == 1)
+follower.widthMin = nil
+
+-- A missing or width-less source falls back rather than erroring
+local orphan = { name = "P", style = "power", power = { width = 340 },
+  widthMode = "match", widthSource = "Deleted" }
+Viewers({ orphan })
+check("a missing source falls back", ns.ResolveWidth(orphan, 340) == 340)
+
+local stacksSource = { name = "Souls", style = "stacks" }
+local followsStacks = { name = "P", style = "power", power = { width = 340 },
+  widthMode = "match", widthSource = "Souls" }
+Viewers({ stacksSource, followsStacks })
+check("a source with no width falls back", ns.ResolveWidth(followsStacks, 340) == 340)
+
+-- Cycles resolve to the fallback instead of recursing forever
+local a = { name = "A", style = "bars", barWidth = 250, widthMode = "match", widthSource = "B" }
+local b = { name = "B", style = "bars", barWidth = 260, widthMode = "match", widthSource = "A" }
+Viewers({ a, b })
+check("a two-bar cycle falls back", ns.ResolveWidth(a, 250) == 250)
+
+local selfRef = { name = "S", style = "bars", barWidth = 250, widthMode = "match",
+  widthSource = "S" }
+Viewers({ selfRef })
+check("a bar following itself falls back", ns.ResolveWidth(selfRef, 250) == 250)
+
+ns.DB = nil
+
 return T
