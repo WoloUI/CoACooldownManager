@@ -488,4 +488,58 @@ ns.Triggers:Evaluate(fresh, withIcon)
 check("test mode never writes to the element", fresh.icon == nil)
 ns.TestMode = nil
 
+--------------------------------------------------------------------------------
+-- Implicit condition logic as it stands BEFORE groups. These pin the behaviour
+-- that must survive: alert actions OR together, the show filter ANDs.
+--------------------------------------------------------------------------------
+local combatCtx = Ctx({ inCombat = function() return true end })
+local peaceCtx = Ctx({ inCombat = function() return false end })
+
+-- Two glow conditions: in combat, and has a target. OR -> either is enough.
+local function GlowPair()
+  return {
+    kind = "buff", name = "Any Buff", showWhen = "always",
+    conditions = {
+      { ctype = "combat", value = true, action = "glow" },
+      { ctype = "hastarget", value = true, action = "glow" },
+    },
+  }
+end
+-- hasTarget is true in the default Ctx, so out of combat only the second matches
+d = ns.Triggers:Evaluate(GlowPair(), peaceCtx)
+check("two glow conditions OR: second alone glows", d.glow == true)
+d = ns.Triggers:Evaluate(GlowPair(), combatCtx)
+check("two glow conditions OR: both matched glows", d.glow == true)
+d = ns.Triggers:Evaluate(GlowPair(), Ctx({
+  inCombat = function() return false end, hasTarget = function() return false end }))
+check("two glow conditions OR: neither matched does not glow", not d.glow)
+
+-- Two "show only if" conditions. AND -> one failing hides the element.
+local function ShowPair()
+  return {
+    kind = "buff", name = "Any Buff", showWhen = "always",
+    conditions = {
+      { ctype = "combat", value = true, action = "show" },
+      { ctype = "hastarget", value = true, action = "show" },
+    },
+  }
+end
+d = ns.Triggers:Evaluate(ShowPair(), combatCtx)
+check("two show conditions AND: both matched shows", d.shown == true)
+d = ns.Triggers:Evaluate(ShowPair(), peaceCtx)
+check("two show conditions AND: one failing hides", d.shown == false)
+
+-- Two hide conditions. OR -> either matched hides.
+local function HidePair()
+  return {
+    kind = "buff", name = "Any Buff", showWhen = "always",
+    conditions = {
+      { ctype = "combat", value = true, action = "hide" },
+      { ctype = "hastarget", value = true, action = "hide" },
+    },
+  }
+end
+d = ns.Triggers:Evaluate(HidePair(), peaceCtx)
+check("two hide conditions OR: second alone hides", d.shown == false)
+
 return T
