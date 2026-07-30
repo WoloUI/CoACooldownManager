@@ -68,6 +68,17 @@ local ACTION_OPTIONS = {
   { text = "Show only if", value = "show" },
 }
 
+-- The join, in the user's words. "AND"/"OR" are stored; All/Any are shown.
+local JOIN_OPTIONS = {
+  { text = "All", value = "AND" },
+  { text = "Any", value = "OR" },
+}
+-- Group headers read "<label> when [All] of:" -- the action's name as a phrase
+local ACTION_LABEL = {
+  show = "Show only if", hide = "Hide when", desaturate = "Desaturate when",
+  glow = "Glow when", sound = "Play sound when",
+}
+
 -- Actions that can carry an alert sound (glow = optional, sound = required)
 local HAS_SOUND = { glow = true, sound = true }
 
@@ -134,6 +145,46 @@ local function Rebuild()
     TriggerBuilder:Load(builder.element, builder.onChange)
     if builder.onChange then builder.onChange() end
   end
+end
+
+-- One header per action that has conditions: the join selector, plus the alert
+-- sound controls for the two actions that can carry a sound. The sound used to
+-- live on a second line under every glow/sound condition row; it belongs here
+-- now that the group is the unit of truth, which also empties out the rows.
+local function CreateGroupHeader(parent)
+  local head = CreateFrame("Frame", nil, parent)
+  head:SetHeight(ROW_H)
+
+  head.label = W.CreateLabel(head, "", 12, W.colors.gold)
+  head.join = W.CreateDropdown(head, 60, function(_, value)
+    local element = builder.element
+    element.condGroups = element.condGroups or {}
+    element.condGroups[head.action] = element.condGroups[head.action] or {}
+    element.condGroups[head.action].join = value
+    Rebuild()
+  end)
+  head.join:SetOptions(JOIN_OPTIONS)
+  head.ofLabel = W.CreateLabel(head, "of:", 12, W.colors.inkDim)
+
+  head.soundLabel = W.CreateLabel(head, "Sound", 11, W.colors.inkDim)
+  head.sound = W.CreateDropdown(head, 150, function(_, value)
+    local element = builder.element
+    element.condGroups = element.condGroups or {}
+    element.condGroups[head.action] = element.condGroups[head.action] or {}
+    element.condGroups[head.action].sound = value ~= "" and value or nil
+  end)
+  head.soundPlay = W.CreateButton(head, "Play", 40, 20, function()
+    local group = ns.Triggers.Group(builder.element, head.action)
+    ns.PlayAlertSound(group and group.sound)
+  end)
+  head.muteCD = W.CreateCheckbox(head, "Silence on cooldown", function(_, checked)
+    local element = builder.element
+    element.condGroups = element.condGroups or {}
+    element.condGroups[head.action] = element.condGroups[head.action] or {}
+    element.condGroups[head.action].muteOnCooldown = checked or nil
+  end)
+
+  return head
 end
 
 local function CreateConditionRow(parent)
@@ -210,27 +261,13 @@ local function CreateConditionRow(parent)
 
   row.action = W.CreateDropdown(row, 92, function(_, value)
     row.cond.action = value
-    Rebuild() -- the sound line appears/disappears with the action
+    Rebuild() -- the row moves to another group's header
   end)
   row.action:SetOptions(ACTION_OPTIONS)
 
   row.remove = W.CreateButton(row, "X", 20, 20, function()
     table.remove(builder.element.conditions, row.index)
     Rebuild()
-  end)
-
-  -- Second line: optional alert sound for glow/sound actions
-  row.soundLabel = W.CreateLabel(row, "Sound", 11, W.colors.inkDim)
-  row.sound = W.CreateDropdown(row, 150, function(_, value)
-    row.cond.sound = value ~= "" and value or nil
-  end)
-  row.soundPlay = W.CreateButton(row, "Play", 40, 20, function()
-    ns.PlayAlertSound(row.cond and row.cond.sound)
-  end)
-
-  -- Cooldown elements only: silence this alert while the spell is on cooldown
-  row.muteCD = W.CreateCheckbox(row, "Silence on cooldown", function(_, checked)
-    row.cond.muteOnCooldown = checked or nil
   end)
 
   return row
@@ -242,8 +279,7 @@ local function LayoutConditionRow(row, cond)
   local x = 0
   local function place(widget, width)
     widget:ClearAllPoints()
-    -- Anchor to the FIRST line (row may be double-height when a sound line
-    -- shows below): center the widget at half a row from the top
+    -- Center the widget vertically at half a row from the top
     widget:SetPoint("LEFT", row, "TOPLEFT", x, -ROW_H / 2)
     widget:Show()
     x = x + width + 4
@@ -315,36 +351,8 @@ local function LayoutConditionRow(row, cond)
   place(row.action, 92)
   place(row.remove, 20)
 
-  -- Sound line under the condition (glow/sound actions only)
-  if HAS_SOUND[cond.action or "glow"] then
-    row.soundLabel:ClearAllPoints()
-    row.soundLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 14, -ROW_H - 6)
-    row.soundLabel:Show()
-    row.sound:ClearAllPoints()
-    row.sound:SetPoint("TOPLEFT", row, "TOPLEFT", 52, -ROW_H - 1)
-    row.sound:SetOptions(SoundOptions())
-    row.sound:SetValue(cond.sound or "")
-    row.sound:Show()
-    row.soundPlay:ClearAllPoints()
-    row.soundPlay:SetPoint("TOPLEFT", row, "TOPLEFT", 208, -ROW_H - 1)
-    row.soundPlay:Show()
-    -- "on cooldown" only means something for spells that have a cooldown
-    if builder.element and builder.element.kind == "cooldown" then
-      row.muteCD:ClearAllPoints()
-      row.muteCD:SetPoint("TOPLEFT", row, "TOPLEFT", 262, -ROW_H - 3)
-      row.muteCD:SetChecked(cond.muteOnCooldown)
-      row.muteCD:Show()
-    else
-      row.muteCD:Hide()
-    end
-    row:SetHeight(ROW_H * 2)
-  else
-    row.soundLabel:Hide()
-    row.sound:Hide()
-    row.soundPlay:Hide()
-    row.muteCD:Hide()
-    row:SetHeight(ROW_H)
-  end
+  -- Rows are always single-height now: the sound moved to the group header
+  row:SetHeight(ROW_H)
 end
 
 function TriggerBuilder:Create(parent)
@@ -408,8 +416,10 @@ function TriggerBuilder:Create(parent)
     builder.element.onlyMine = checked
   end)
 
-  builder.condHeader = W.CreateSection(builder, "CONDITIONS  (and...)")
+  -- No "(and...)" suffix any more: each group header states its own join
+  builder.condHeader = W.CreateSection(builder, "CONDITIONS")
   builder.condRows = {}
+  builder.groupHeads = {}
 
   builder.addCond = W.CreateButton(builder, "+ Add condition", 110, 20, function()
     builder.element.conditions = builder.element.conditions or {}
@@ -541,24 +551,98 @@ function TriggerBuilder:Load(element, onChange)
 
   local conditions = element.conditions or {}
   element.conditions = conditions
-  for i, cond in ipairs(conditions) do
-    local row = builder.condRows[i]
-    if not row then
-      row = CreateConditionRow(builder)
-      builder.condRows[i] = row
+
+  -- Bucket by action so each group renders under its own header. Row widgets
+  -- come from one shared pool indexed by render order, not by condition index,
+  -- so the pool stays as small as the longest element.
+  local buckets = {}
+  for _, cond in ipairs(conditions) do
+    local action = cond.action or "glow"
+    buckets[action] = buckets[action] or {}
+    table.insert(buckets[action], cond)
+  end
+
+  local rowsUsed, headsUsed = 0, 0
+  for _, action in ipairs(ns.Triggers.ACTION_ORDER) do
+    local bucket = buckets[action]
+    -- A header with no conditions under it is noise, so an element with a single
+    -- glow condition looks almost exactly like it did before groups existed.
+    if bucket then
+      headsUsed = headsUsed + 1
+      local head = builder.groupHeads[headsUsed]
+      if not head then
+        head = CreateGroupHeader(builder)
+        builder.groupHeads[headsUsed] = head
+      end
+      head.action = action
+      head:ClearAllPoints()
+      head:SetPoint("TOPLEFT", PAD, y)
+      head:SetPoint("RIGHT", builder, "RIGHT", -PAD, 0)
+
+      head.label:ClearAllPoints()
+      head.label:SetPoint("LEFT", head, "TOPLEFT", 0, -ROW_H / 2)
+      head.label:SetText(ACTION_LABEL[action] or action)
+      head.join:ClearAllPoints()
+      head.join:SetPoint("LEFT", head, "TOPLEFT", 118, -ROW_H / 2)
+      head.join:SetValue(ns.Triggers.GroupJoin(element, action))
+      head.ofLabel:ClearAllPoints()
+      head.ofLabel:SetPoint("LEFT", head, "TOPLEFT", 182, -ROW_H / 2)
+      head.label:Show(); head.join:Show(); head.ofLabel:Show()
+
+      local group = ns.Triggers.Group(element, action)
+      if HAS_SOUND[action] then
+        head.soundLabel:ClearAllPoints()
+        head.soundLabel:SetPoint("LEFT", head, "TOPLEFT", 212, -ROW_H / 2)
+        head.sound:ClearAllPoints()
+        head.sound:SetPoint("LEFT", head, "TOPLEFT", 250, -ROW_H / 2)
+        head.sound:SetOptions(SoundOptions())
+        head.sound:SetValue((group and group.sound) or "")
+        head.soundPlay:ClearAllPoints()
+        head.soundPlay:SetPoint("LEFT", head, "TOPLEFT", 406, -ROW_H / 2)
+        head.soundLabel:Show(); head.sound:Show(); head.soundPlay:Show()
+        -- "on cooldown" only means something for a spell that has a cooldown
+        if element.kind == "cooldown" then
+          head.muteCD:ClearAllPoints()
+          head.muteCD:SetPoint("TOPLEFT", head, "TOPLEFT", 250, -ROW_H - 2)
+          head.muteCD:SetChecked(group and group.muteOnCooldown)
+          head.muteCD:Show()
+          head:SetHeight(ROW_H * 2)
+        else
+          head.muteCD:Hide()
+          head:SetHeight(ROW_H)
+        end
+      else
+        head.soundLabel:Hide(); head.sound:Hide(); head.soundPlay:Hide()
+        head.muteCD:Hide()
+        head:SetHeight(ROW_H)
+      end
+      head:Show()
+      y = y - head:GetHeight()
+
+      for _, cond in ipairs(bucket) do
+        rowsUsed = rowsUsed + 1
+        local row = builder.condRows[rowsUsed]
+        if not row then
+          row = CreateConditionRow(builder)
+          builder.condRows[rowsUsed] = row
+        end
+        row.cond = cond
+        -- The remove button deletes from element.conditions, so the row must
+        -- carry the index into THAT array, not its position in the bucket.
+        for i, c in ipairs(conditions) do
+          if c == cond then row.index = i break end
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", PAD + 14, y) -- indented under its header
+        row:SetPoint("RIGHT", builder, "RIGHT", -PAD, 0)
+        LayoutConditionRow(row, cond)
+        row:Show()
+        y = y - row:GetHeight()
+      end
     end
-    row.cond = cond
-    row.index = i
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", PAD, y)
-    row:SetPoint("RIGHT", builder, "RIGHT", -PAD, 0)
-    LayoutConditionRow(row, cond)
-    row:Show()
-    y = y - row:GetHeight() -- sound line doubles the row
   end
-  for i = #conditions + 1, #builder.condRows do
-    builder.condRows[i]:Hide()
-  end
+  for i = rowsUsed + 1, #builder.condRows do builder.condRows[i]:Hide() end
+  for i = headsUsed + 1, #builder.groupHeads do builder.groupHeads[i]:Hide() end
 
   builder.addCond:ClearAllPoints()
   builder.addCond:SetPoint("TOPLEFT", PAD, y - 2)
