@@ -20,6 +20,7 @@ local function Styles()
       shield = ns.ShieldBar,
       swing = ns.SwingBar,
       cast = ns.CastBar,
+      history = ns.HistoryBar,
     }
   end
   return STYLE_MODULES
@@ -199,6 +200,7 @@ local function HideStyleWidgets(frame)
   for _, col in ipairs(frame.shieldCols or {}) do col:Hide() end -- shield columns
   for _, bar in ipairs(frame.swingBars or {}) do bar:Hide() end   -- swing
   if frame.castBar then frame.castBar:Hide() end                  -- cast
+  for _, btn in ipairs(frame.historyIcons or {}) do btn:Hide() end -- history
 end
 Viewer._HideStyleWidgets = HideStyleWidgets -- test seam
 

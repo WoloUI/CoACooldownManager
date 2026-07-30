@@ -24,6 +24,7 @@ UI\Glow.lua
 UI\IconRow.lua
 UI\StatusBars.lua
 UI\ActivityBars.lua
+UI\HistoryBar.lua
 UI\PowerBar.lua
 UI\StackBar.lua
 UI\ReminderRow.lua

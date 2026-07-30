@@ -488,6 +488,11 @@ function DB:AddViewer(name, style)
     -- Player cast bar with channel ticks (event-driven, no elements)
     viewer.cast = { width = 220, height = 22, showIcon = true, showTime = true,
       showTicks = true, tickSeconds = 1.0 }
+  elseif style == "history" then
+    -- Self-populating from cast events; no element list. Ranges follow the
+    -- GCDhistory addon's, which are already sane.
+    viewer.history = { iconSize = 32, spacing = 4, visible = 10, fade = 8,
+      growth = "LEFT", tooltips = true, blacklist = "" }
   end
   table.insert(self.profile.viewers, viewer)
   ns:Fire("VIEWERS_CHANGED")

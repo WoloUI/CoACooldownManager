@@ -30,6 +30,7 @@ local frame = {
   countText = FakeWidget("countText"),
   alerts = { FakeWidget("alert") },                     -- reminder rows
   shieldCols = { FakeWidget("shieldCol") },             -- shield columns
+  historyIcons = { FakeWidget("histIcon") },            -- history bar icons
 }
 ns.Viewer._HideStyleWidgets(frame)
 
@@ -40,6 +41,7 @@ check("stack bar holder hidden", hidden.barHolder == true)
 check("stack count text hidden", hidden.countText == true)
 check("reminder alerts hidden", hidden.alert == true)
 check("shield columns hidden", hidden.shieldCol == true)
+check("history icons hidden", hidden.histIcon == true)
 
 local ok = pcall(ns.Viewer._HideStyleWidgets, {})
 check("frame without pools tolerated", ok == true)
