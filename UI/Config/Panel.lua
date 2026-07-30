@@ -26,6 +26,10 @@ local POSITION_OPTIONS = {
   { text = "Left of parent", value = "left" },
   { text = "Right of parent", value = "right" },
 }
+local WIDTH_MODE_OPTIONS = {
+  { text = "Fixed", value = "fixed" },
+  { text = "Match bar", value = "match" },
+}
 local VISIBILITY_OPTIONS = {
   { text = "Always", value = "always" },
   { text = "In combat", value = "combat" },
@@ -362,6 +366,42 @@ function Config:BuildControls()
   c.spacing = NumBox("spacing", 5)
   c.fontLabel = W.CreateLabel(parent, "Font", 12, W.colors.inkDim)
   c.fontSize = NumBox("fontSize", 11)
+
+  -- Match width: a bar can follow another bar's configured width instead of
+  -- carrying its own number. Only styles ConfiguredWidth understands can be a
+  -- source, and an icon row sizes itself from its icons so it is a source only.
+  c.widthModeLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
+  c.widthMode = W.CreateDropdown(parent, 110, function(_, value)
+    local viewer = SelectedViewer()
+    if value == "match" then
+      viewer.widthMode = "match"
+      -- Pick a source up front: a match mode with no source silently does
+      -- nothing, which reads as a broken setting.
+      if not viewer.widthSource then
+        for _, other in ipairs(ns.profile.viewers) do
+          if other.name ~= viewer.name and ns.ConfiguredWidth(other) then
+            viewer.widthSource = other.name
+            break
+          end
+        end
+      end
+    else
+      viewer.widthMode = nil
+    end
+    Touch()
+    Config:Render() -- the source and min boxes only exist in match mode
+  end)
+  c.widthMode:SetOptions(WIDTH_MODE_OPTIONS)
+  c.widthSourceLabel = W.CreateLabel(parent, "Follow", 12, W.colors.inkDim)
+  c.widthSource = W.CreateDropdown(parent, 110, function(_, value)
+    SelectedViewer().widthSource = value
+    Touch()
+  end)
+  c.widthMinLabel = W.CreateLabel(parent, "Min", 12, W.colors.inkDim)
+  c.widthMin = W.CreateEditBox(parent, 44, 20, function(_, text)
+    SelectedViewer().widthMin = math.max(tonumber(text) or 200, 1)
+    Touch()
+  end, "200")
 
   c.showKeybind = W.CreateCheckbox(parent, "Keybinds", function(_, checked)
     SelectedViewer().showKeybind = checked
@@ -1363,6 +1403,39 @@ end
 --------------------------------------------------------------------------------
 -- Render
 --------------------------------------------------------------------------------
+-- The match-width row, shared by every style that can follow another bar.
+-- Returns the new y cursor. `cols` carries the form grid so the caller's
+-- columns are honoured.
+local function RenderWidthMode(c, viewer, y, cols)
+  c.widthModeLabel:SetPoint("TOPLEFT", cols.L1, y - 4); c.widthModeLabel:Show()
+  c.widthMode:SetPoint("TOPLEFT", cols.C1, y)
+  c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
+  c.widthMode:Show()
+  if viewer.widthMode ~= "match" then return y - 26 end
+
+  -- Any OTHER bar whose style has a configured width. An icon row is the usual
+  -- pick: its width is a function of how many spells are in it.
+  local options = {}
+  for _, other in ipairs(ns.profile.viewers) do
+    if other.name ~= viewer.name and ns.ConfiguredWidth(other) then
+      options[#options + 1] = { text = other.name, value = other.name }
+    end
+  end
+  if #options == 0 then
+    options[1] = { text = "(no other bar)", value = "" }
+  end
+  c.widthSourceLabel:SetPoint("TOPLEFT", cols.L2, y - 4); c.widthSourceLabel:Show()
+  c.widthSource:SetPoint("TOPLEFT", cols.C2, y)
+  c.widthSource:SetOptions(options)
+  c.widthSource:SetValue(viewer.widthSource or options[1].value)
+  c.widthSource:Show()
+  c.widthMinLabel:SetPoint("TOPLEFT", cols.L3, y - 4); c.widthMinLabel:Show()
+  c.widthMin:SetPoint("TOPLEFT", cols.C3, y)
+  c.widthMin:SetText(tostring(viewer.widthMin or 200))
+  c.widthMin:Show()
+  return y - 26
+end
+
 local ALL_CONTROL_KEYS -- every positionable control, hidden before each render
 
 local function HideAllControls()
@@ -2397,14 +2470,24 @@ function Config:Render()
       c.color2Reset:SetPoint("TOPLEFT", CW + 26, y); c.color2Reset:Show()
     end
     y = y - 26
-    -- Row: Width / Height / Bar 2 height
-    c.powerWLabel:SetPoint("TOPLEFT", L1, y - 4); c.powerWLabel:Show()
-    c.powerW:SetPoint("TOPLEFT", C1, y); c.powerW:SetText(tostring(viewer.power.width or 340)); c.powerW:Show()
-    c.powerHLabel:SetPoint("TOPLEFT", L2, y - 4); c.powerHLabel:Show()
-    c.powerH:SetPoint("TOPLEFT", C2, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
-    c.powerSubHLabel:SetPoint("TOPLEFT", L3, y - 4); c.powerSubHLabel:Show()
-    c.powerSubH:SetPoint("TOPLEFT", C3, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
+    -- Row: Width / Height / Bar 2 height. The Width box is meaningless while the
+    -- bar follows another one, so it gives up its column to Height.
+    local cols = { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 }
+    if viewer.widthMode ~= "match" then
+      c.powerWLabel:SetPoint("TOPLEFT", L1, y - 4); c.powerWLabel:Show()
+      c.powerW:SetPoint("TOPLEFT", C1, y); c.powerW:SetText(tostring(viewer.power.width or 340)); c.powerW:Show()
+      c.powerHLabel:SetPoint("TOPLEFT", L2, y - 4); c.powerHLabel:Show()
+      c.powerH:SetPoint("TOPLEFT", C2, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
+      c.powerSubHLabel:SetPoint("TOPLEFT", L3, y - 4); c.powerSubHLabel:Show()
+      c.powerSubH:SetPoint("TOPLEFT", C3, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
+    else
+      c.powerHLabel:SetPoint("TOPLEFT", L1, y - 4); c.powerHLabel:Show()
+      c.powerH:SetPoint("TOPLEFT", C1, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
+      c.powerSubHLabel:SetPoint("TOPLEFT", L2, y - 4); c.powerSubHLabel:Show()
+      c.powerSubH:SetPoint("TOPLEFT", C2, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
+    end
     y = y - 28
+    y = RenderWidthMode(c, viewer, y, cols)
     -- Row: Text 1 [dd]      Text 2 [dd]
     c.text1Label:SetPoint("TOPLEFT", L1, y - 4); c.text1Label:Show()
     c.powerText1:SetPoint("TOPLEFT", C1, y)
@@ -2547,6 +2630,8 @@ function Config:Render()
     c.swingHLabel:SetPoint("TOPLEFT", L2, y - 4); c.swingHLabel:Show()
     c.swingH:SetPoint("TOPLEFT", C2, y); c.swingH:SetText(tostring(sw.height or 16)); c.swingH:Show()
     y = y - 28
+    y = RenderWidthMode(c, viewer, y,
+      { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 })
     c.swingLabelChk:SetPoint("TOPLEFT", C1, y); c.swingLabelChk:SetChecked(sw.showLabel ~= false); c.swingLabelChk:Show()
     c.swingTimeChk:SetPoint("TOPLEFT", C2, y); c.swingTimeChk:SetChecked(sw.showTime ~= false); c.swingTimeChk:Show()
     y = y - 26
@@ -2565,6 +2650,8 @@ function Config:Render()
     c.castHLabel:SetPoint("TOPLEFT", L2, y - 4); c.castHLabel:Show()
     c.castH:SetPoint("TOPLEFT", C2, y); c.castH:SetText(tostring(ca.height or 22)); c.castH:Show()
     y = y - 28
+    y = RenderWidthMode(c, viewer, y,
+      { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 })
     c.castIconChk:SetPoint("TOPLEFT", C1, y); c.castIconChk:SetChecked(ca.showIcon ~= false); c.castIconChk:Show()
     c.castTimeChk:SetPoint("TOPLEFT", C2, y); c.castTimeChk:SetChecked(ca.showTime ~= false); c.castTimeChk:Show()
     y = y - 26
@@ -2598,14 +2685,28 @@ function Config:Render()
       c.fontLabel:SetPoint("TOPLEFT", L3, y - 4); c.fontLabel:Show()
       c.fontSize:SetPoint("TOPLEFT", C3, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
     else
-      c.barWLabel:SetPoint("TOPLEFT", L1, y - 4); c.barWLabel:Show()
-      c.barW:SetPoint("TOPLEFT", C1, y); c.barW:SetText(tostring(viewer.barWidth or 250)); c.barW:Show()
-      c.barHLabel:SetPoint("TOPLEFT", L2, y - 4); c.barHLabel:Show()
-      c.barH:SetPoint("TOPLEFT", C2, y); c.barH:SetText(tostring(viewer.barHeight or 20)); c.barH:Show()
-      c.spacingLabel:SetPoint("TOPLEFT", L3, y - 4); c.spacingLabel:Show()
-      c.spacing:SetPoint("TOPLEFT", C3, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
+      -- The Width box is meaningless while the bar follows another one
+      if viewer.widthMode ~= "match" then
+        c.barWLabel:SetPoint("TOPLEFT", L1, y - 4); c.barWLabel:Show()
+        c.barW:SetPoint("TOPLEFT", C1, y); c.barW:SetText(tostring(viewer.barWidth or 250)); c.barW:Show()
+        c.barHLabel:SetPoint("TOPLEFT", L2, y - 4); c.barHLabel:Show()
+        c.barH:SetPoint("TOPLEFT", C2, y); c.barH:SetText(tostring(viewer.barHeight or 20)); c.barH:Show()
+        c.spacingLabel:SetPoint("TOPLEFT", L3, y - 4); c.spacingLabel:Show()
+        c.spacing:SetPoint("TOPLEFT", C3, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
+      else
+        c.barHLabel:SetPoint("TOPLEFT", L1, y - 4); c.barHLabel:Show()
+        c.barH:SetPoint("TOPLEFT", C1, y); c.barH:SetText(tostring(viewer.barHeight or 20)); c.barH:Show()
+        c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
+        c.spacing:SetPoint("TOPLEFT", C2, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
+      end
     end
     y = y - 26
+    -- Only duration bars can follow another bar; an icon row sizes itself from
+    -- its icons, so it is a source only.
+    if style == "bars" then
+      y = RenderWidthMode(c, viewer, y,
+        { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 })
+    end
     -- Row: font (bars) + toggles aligned to control columns
     if style == "bars" then
       c.fontLabel:SetPoint("TOPLEFT", L1, y - 4); c.fontLabel:Show()
