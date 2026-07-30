@@ -80,7 +80,8 @@ function PowerBar:Build(frame, cfg)
     frame.combo = CreateComboRow(frame)
   end
   local p = cfg.power
-  local width, h1, h2 = p.width or 340, p.height or 26, p.subHeight or 18
+  local width = ns.ResolveWidth(cfg, p.width or 340)
+  local h1, h2 = p.height or 26, p.subHeight or 18
 
   frame.bar1:SetSize(width, h1)
   frame.bar1:ClearAllPoints()
@@ -148,5 +149,5 @@ function PowerBar:Update(frame, cfg)
     frame.combo:Hide()
   end
 
-  frame:SetSize(p.width or 340, height)
+  frame:SetSize(ns.ResolveWidth(cfg, p.width or 340), height)
 end

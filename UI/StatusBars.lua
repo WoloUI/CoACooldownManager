@@ -64,7 +64,7 @@ function StatusBars:Build(frame, cfg)
 end
 
 local function SetBarDisplay(holder, display, element, cfg, now)
-  local w = cfg.barWidth or 250
+  local w = ns.ResolveWidth(cfg, cfg.barWidth or 250)
   local h = cfg.barHeight or 20
   holder:SetSize(w, h)
 
@@ -129,7 +129,7 @@ local function SetBarDisplay(holder, display, element, cfg, now)
 end
 
 local function LayoutBars(frame, cfg, count)
-  local w = cfg.barWidth or 250
+  local w = ns.ResolveWidth(cfg, cfg.barWidth or 250)
   local h = cfg.barHeight or 20
   local spacing = cfg.spacing or 3
   local total = count > 0 and (count * h + (count - 1) * spacing) or h

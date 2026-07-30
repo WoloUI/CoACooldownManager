@@ -155,7 +155,7 @@ end
 
 function SwingBar:Update(frame, cfg)
   local sc = cfg.swing or {}
-  local w = sc.width or 200
+  local w = ns.ResolveWidth(cfg, sc.width or 200)
   local h = sc.height or 16
   local spacing = cfg.spacing or 3
 
@@ -252,7 +252,7 @@ end
 
 function CastBar:Update(frame, cfg)
   local cc = cfg.cast or {}
-  local w = cc.width or 220
+  local w = ns.ResolveWidth(cfg, cc.width or 220)
   local h = cc.height or 22
   local holder = frame.castBar
   if not holder then
