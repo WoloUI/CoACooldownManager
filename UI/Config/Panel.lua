@@ -207,7 +207,21 @@ local controls = {}
 
 local function BuildWindow()
   W = ns.Widgets
-  win = W.CreateWindow("CoACDMConfig", 780, 560, "CoA Cooldown Manager")
+  -- The minimum width stays at the shipped 780: the content pane is a grid at
+  -- fixed columns (see the L1/C1..L3/C3 constants in Render), so narrowing past
+  -- 780 would clip the third column. Making that grid fluid is GH#7's job.
+  local saved = ns.DB and ns.DB.db and ns.DB.db.global
+    and ns.DB.db.global.configWindow or {}
+  win = W.CreateWindow("CoACDMConfig", saved.width or 780, saved.height or 560,
+    "CoA Cooldown Manager", {
+      minWidth = 780, minHeight = 420,
+      maxWidth = 1400, maxHeight = 1000,
+      onResize = function(w, h)
+        local store = ns.DB.db.global.configWindow
+        store.width, store.height = w, h
+        Config:Render()
+      end,
+    })
 
   win.profileLabel = W.CreateLabel(win.titleBar, "", 11, W.colors.inkDim)
   win.profileLabel:SetPoint("RIGHT", win.close, "LEFT", -10, 0)
@@ -301,7 +315,7 @@ local function BuildWindow()
   win.scroll:SetPoint("TOPLEFT", win.sidebar, "TOPRIGHT", PAD, 0)
   win.scroll:SetPoint("BOTTOMRIGHT", -28, 10)
   win.content = CreateFrame("Frame", nil, win.scroll)
-  win.content:SetWidth(760 - SIDEBAR_W - PAD - 30)
+  win.content:SetWidth(ns.ContentWidth(win:GetWidth()))
   win.content:SetHeight(600)
   win.scroll:SetScrollChild(win.content)
 
@@ -1911,6 +1925,8 @@ end
 
 function Config:Render()
   if not win then return end
+  -- A resize only reflows if the pane is re-measured every render
+  win.content:SetWidth(ns.ContentWidth(win:GetWidth()))
   local c = controls
   HideAllControls()
   RenderSidebar()
