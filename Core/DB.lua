@@ -225,6 +225,10 @@ function DB:Init()
   db.global = db.global or {}
   db.global.equivGroups = nil -- retired with the buff-group reminder type
   db.global.appearance = db.global.appearance or {} -- font/texture/fontScale
+  -- Config panel size (w/h). Account-wide next to `appearance`: a window size is
+  -- a display preference, not per-character like `layout` or per-spec like
+  -- `viewers`.
+  db.global.configWindow = db.global.configWindow or {}
   db.global.profiles = db.global.profiles or {}     -- named profile templates (account-wide library)
   -- Aggro alert overlay (screen-space, shared by every character like the minimap)
   db.global.aggro = db.global.aggro or {

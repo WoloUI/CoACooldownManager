@@ -297,7 +297,7 @@ function W.CreateSection(parent, title)
   return fs
 end
 
-function W.CreateWindow(name, width, height, titleText)
+function W.CreateWindow(name, width, height, titleText, opts)
   local win = CreateFrame("Frame", name, UIParent)
   win:SetSize(width, height)
   win:SetPoint("CENTER")
@@ -322,6 +322,52 @@ function W.CreateWindow(name, width, height, titleText)
 
   win.close = W.CreateButton(win.titleBar, "X", 20, 20, function() win:Hide() end)
   win.close:SetPoint("RIGHT", -4, 0)
+
+  -- Resizing is opt-in: the import/export dialog in this same file is a fixed
+  -- size and must not grow a grip.
+  if opts then
+    win:SetResizable(true)
+    if win.SetMinResize then
+      win:SetMinResize(opts.minWidth or width, opts.minHeight or height)
+      win:SetMaxResize(opts.maxWidth or width * 2, opts.maxHeight or height * 2)
+    end
+
+    -- Bottom-right grip. Three stacked diagonal pips, drawn rather than using
+    -- the Blizzard texture, so it matches the panel's dark styling.
+    win.grip = CreateFrame("Button", nil, win)
+    win.grip:SetSize(16, 16)
+    win.grip:SetPoint("BOTTOMRIGHT", -2, 2)
+    win.grip.pips = {}
+    for i = 1, 3 do
+      local pip = win.grip:CreateTexture(nil, "OVERLAY")
+      pip:SetTexture("Interface\\Buttons\\WHITE8X8")
+      pip:SetVertexColor(COLORS.inkDim[1], COLORS.inkDim[2], COLORS.inkDim[3], 0.7)
+      pip:SetSize(10 - (i - 1) * 3, 1)
+      pip:SetPoint("BOTTOMRIGHT", -1, 1 + (i - 1) * 3)
+      -- Guarded like SetMinResize below: Texture:SetRotation is not on every
+      -- client this addon is opened against, and without it the pips are a
+      -- descending stair rather than a diagonal -- still legible as a grip.
+      if pip.SetRotation then pip:SetRotation(math.pi / 4) end
+      win.grip.pips[i] = pip
+    end
+    win.grip:SetScript("OnMouseDown", function()
+      win:StartSizing("BOTTOMRIGHT")
+    end)
+    win.grip:SetScript("OnMouseUp", function()
+      win:StopMovingOrSizing()
+      if opts.onResize then opts.onResize(win:GetWidth(), win:GetHeight()) end
+    end)
+    win.grip:SetScript("OnEnter", function()
+      for _, pip in ipairs(win.grip.pips) do
+        pip:SetVertexColor(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], 1)
+      end
+    end)
+    win.grip:SetScript("OnLeave", function()
+      for _, pip in ipairs(win.grip.pips) do
+        pip:SetVertexColor(COLORS.inkDim[1], COLORS.inkDim[2], COLORS.inkDim[3], 0.7)
+      end
+    end)
+  end
 
   tinsert(UISpecialFrames, name) -- ESC closes
   win:Hide()
