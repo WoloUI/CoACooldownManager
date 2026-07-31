@@ -529,6 +529,7 @@ function Config:BuildControls()
   -- sharing it while changing what it means is how a value lands in the wrong
   -- field.
   c.stackSegWLabel = W.CreateLabel(parent, "Seg width", 12, W.colors.inkDim)
+  c.remSizeLabel = W.CreateLabel(parent, "Alert size", 12, W.colors.inkDim)
   c.segHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
   c.segH = NumBox("segHeight", 16)
   c.barWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
@@ -2870,20 +2871,21 @@ function Config:Render()
   elseif style == "reminders" then
     y = RenderElementList(c, viewer, y, true)
     y = y - 6
-    c.remTypeLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTypeLabel:Show()
-    c.remType:SetPoint("TOPLEFT", C1, y); c.remType:Show()
-    local rtype = c.remType.value
-    local PARAM_X = C1 + 136
-    if rtype == "aura" then
-      c.remAura:SetPoint("TOPLEFT", PARAM_X, y); c.remAura:Show()
+    -- The alert row's Add block, on cells like every other style's. The rows
+    -- above are still labelled as alerts rather than spells -- that lives in
+    -- ElementLabel's rtype branch, which this does not touch.
+    local remPaneW = ns.ContentWidth(win:GetWidth())
+    local remCells = {
+      { label = c.remTypeLabel, control = c.remType, width = 138 },
+    }
+    if c.remType.value == "aura" then
+      remCells[#remCells + 1] = { control = c.remAura, width = 158 }
     else
-      c.remSlot:SetPoint("TOPLEFT", PARAM_X, y); c.remSlot:Show()
+      remCells[#remCells + 1] = { control = c.remSlot, width = 118 }
     end
-    y = y - 26
-    c.remTextLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTextLabel:Show()
-    c.remText:SetPoint("TOPLEFT", C1, y); c.remText:Show()
-    c.remAdd:SetPoint("TOPLEFT", C1 + 208, y); c.remAdd:Show()
-    y = y - 30
+    remCells[#remCells + 1] = { label = c.remTextLabel, control = c.remText, width = 208 }
+    remCells[#remCells + 1] = { control = c.remAdd, width = 56 }
+    y = ns.FormCells(y, remCells, remPaneW)
   end
 
   -- Appearance / per-style sections
@@ -3232,12 +3234,14 @@ function Config:Render()
     end
     y = ns.FormCells(y, toggles, paneW)
   else
-    c.sizeLabel:SetText("Size")
-    c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
-    c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 24)); c.iconSize:Show()
-    c.fontLabel:SetPoint("TOPLEFT", L2, y - 4); c.fontLabel:Show()
-    c.fontSize:SetPoint("TOPLEFT", C2, y); c.fontSize:SetText(tostring(viewer.fontSize or 12)); c.fontSize:Show()
-    y = y - 34
+    -- reminders. Its own label rather than rewriting the icon row's, so that
+    -- widget now carries exactly one meaning per style.
+    c.iconSize:SetText(tostring(viewer.iconSize or 24))
+    c.fontSize:SetText(tostring(viewer.fontSize or 12))
+    y = ns.FormCells(y, {
+      { label = c.remSizeLabel, control = c.iconSize, width = 76 },
+      { label = c.fontLabel,    control = c.fontSize, width = 64 },
+    }, paneW)
   end
 
   -- When to show

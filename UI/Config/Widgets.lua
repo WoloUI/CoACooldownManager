@@ -292,11 +292,6 @@ end
 --------------------------------------------------------------------------------
 -- Section header + window shell
 --------------------------------------------------------------------------------
-function W.CreateSection(parent, title)
-  local fs = W.CreateLabel(parent, title, 11, COLORS.gold)
-  return fs
-end
-
 -- Blizzard's scroll bar is a chunky bordered widget with an arrow button at each
 -- end. The panel is drawn flat and dark, so the arrows go and what is left is a
 -- track with a thumb on it.
@@ -360,11 +355,11 @@ end
 
 -- A section header with a hairline that fills the remaining width.
 --
--- CreateSection above is a bare gold string with no rule and no consistent space
--- around it, so on a crowded tab it reads as one more label rather than a break.
--- This one owns its leading and trailing space, and reports that space as COST so
--- callers advance their y cursor by the same amount for every title -- a long
--- section name must not shift the rows beneath it.
+-- It replaced W.CreateSection, which was a bare gold string with no rule and no
+-- consistent space around it, so on a crowded tab it read as one more label
+-- rather than a break. This one owns its leading and trailing space, and reports
+-- that space as COST so callers advance their y cursor by the same amount for
+-- every title -- a long section name must not shift the rows beneath it.
 local SECTION_LEAD = 14
 local SECTION_TRAIL = 8
 local SECTION_LABEL_H = 12
