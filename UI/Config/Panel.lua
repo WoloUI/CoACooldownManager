@@ -429,7 +429,7 @@ function Config:BuildControls()
   end)
 
   -- Anchor
-  c.anchorHeader = W.CreateSection(parent, "ANCHOR")
+  c.anchorHeader = W.CreateSectionHeader(parent, "POSITION")
   c.anchorParentLabel = W.CreateLabel(parent, "Attach to", 12, W.colors.inkDim)
   c.anchorParent = W.CreateDropdown(parent, 150, function(_, value)
     local viewer = SelectedViewer()
@@ -479,7 +479,7 @@ function Config:BuildControls()
   end, "0")
 
   -- Appearance
-  c.lookHeader = W.CreateSection(parent, "APPEARANCE")
+  c.lookHeader = W.CreateSectionHeader(parent, "LOOK")
   c.styleLabel = W.CreateLabel(parent, "Style", 12, W.colors.inkDim)
   c.style = W.CreateDropdown(parent, 120, function(_, value)
     SelectedViewer().style = value
@@ -515,7 +515,9 @@ function Config:BuildControls()
   -- Match width: a bar can follow another bar's configured width instead of
   -- carrying its own number. Only styles ConfiguredWidth understands can be a
   -- source, and an icon row sizes itself from its icons so it is a source only.
-  c.widthModeLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
+  -- "Width mode", not "Width": the Width box beside it is a different control,
+  -- and two cells labelled the same is how a value lands in the wrong box.
+  c.widthModeLabel = W.CreateLabel(parent, "Width mode", 12, W.colors.inkDim)
   c.widthMode = W.CreateDropdown(parent, 110, function(_, value)
     local viewer = SelectedViewer()
     if value == "match" then
@@ -578,6 +580,9 @@ function Config:BuildControls()
     Touch()
   end)
 
+  -- The per-bar visibility pair never had a section of its own -- it was two
+  -- loose widgets between the style block and the element list.
+  c.visHeader = W.CreateSectionHeader(parent, "WHEN TO SHOW")
   c.visLabel = W.CreateLabel(parent, "Show bar", 12, W.colors.inkDim)
   c.visibility = W.CreateDropdown(parent, 110, function(_, value)
     SelectedViewer().visibility = value
@@ -1058,7 +1063,7 @@ function Config:BuildControls()
   end, "Life Tap")
 
   -- Elements
-  c.elementsHeader = W.CreateSection(parent, "ELEMENTS")
+  c.elementsHeader = W.CreateSectionHeader(parent, "CONTENTS")
   c.elementRows = {}
   c.addInput = W.CreateEditBox(parent, 170, 20, nil, "spell name or ID")
   -- Re-render on kind change so the trinket slot dropdown appears/disappears
@@ -1608,15 +1613,9 @@ end
 -- The match-width row, shared by every style that can follow another bar.
 -- Returns the new y cursor. `cols` carries the form grid so the caller's
 -- columns are honoured.
-local function RenderWidthMode(c, viewer, y, cols)
-  c.widthModeLabel:SetPoint("TOPLEFT", cols.L1, y - 4); c.widthModeLabel:Show()
-  c.widthMode:SetPoint("TOPLEFT", cols.C1, y)
-  c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
-  c.widthMode:Show()
-  if viewer.widthMode ~= "match" then return y - 26 end
-
-  -- Any OTHER bar whose style has a configured width. An icon row is the usual
-  -- pick: its width is a function of how many spells are in it.
+-- Any OTHER bar whose style has a configured width. An icon row is the usual
+-- pick: its width is a function of how many spells are in it.
+local function WidthSourceOptions(viewer)
   local options = {}
   for _, other in ipairs(ns.profile.viewers) do
     if other.name ~= viewer.name and ns.ConfiguredWidth(other) then
@@ -1626,6 +1625,19 @@ local function RenderWidthMode(c, viewer, y, cols)
   if #options == 0 then
     options[1] = { text = "(no other bar)", value = "" }
   end
+  return options
+end
+
+-- The grid version, still used by every style that has not moved to cells yet
+-- (power, swing, cast). It goes when the last of them converts.
+local function RenderWidthMode(c, viewer, y, cols)
+  c.widthModeLabel:SetPoint("TOPLEFT", cols.L1, y - 4); c.widthModeLabel:Show()
+  c.widthMode:SetPoint("TOPLEFT", cols.C1, y)
+  c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
+  c.widthMode:Show()
+  if viewer.widthMode ~= "match" then return y - 26 end
+
+  local options = WidthSourceOptions(viewer)
   c.widthSourceLabel:SetPoint("TOPLEFT", cols.L2, y - 4); c.widthSourceLabel:Show()
   c.widthSource:SetPoint("TOPLEFT", cols.C2, y)
   c.widthSource:SetOptions(options)
@@ -1636,6 +1648,18 @@ local function RenderWidthMode(c, viewer, y, cols)
   c.widthMin:SetText(tostring(viewer.widthMin or 200))
   c.widthMin:Show()
   return y - 26
+end
+
+-- The Follow / Min pair, appended to the LOOK cell list rather than positioned
+-- on a row of its own: they only exist while the bar matches another one, and a
+-- cell list is what lets them disappear without leaving a hole.
+local function AppendWidthSourceCells(c, viewer, cells)
+  local options = WidthSourceOptions(viewer)
+  c.widthSource:SetOptions(options)
+  c.widthSource:SetValue(viewer.widthSource or options[1].value)
+  c.widthMin:SetText(tostring(viewer.widthMin or 200))
+  cells[#cells + 1] = { label = c.widthSourceLabel, control = c.widthSource, width = 118 }
+  cells[#cells + 1] = { label = c.widthMinLabel, control = c.widthMin, width = 56 }
 end
 
 local ALL_CONTROL_KEYS -- every positionable control, hidden before each render
@@ -1778,9 +1802,10 @@ local function SetArrowEnabled(btn, enabled)
 end
 
 local function RenderElementList(c, viewer, y, isReminders)
-  c.elementsHeader:SetPoint("TOPLEFT", 0, y)
+  c.elementsHeader:SetPoint("TOPLEFT", 0, y - c.elementsHeader.LEAD)
+  c.elementsHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
   c.elementsHeader:Show()
-  y = y - 20
+  y = y - c.elementsHeader.COST
 
   for i, el in ipairs(viewer.elements) do
     local row = c.elementRows[i]
@@ -2644,57 +2669,80 @@ function Config:Render()
   end
   y = y - 30
 
-  -- Anchor section (Power too: it can be re-anchored FREE only, so show but lock parent)
-  c.anchorHeader:SetPoint("TOPLEFT", 0, y)
-  c.anchorHeader:Show()
-  y = y - 22
-  local anchor = ns.DB:GetAnchor(viewer)
-  if viewer.name ~= "Power" then
-    local parentOptions = { { text = "Screen (free)", value = "FREE" } }
-    for _, other in ipairs(ns.profile.viewers) do
-      if other.name ~= viewer.name and not ns.DB:WouldCycle(viewer.name, other.name) then
-        parentOptions[#parentOptions + 1] = { text = other.name, value = other.name }
-      end
+  -- Section order follows how a bar gets built: what is in it, then what
+  -- it looks like, then when it shows, then where it sits. You position a bar
+  -- once; you edit its contents constantly.
+  local style = viewer.style
+
+  -- Elements
+  if style == "icons" or style == "bars" or style == "shield" then
+    y = RenderElementList(c, viewer, y, false)
+    y = y - 6
+    c.addLabel:SetPoint("TOPLEFT", L1, y - 4); c.addLabel:Show()
+    if style == "shield" and c.addKind.value == "cooldown" then
+      c.addKind:SetValue("buff") -- shields are buffs; save the extra click
     end
-    c.anchorParentLabel:SetText("Attach to")
-    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
-    c.anchorParentLabel:Show()
-    c.anchorParent:SetOptions(parentOptions)
-    c.anchorParent:SetValue(anchor.parent or "FREE")
-    c.anchorParent:SetPoint("TOPLEFT", C1, y)
-    c.anchorParent:Show()
-    if anchor.parent ~= "FREE" then
-      c.anchorPosLabel:SetPoint("TOPLEFT", LW, y - 4)
-      c.anchorPosLabel:Show()
-      local pos = "above"
-      if anchor.relPoint == "BOTTOM" then pos = "below"
-      elseif anchor.relPoint == "LEFT" then pos = "left"
-      elseif anchor.relPoint == "RIGHT" then pos = "right" end
-      c.anchorPos:SetValue(pos)
-      c.anchorPos:SetPoint("TOPLEFT", CW, y)
-      c.anchorPos:Show()
+    local isTrinket = c.addKind.value == "trinket"
+    local isTotem = c.addKind.value == "totem"
+    local totemByName = isTotem and c.addTotemSlot.value == "name"
+    if isTrinket then
+      -- Trinket picks an equipped slot; the spell text box is not used
+      c.addInput:Hide()
+      c.addSlot:SetPoint("TOPLEFT", C1, y); c.addSlot:Show()
+    elseif isTotem then
+      -- Totem picks a slot; the name box gets its own line below (the row is
+      -- already full at the kind dropdown)
+      c.addSlot:Hide()
+      c.addInput:Hide()
+      c.addTotemSlot:SetPoint("TOPLEFT", C1, y); c.addTotemSlot:Show()
+    else
+      c.addSlot:Hide()
+      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
     end
-  else
-    c.anchorParentLabel:SetText("Root bar: drag it in Edit mode; every anchored bar follows.")
-    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
-    c.anchorParentLabel:Show()
+    c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
+    c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
+    y = y - 24
+    if totemByName then
+      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
+      y = y - 24
+    end
+    local addHint
+    if isTotem then
+      addHint = totemByName
+        and "Type the TOTEM's name as /cdm totems prints it (it can differ from the spell's).\nGray while it is down, sweeping its re-plant cooldown if it has one."
+        or "Tracks whatever stands in that totem slot: time left while it is up, and while it is\ndown, gray plus its re-plant cooldown. Icon and name are learned when you plant one.\nSelect it below for a glow or sound when it can be re-planted (This spell ready)."
+    elseif isTrinket then
+      addHint = "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
+    elseif c.addKind.value == "item" then
+      addHint = "Type a consumable's name or item ID. Shows its cooldown and the count you carry."
+    elseif style == "shield" then
+      addHint = "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
+    else
+      addHint = "Type a name or spell ID, or drag a spell from your spellbook."
+    end
+    c.addHint:SetText(addHint)
+    c.addHint:SetPoint("TOPLEFT", C1, y); c.addHint:Show()
+    y = y - 24
+  elseif style == "reminders" then
+    y = RenderElementList(c, viewer, y, true)
+    y = y - 6
+    c.remTypeLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTypeLabel:Show()
+    c.remType:SetPoint("TOPLEFT", C1, y); c.remType:Show()
+    local rtype = c.remType.value
+    local PARAM_X = C1 + 136
+    if rtype == "aura" then
+      c.remAura:SetPoint("TOPLEFT", PARAM_X, y); c.remAura:Show()
+    else
+      c.remSlot:SetPoint("TOPLEFT", PARAM_X, y); c.remSlot:Show()
+    end
+    y = y - 26
+    c.remTextLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTextLabel:Show()
+    c.remText:SetPoint("TOPLEFT", C1, y); c.remText:Show()
+    c.remAdd:SetPoint("TOPLEFT", C1 + 208, y); c.remAdd:Show()
+    y = y - 30
   end
-  y = y - 26
-  c.anchorXLabel:SetText("Offset X")
-  c.anchorXLabel:SetPoint("TOPLEFT", L1, y - 4)
-  c.anchorXLabel:Show()
-  c.anchorX:SetPoint("TOPLEFT", C1, y)
-  c.anchorX:SetText(tostring(math.floor((anchor.x or 0) + 0.5)))
-  c.anchorX:Show()
-  c.anchorYLabel:SetPoint("TOPLEFT", L2, y - 4)
-  c.anchorYLabel:Show()
-  c.anchorY:SetPoint("TOPLEFT", C2, y)
-  c.anchorY:SetText(tostring(math.floor((anchor.y or 0) + 0.5)))
-  c.anchorY:Show()
-  y = y - 34
 
   -- Appearance / per-style sections
-  local style = viewer.style
   if style == "power" then
     local type1, type2 = ns.Power:GetTypes()
     c.powerHeader:SetPoint("TOPLEFT", 0, y)
@@ -2941,89 +2989,78 @@ function Config:Render()
     c.histBlacklist:SetPoint("TOPLEFT", L1, y); c.histBlacklist:SetText(hc.blacklist or ""); c.histBlacklist:Show()
     y = y - 30
   elseif style ~= "reminders" then
-    c.lookHeader:SetPoint("TOPLEFT", 0, y)
+    -- icons and bars. Every control is set first, then packed: the cells decide
+    -- where things land, so nothing here carries a hand-tuned offset.
+    local paneW = ns.ContentWidth(win:GetWidth())
+    c.lookHeader:SetPoint("TOPLEFT", 0, y - c.lookHeader.LEAD)
+    c.lookHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
     c.lookHeader:Show()
-    y = y - 22
-    -- Row: Style [dd]         Growth [dd]
-    c.styleLabel:SetPoint("TOPLEFT", L1, y - 4); c.styleLabel:Show()
-    c.style:SetPoint("TOPLEFT", C1, y); c.style:SetValue(style); c.style:Show()
-    c.growthLabel:SetPoint("TOPLEFT", LW, y - 4); c.growthLabel:Show()
+    y = y - c.lookHeader.COST
+
+    c.style:SetValue(style)
     c.growth:SetOptions(style == "bars" and GROWTH_BARS or GROWTH_ICONS)
     c.growth:SetValue(viewer.growth or (style == "bars" and "UP" or "CENTER"))
-    c.growth:SetPoint("TOPLEFT", CW, y); c.growth:Show()
-    y = y - 26
-    -- Row: sizes
+    c.spacing:SetText(tostring(viewer.spacing or 5))
+    c.fontSize:SetText(tostring(viewer.fontSize or 11))
+
+    local cells = {
+      { label = c.styleLabel,  control = c.style,  width = 128 },
+      { label = c.growthLabel, control = c.growth, width = 118 },
+    }
     if style == "icons" then
-      c.sizeLabel:SetText("Size")
-      c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
-      c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 32)); c.iconSize:Show()
-      c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
-      c.spacing:SetPoint("TOPLEFT", C2, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
-      c.fontLabel:SetPoint("TOPLEFT", L3, y - 4); c.fontLabel:Show()
-      c.fontSize:SetPoint("TOPLEFT", C3, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
-    else
-      -- The Width box is meaningless while the bar follows another one
-      if viewer.widthMode ~= "match" then
-        c.barWLabel:SetPoint("TOPLEFT", L1, y - 4); c.barWLabel:Show()
-        c.barW:SetPoint("TOPLEFT", C1, y); c.barW:SetText(tostring(viewer.barWidth or 250)); c.barW:Show()
-        c.barHLabel:SetPoint("TOPLEFT", L2, y - 4); c.barHLabel:Show()
-        c.barH:SetPoint("TOPLEFT", C2, y); c.barH:SetText(tostring(viewer.barHeight or 20)); c.barH:Show()
-        c.spacingLabel:SetPoint("TOPLEFT", L3, y - 4); c.spacingLabel:Show()
-        c.spacing:SetPoint("TOPLEFT", C3, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
+      -- Each style labels its OWN cells: c.iconSize used to be re-labelled from
+      -- "Size" to "Width" mid-render depending on style, which is how a value
+      -- lands in the wrong box.
+      c.sizeLabel:SetText("Icon size")
+      c.iconSize:SetText(tostring(viewer.iconSize or 32))
+      cells[#cells + 1] = { label = c.sizeLabel,    control = c.iconSize, width = 60 }
+      cells[#cells + 1] = { label = c.spacingLabel, control = c.spacing,  width = 56 }
+      cells[#cells + 1] = { label = c.fontLabel,    control = c.fontSize, width = 56 }
+    else -- bars
+      -- Only duration bars can follow another bar; an icon row sizes itself from
+      -- its icons, so it is a source only.
+      c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
+      cells[#cells + 1] = { label = c.widthModeLabel, control = c.widthMode, width = 118 }
+      if viewer.widthMode == "match" then
+        -- The Width box is meaningless while the bar follows another one, so it
+        -- drops out of the list entirely rather than sitting there inert.
+        AppendWidthSourceCells(c, viewer, cells)
       else
-        c.barHLabel:SetPoint("TOPLEFT", L1, y - 4); c.barHLabel:Show()
-        c.barH:SetPoint("TOPLEFT", C1, y); c.barH:SetText(tostring(viewer.barHeight or 20)); c.barH:Show()
-        c.spacingLabel:SetPoint("TOPLEFT", L2, y - 4); c.spacingLabel:Show()
-        c.spacing:SetPoint("TOPLEFT", C2, y); c.spacing:SetText(tostring(viewer.spacing or 5)); c.spacing:Show()
+        c.barW:SetText(tostring(viewer.barWidth or 250))
+        cells[#cells + 1] = { label = c.barWLabel, control = c.barW, width = 56 }
       end
+      c.barH:SetText(tostring(viewer.barHeight or 20))
+      cells[#cells + 1] = { label = c.barHLabel,    control = c.barH,     width = 56 }
+      cells[#cells + 1] = { label = c.spacingLabel, control = c.spacing,  width = 56 }
+      cells[#cells + 1] = { label = c.fontLabel,    control = c.fontSize, width = 56 }
     end
-    y = y - 26
-    -- Only duration bars can follow another bar; an icon row sizes itself from
-    -- its icons, so it is a source only.
-    if style == "bars" then
-      y = RenderWidthMode(c, viewer, y,
-        { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 })
-    end
-    -- Row: font (bars) + toggles aligned to control columns
-    if style == "bars" then
-      c.fontLabel:SetPoint("TOPLEFT", L1, y - 4); c.fontLabel:Show()
-      c.fontSize:SetPoint("TOPLEFT", C1, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
-      c.showStacks:SetPoint("TOPLEFT", C2, y)
-    else
-      c.showKeybind:SetPoint("TOPLEFT", C1, y)
-      c.showKeybind:SetChecked(viewer.showKeybind ~= false)
-      c.showKeybind:Show()
-      c.showStacks:SetPoint("TOPLEFT", C2, y)
-      c.reverseSweep:SetPoint("TOPLEFT", C3 - 60, y)
-      c.reverseSweep:SetChecked(viewer.reverseSweep)
-      c.reverseSweep:Show()
-    end
+    y = ns.FormCells(y, cells, paneW)
+
+    -- The toggles. A checkbox carries its own text, so these have no label cell.
     c.showStacks:SetChecked(viewer.showStacks ~= false)
-    c.showStacks:Show()
-    -- Timer sits beside Stacks for duration bars; icons already use all three
-    -- control columns on that row, so it gets its own line there
-    if style == "bars" then
-      c.showTimer:SetPoint("TOPLEFT", C3 - 60, y)
-      y = y - 26
-      c.showBarIcon:SetPoint("TOPLEFT", C1, y)
-      c.showBarIcon:SetChecked(viewer.showIcon ~= false)
-      c.showBarIcon:Show()
-    else
-      y = y - 26
-      c.showTimer:SetPoint("TOPLEFT", C1, y)
-      -- Only icons render the GCD sweep; duration bars ignore it entirely
-      c.showGCD:SetPoint("TOPLEFT", C2, y)
-      c.showGCD:SetChecked(viewer.showGCD == true)
-      c.showGCD:Show()
-      if viewer.showGCD then
-        c.showGCDTime:SetPoint("TOPLEFT", C3 - 60, y)
-        c.showGCDTime:SetChecked(viewer.showGCDTime == true)
-        c.showGCDTime:Show()
-      end
-    end
     c.showTimer:SetChecked(viewer.showTimer ~= false)
-    c.showTimer:Show()
-    y = y - 30
+    local toggles = {}
+    if style == "icons" then
+      c.showKeybind:SetChecked(viewer.showKeybind ~= false)
+      c.reverseSweep:SetChecked(viewer.reverseSweep)
+      c.showGCD:SetChecked(viewer.showGCD == true)
+      toggles[#toggles + 1] = { control = c.showKeybind,  width = 104 }
+      toggles[#toggles + 1] = { control = c.showStacks,   width = 86 }
+      toggles[#toggles + 1] = { control = c.showTimer,    width = 78 }
+      toggles[#toggles + 1] = { control = c.reverseSweep, width = 128 }
+      -- Only icons render the GCD sweep; duration bars ignore it entirely
+      toggles[#toggles + 1] = { control = c.showGCD,      width = 108 }
+      if viewer.showGCD then
+        c.showGCDTime:SetChecked(viewer.showGCDTime == true)
+        toggles[#toggles + 1] = { control = c.showGCDTime, width = 104 }
+      end
+    else -- bars
+      c.showBarIcon:SetChecked(viewer.showIcon ~= false)
+      toggles[#toggles + 1] = { control = c.showStacks,  width = 86 }
+      toggles[#toggles + 1] = { control = c.showTimer,   width = 78 }
+      toggles[#toggles + 1] = { control = c.showBarIcon, width = 78 }
+    end
+    y = ns.FormCells(y, toggles, paneW)
   else
     c.sizeLabel:SetText("Size")
     c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
@@ -3033,81 +3070,65 @@ function Config:Render()
     y = y - 34
   end
 
-  -- Visibility
-  c.visLabel:SetPoint("TOPLEFT", L1, y - 4)
-  c.visLabel:Show()
+  -- When to show
+  c.visHeader:SetPoint("TOPLEFT", 0, y - c.visHeader.LEAD)
+  c.visHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+  c.visHeader:Show()
+  y = y - c.visHeader.COST
   c.visibility:SetValue(viewer.visibility or "always")
-  c.visibility:SetPoint("TOPLEFT", C1, y)
-  c.visibility:Show()
-  y = y - 36
+  y = ns.FormCells(y, {
+    { label = c.visLabel, control = c.visibility, width = 118 },
+  }, ns.ContentWidth(win:GetWidth()))
 
-  -- Elements
-  if style == "icons" or style == "bars" or style == "shield" then
-    y = RenderElementList(c, viewer, y, false)
-    y = y - 6
-    c.addLabel:SetPoint("TOPLEFT", L1, y - 4); c.addLabel:Show()
-    if style == "shield" and c.addKind.value == "cooldown" then
-      c.addKind:SetValue("buff") -- shields are buffs; save the extra click
+  -- Position (Power too: it can be re-anchored FREE only, so show but lock parent)
+  c.anchorHeader:SetPoint("TOPLEFT", 0, y - c.anchorHeader.LEAD)
+  c.anchorHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+  c.anchorHeader:Show()
+  y = y - c.anchorHeader.COST
+  local anchor = ns.DB:GetAnchor(viewer)
+  if viewer.name ~= "Power" then
+    local parentOptions = { { text = "Screen (free)", value = "FREE" } }
+    for _, other in ipairs(ns.profile.viewers) do
+      if other.name ~= viewer.name and not ns.DB:WouldCycle(viewer.name, other.name) then
+        parentOptions[#parentOptions + 1] = { text = other.name, value = other.name }
+      end
     end
-    local isTrinket = c.addKind.value == "trinket"
-    local isTotem = c.addKind.value == "totem"
-    local totemByName = isTotem and c.addTotemSlot.value == "name"
-    if isTrinket then
-      -- Trinket picks an equipped slot; the spell text box is not used
-      c.addInput:Hide()
-      c.addSlot:SetPoint("TOPLEFT", C1, y); c.addSlot:Show()
-    elseif isTotem then
-      -- Totem picks a slot; the name box gets its own line below (the row is
-      -- already full at the kind dropdown)
-      c.addSlot:Hide()
-      c.addInput:Hide()
-      c.addTotemSlot:SetPoint("TOPLEFT", C1, y); c.addTotemSlot:Show()
-    else
-      c.addSlot:Hide()
-      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
+    c.anchorParentLabel:SetText("Attach to")
+    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
+    c.anchorParentLabel:Show()
+    c.anchorParent:SetOptions(parentOptions)
+    c.anchorParent:SetValue(anchor.parent or "FREE")
+    c.anchorParent:SetPoint("TOPLEFT", C1, y)
+    c.anchorParent:Show()
+    if anchor.parent ~= "FREE" then
+      c.anchorPosLabel:SetPoint("TOPLEFT", LW, y - 4)
+      c.anchorPosLabel:Show()
+      local pos = "above"
+      if anchor.relPoint == "BOTTOM" then pos = "below"
+      elseif anchor.relPoint == "LEFT" then pos = "left"
+      elseif anchor.relPoint == "RIGHT" then pos = "right" end
+      c.anchorPos:SetValue(pos)
+      c.anchorPos:SetPoint("TOPLEFT", CW, y)
+      c.anchorPos:Show()
     end
-    c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
-    c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
-    y = y - 24
-    if totemByName then
-      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
-      y = y - 24
-    end
-    local addHint
-    if isTotem then
-      addHint = totemByName
-        and "Type the TOTEM's name as /cdm totems prints it (it can differ from the spell's).\nGray while it is down, sweeping its re-plant cooldown if it has one."
-        or "Tracks whatever stands in that totem slot: time left while it is up, and while it is\ndown, gray plus its re-plant cooldown. Icon and name are learned when you plant one.\nSelect it below for a glow or sound when it can be re-planted (This spell ready)."
-    elseif isTrinket then
-      addHint = "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
-    elseif c.addKind.value == "item" then
-      addHint = "Type a consumable's name or item ID. Shows its cooldown and the count you carry."
-    elseif style == "shield" then
-      addHint = "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
-    else
-      addHint = "Type a name or spell ID, or drag a spell from your spellbook."
-    end
-    c.addHint:SetText(addHint)
-    c.addHint:SetPoint("TOPLEFT", C1, y); c.addHint:Show()
-    y = y - 24
-  elseif style == "reminders" then
-    y = RenderElementList(c, viewer, y, true)
-    y = y - 6
-    c.remTypeLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTypeLabel:Show()
-    c.remType:SetPoint("TOPLEFT", C1, y); c.remType:Show()
-    local rtype = c.remType.value
-    local PARAM_X = C1 + 136
-    if rtype == "aura" then
-      c.remAura:SetPoint("TOPLEFT", PARAM_X, y); c.remAura:Show()
-    else
-      c.remSlot:SetPoint("TOPLEFT", PARAM_X, y); c.remSlot:Show()
-    end
-    y = y - 26
-    c.remTextLabel:SetPoint("TOPLEFT", L1, y - 4); c.remTextLabel:Show()
-    c.remText:SetPoint("TOPLEFT", C1, y); c.remText:Show()
-    c.remAdd:SetPoint("TOPLEFT", C1 + 208, y); c.remAdd:Show()
-    y = y - 30
+  else
+    c.anchorParentLabel:SetText("Root bar: drag it in Edit mode; every anchored bar follows.")
+    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
+    c.anchorParentLabel:Show()
   end
+  y = y - 26
+  c.anchorXLabel:SetText("Offset X")
+  c.anchorXLabel:SetPoint("TOPLEFT", L1, y - 4)
+  c.anchorXLabel:Show()
+  c.anchorX:SetPoint("TOPLEFT", C1, y)
+  c.anchorX:SetText(tostring(math.floor((anchor.x or 0) + 0.5)))
+  c.anchorX:Show()
+  c.anchorYLabel:SetPoint("TOPLEFT", L2, y - 4)
+  c.anchorYLabel:Show()
+  c.anchorY:SetPoint("TOPLEFT", C2, y)
+  c.anchorY:SetText(tostring(math.floor((anchor.y or 0) + 0.5)))
+  c.anchorY:Show()
+  y = y - 34
 
   win.content:SetHeight(math.max(-y + 40, 400))
 end

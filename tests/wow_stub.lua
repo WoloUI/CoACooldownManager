@@ -7,7 +7,10 @@ local M = {}
 -- what ended up on screen. `_shown` starts FALSE so IsShown/IsVisible stay
 -- falsy by default, exactly like the old catch-all's nil.
 local function MakeFrame()
-  local frame = { _shown = false }
+  -- _width/_height are seeded rather than left absent: the __index below answers
+  -- every missing key with a no-op FUNCTION, which is truthy, so `self._height or
+  -- 0` would hand a function to arithmetic instead of falling back to zero.
+  local frame = { _shown = false, _width = 0, _height = 0 }
   local scripts = {}
   frame.SetScript = function(_, name, fn) scripts[name] = fn end
   frame.GetScript = function(_, name) return scripts[name] end
@@ -21,6 +24,14 @@ local function MakeFrame()
   frame.Fire = function(self, name, ...)
     if scripts[name] then return scripts[name](self, ...) end
   end
+  -- Size is remembered rather than dropped: layout code asks a frame how wide it
+  -- is (the config pane packs against the live window width), and a nil there is
+  -- an arithmetic error rather than a wrong number.
+  frame.SetWidth = function(self, w) self._width = w end
+  frame.SetHeight = function(self, h) self._height = h end
+  frame.SetSize = function(self, w, h) self._width, self._height = w, h end
+  frame.GetWidth = function(self) return self._width or 0 end
+  frame.GetHeight = function(self) return self._height or 0 end
   frame.Show = function(self) self._shown = true end
   frame.Hide = function(self) self._shown = false end
   frame.IsShown = function(self) return self._shown end
@@ -86,9 +97,12 @@ M.MakeEditBox = MakeEditBox
 function M.install(env)
   env = env or _G
 
-  env.CreateFrame = function(frameType)
-    if frameType == "EditBox" then return MakeEditBox() end
-    return MakeFrame()
+  env.CreateFrame = function(frameType, name)
+    local frame = frameType == "EditBox" and MakeEditBox() or MakeFrame()
+    -- A named frame becomes a global, as it does on the client. Tests reach the
+    -- config window that way rather than through a Panel.lua local.
+    if name then env[name] = frame end
+    return frame
   end
   env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) print("[chat] " .. tostring(msg)) end }
   env.GetTime = function() return env.__now or 1000 end
