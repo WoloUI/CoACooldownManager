@@ -464,7 +464,7 @@ function Config:BuildControls()
     ns.DB:SetAnchor(viewer, anchor)
     Touch()
   end)
-  c.anchorPosLabel = W.CreateLabel(parent, "Position", 12, W.colors.inkDim)
+  c.anchorPosLabel = W.CreateLabel(parent, "Side", 12, W.colors.inkDim)
   c.anchorPos = W.CreateDropdown(parent, 130, function(_, value)
     local viewer = SelectedViewer()
     local anchor = ns.CopyTable(ns.DB:GetAnchor(viewer))
@@ -482,7 +482,7 @@ function Config:BuildControls()
     Config:Render()
   end)
   c.anchorPos:SetOptions(POSITION_OPTIONS)
-  c.anchorXLabel = W.CreateLabel(parent, "X", 12, W.colors.inkDim)
+  c.anchorXLabel = W.CreateLabel(parent, "X offset", 12, W.colors.inkDim)
   c.anchorX = W.CreateEditBox(parent, 46, 20, function(_, text)
     local viewer = SelectedViewer()
     local anchor = ns.CopyTable(ns.DB:GetAnchor(viewer))
@@ -490,7 +490,7 @@ function Config:BuildControls()
     ns.DB:SetAnchor(viewer, anchor)
     Touch()
   end, "0")
-  c.anchorYLabel = W.CreateLabel(parent, "Y", 12, W.colors.inkDim)
+  c.anchorYLabel = W.CreateLabel(parent, "Y offset", 12, W.colors.inkDim)
   c.anchorY = W.CreateEditBox(parent, 46, 20, function(_, text)
     local viewer = SelectedViewer()
     local anchor = ns.CopyTable(ns.DB:GetAnchor(viewer))
@@ -3182,6 +3182,11 @@ function Config:Render()
   c.anchorHeader:Show()
   y = y - c.anchorHeader.COST
   local anchor = ns.DB:GetAnchor(viewer)
+  local posPaneW = ns.ContentWidth(win:GetWidth())
+  c.anchorX:SetText(tostring(math.floor((anchor.x or 0) + 0.5)))
+  c.anchorY:SetText(tostring(math.floor((anchor.y or 0) + 0.5)))
+
+  local posCells = {}
   if viewer.name ~= "Power" then
     local parentOptions = { { text = "Screen (free)", value = "FREE" } }
     for _, other in ipairs(ns.profile.viewers) do
@@ -3190,41 +3195,31 @@ function Config:Render()
       end
     end
     c.anchorParentLabel:SetText("Attach to")
-    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
-    c.anchorParentLabel:Show()
     c.anchorParent:SetOptions(parentOptions)
     c.anchorParent:SetValue(anchor.parent or "FREE")
-    c.anchorParent:SetPoint("TOPLEFT", C1, y)
-    c.anchorParent:Show()
+    posCells[#posCells + 1] =
+      { label = c.anchorParentLabel, control = c.anchorParent, width = 158 }
     if anchor.parent ~= "FREE" then
-      c.anchorPosLabel:SetPoint("TOPLEFT", LW, y - 4)
-      c.anchorPosLabel:Show()
       local pos = "above"
       if anchor.relPoint == "BOTTOM" then pos = "below"
       elseif anchor.relPoint == "LEFT" then pos = "left"
       elseif anchor.relPoint == "RIGHT" then pos = "right" end
       c.anchorPos:SetValue(pos)
-      c.anchorPos:SetPoint("TOPLEFT", CW, y)
-      c.anchorPos:Show()
+      posCells[#posCells + 1] =
+        { label = c.anchorPosLabel, control = c.anchorPos, width = 138 }
     end
   else
+    -- The root bar has nothing to attach to, so its cell is a note instead. A
+    -- sentence is not a cell label: it gets its own full-width line.
     c.anchorParentLabel:SetText("Root bar: drag it in Edit mode; every anchored bar follows.")
-    c.anchorParentLabel:SetPoint("TOPLEFT", L1, y - 4)
+    c.anchorParentLabel:ClearAllPoints()
+    c.anchorParentLabel:SetPoint("TOPLEFT", 0, y)
     c.anchorParentLabel:Show()
+    y = y - 20
   end
-  y = y - 26
-  c.anchorXLabel:SetText("Offset X")
-  c.anchorXLabel:SetPoint("TOPLEFT", L1, y - 4)
-  c.anchorXLabel:Show()
-  c.anchorX:SetPoint("TOPLEFT", C1, y)
-  c.anchorX:SetText(tostring(math.floor((anchor.x or 0) + 0.5)))
-  c.anchorX:Show()
-  c.anchorYLabel:SetPoint("TOPLEFT", L2, y - 4)
-  c.anchorYLabel:Show()
-  c.anchorY:SetPoint("TOPLEFT", C2, y)
-  c.anchorY:SetText(tostring(math.floor((anchor.y or 0) + 0.5)))
-  c.anchorY:Show()
-  y = y - 34
+  posCells[#posCells + 1] = { label = c.anchorXLabel, control = c.anchorX, width = 64 }
+  posCells[#posCells + 1] = { label = c.anchorYLabel, control = c.anchorY, width = 64 }
+  y = ns.FormCells(y, posCells, posPaneW)
 
   win.content:SetHeight(math.max(-y + 40, 400))
 end
