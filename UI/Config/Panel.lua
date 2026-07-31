@@ -144,6 +144,60 @@ local function TouchTracking()
 end
 
 --------------------------------------------------------------------------------
+-- Sidebar layout arithmetic
+--------------------------------------------------------------------------------
+-- The bar list used to grow downward with no clamp from y = -168, while the
+-- utility buttons stayed pinned to the sidebar bottom, so a long list simply ran
+-- over them (GH#6). The list is a scroll frame now, and everything below it is
+-- pinned. These functions own the arithmetic that decides how much room the list
+-- gets, kept pure so it can be tested without frames.
+local LIST_TOP = -168          -- where the list starts, below the BARS header
+local LIST_ROW_H = 23          -- one bar button plus its gap
+local BOTTOM_PAD = 10          -- Test mode button's own offset
+local BTN_H = 22
+local BTN_GAP = 6
+local NEWBAR_H = 22
+-- name box + style dropdown + Create button, at the 23px spacing they render at
+local CREATE_BLOCK_H = 23 * 3
+
+-- Distance from the sidebar bottom to the top of the pinned stack, i.e. the
+-- first y the list may NOT occupy. Stack from the bottom up: Test mode,
+-- Edit mode / Scan spells, then the new-bar block.
+local function PinnedStackHeight(creating)
+  local h = BOTTOM_PAD + BTN_H          -- Test mode
+  h = h + BTN_GAP + BTN_H               -- Edit mode / Scan spells
+  h = h + BTN_GAP + NEWBAR_H            -- + New bar...
+  if creating then h = h + CREATE_BLOCK_H end
+  return h
+end
+
+function ns.SidebarMetrics(windowHeight, creating)
+  local createBlockHeight = creating and CREATE_BLOCK_H or 0
+  local pinned = PinnedStackHeight(creating)
+  -- The list occupies from LIST_TOP down to the top of the pinned stack. Both are
+  -- measured from opposite edges, hence the subtraction from the window height.
+  local listHeight = windowHeight + LIST_TOP - pinned
+  -- A hard floor of one row: SetMinResize keeps the window at 420+, but a future
+  -- change to the pinned stack must not be able to produce a negative height.
+  if listHeight < LIST_ROW_H then listHeight = LIST_ROW_H end
+  return {
+    listTop = LIST_TOP,
+    listHeight = listHeight,
+    visibleRows = math.floor(listHeight / LIST_ROW_H),
+    -- Offsets from the sidebar BOTTOM, for the pinned widgets
+    newBarY = BOTTOM_PAD + BTN_H + BTN_GAP + BTN_H + BTN_GAP + createBlockHeight,
+    createBlockHeight = createBlockHeight,
+  }
+end
+
+function ns.ContentWidth(windowWidth)
+  -- Was the literal `760 - SIDEBAR_W - PAD - 30`; the 760 did not even match the
+  -- 780 window it was written for. 30 covers the scrollbar and its inset.
+  local w = windowWidth - 20 - SIDEBAR_W - PAD - 30
+  return w > 0 and w or 0
+end
+
+--------------------------------------------------------------------------------
 -- Window skeleton
 --------------------------------------------------------------------------------
 local controls = {}
