@@ -524,6 +524,11 @@ function Config:BuildControls()
   end
   c.sizeLabel = W.CreateLabel(parent, "Size", 12, W.colors.inkDim)
   c.iconSize = NumBox("iconSize", 32)
+  -- The stack bar's own width label. It used to borrow the icon row's "Size"
+  -- label and rewrite it to "Width" mid-render; sharing a widget is fine,
+  -- sharing it while changing what it means is how a value lands in the wrong
+  -- field.
+  c.stackSegWLabel = W.CreateLabel(parent, "Seg width", 12, W.colors.inkDim)
   c.segHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
   c.segH = NumBox("segHeight", 16)
   c.barWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
@@ -833,7 +838,6 @@ function Config:BuildControls()
     .. "client answers for your current target.", 10, W.colors.inkDim)
 
   -- Stack bar options
-  c.stackHeader = W.CreateSection(parent, "TRACKED RESOURCE (aura stacks)")
   c.stackIdLabel = W.CreateLabel(parent, "Aura (name/ID)", 12, W.colors.inkDim)
   c.stackId = W.CreateEditBox(parent, 80, 20, function(_, text)
     local viewer = SelectedViewer()
@@ -952,7 +956,6 @@ function Config:BuildControls()
       curve = 12, showValue = true, color = { 1, 0.72, 0.2 } }
     return viewer.shield
   end
-  c.shieldHeader = W.CreateSection(parent, "NANSHIELD")
   c.shieldSegLabel = W.CreateLabel(parent, "Segments", 12, W.colors.inkDim)
   c.shieldSegs = W.CreateEditBox(parent, 40, 20, function(_, text)
     ShieldCfg().segments = math.min(math.max(tonumber(text) or 14, 3), 40)
@@ -2952,119 +2955,113 @@ function Config:Render()
     }, paneW)
   elseif style == "stacks" then
     viewer.stack = viewer.stack or { maxStacks = 3, onlyMine = true }
-    c.stackHeader:SetPoint("TOPLEFT", 0, y)
-    c.stackHeader:Show()
-    y = y - 22
-    -- Row: Aura ID [box]      Max stacks [box]
-    c.stackIdLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackIdLabel:Show()
-    c.stackId:SetPoint("TOPLEFT", C1, y)
-    c.stackId:SetText(viewer.stack.spellID and tostring(viewer.stack.spellID) or "")
-    c.stackId:Show()
-    local autoMax = (viewer.stack.maxStacks or 3) <= 0
-    c.stackMaxLabel:SetPoint("TOPLEFT", LW, y - 4); c.stackMaxLabel:Show()
+    local st = viewer.stack
+    local autoMax = (st.maxStacks or 3) <= 0
+    c.stackId:SetText(st.spellID and tostring(st.spellID) or "")
+    c.stackDisplay:SetValue(st.display or "segments")
+    c.stackUnit:SetValue(st.unit or "player")
+    c.stackColor:SetValue(st.colorName or "gold")
+
+    local cells = { { label = c.stackIdLabel, control = c.stackId, width = 118 } }
+    -- The Max box gives up its cell to "Auto max" rather than sitting there
+    -- inert while the maximum is being learned from the aura.
     if not autoMax then
-      c.stackMax:SetPoint("TOPLEFT", CW, y)
-      c.stackMax:SetText(tostring(viewer.stack.maxStacks or 3))
-      c.stackMax:Show()
+      c.stackMax:SetText(tostring(st.maxStacks or 3))
+      cells[#cells + 1] = { label = c.stackMaxLabel, control = c.stackMax, width = 88 }
     end
-    c.stackAuto:SetPoint("TOPLEFT", CW + 50, y + 2)
+    cells[#cells + 1] = { label = c.stackDisplayLabel, control = c.stackDisplay, width = 118 }
+    cells[#cells + 1] = { label = c.stackUnitLabel,    control = c.stackUnit,    width = 108 }
+    cells[#cells + 1] = { label = c.stackColorLabel,   control = c.stackColor,   width = 108 }
+    y = ns.FormCells(y, cells, paneW)
+
     c.stackAuto:SetChecked(autoMax)
-    c.stackAuto:Show()
-    y = y - 22
-    c.stackMaxHint:SetPoint("TOPLEFT", L1, y); c.stackMaxHint:Show()
-    y = y - 22
-    -- Row: Display [dd]       On unit [dd]
-    c.stackDisplayLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackDisplayLabel:Show()
-    c.stackDisplay:SetPoint("TOPLEFT", C1, y)
-    c.stackDisplay:SetValue(viewer.stack.display or "segments")
-    c.stackDisplay:Show()
-    c.stackUnitLabel:SetPoint("TOPLEFT", LW, y - 4); c.stackUnitLabel:Show()
-    c.stackUnit:SetPoint("TOPLEFT", CW, y)
-    c.stackUnit:SetValue(viewer.stack.unit or "player")
-    c.stackUnit:Show()
-    y = y - 26
-    -- Row: Color [dd]         [x] Show count text
-    c.stackColorLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackColorLabel:Show()
-    c.stackColor:SetPoint("TOPLEFT", C1, y); c.stackColor:SetValue(viewer.stack.colorName or "gold"); c.stackColor:Show()
-    c.stackCount:SetPoint("TOPLEFT", LW, y); c.stackCount:SetChecked(viewer.stack.showCount ~= false); c.stackCount:Show()
-    c.stackGradient:SetPoint("TOPLEFT", C3 - 20, y)
-    c.stackGradient:SetChecked(viewer.stack.gradient == true)
-    c.stackGradient:Show()
-    y = y - 26
-    -- Row: Filling aura [box]   per seg [box]   [x] Drain on expiry
-    c.stackSubLabel:SetPoint("TOPLEFT", L1, y - 4); c.stackSubLabel:Show()
-    c.stackSub:SetPoint("TOPLEFT", C1, y)
-    c.stackSub:SetText(viewer.stack.subSpellID and tostring(viewer.stack.subSpellID) or "")
-    c.stackSub:Show()
-    if viewer.stack.subSpellID then
-      c.stackSubMaxLabel:SetPoint("TOPLEFT", L2 + 30, y - 4); c.stackSubMaxLabel:Show()
-      c.stackSubMax:SetPoint("TOPLEFT", C2 + 20, y)
-      c.stackSubMax:SetText(tostring(viewer.stack.subMax or 3))
-      c.stackSubMax:Show()
-      c.stackSubDrain:SetPoint("TOPLEFT", C3 - 20, y)
-      c.stackSubDrain:SetChecked(viewer.stack.subDrain ~= false)
-      c.stackSubDrain:Show()
-      y = y - 24
-      c.stackSubdivide:SetPoint("TOPLEFT", C1, y)
-      c.stackSubdivide:SetChecked(viewer.stack.subdivide == true)
-      c.stackSubdivide:Show()
-    end
+    c.stackCount:SetChecked(st.showCount ~= false)
+    c.stackGradient:SetChecked(st.gradient == true)
+    y = ns.FormCells(y, {
+      { control = c.stackAuto,     width = 104 },
+      { control = c.stackCount,    width = 134 },
+      { control = c.stackGradient, width = 110 },
+    }, paneW)
+
+    c.stackMaxHint:ClearAllPoints()
+    c.stackMaxHint:SetPoint("TOPLEFT", 0, y); c.stackMaxHint:Show()
     y = y - 24
-    c.stackSubHint:SetPoint("TOPLEFT", L1, y); c.stackSubHint:Show()
-    y = y - 10
-    y = y - 26
-    -- Row: sizes per display mode
-    if viewer.stack.display == "bar" then
-      c.barWLabel:SetPoint("TOPLEFT", L1, y - 4); c.barWLabel:Show()
-      c.barW:SetPoint("TOPLEFT", C1, y); c.barW:SetText(tostring(viewer.barWidth or 200)); c.barW:Show()
-      c.barHLabel:SetPoint("TOPLEFT", L2, y - 4); c.barHLabel:Show()
-      c.barH:SetPoint("TOPLEFT", C2, y); c.barH:SetText(tostring(viewer.barHeight or 16)); c.barH:Show()
-      c.fontLabel:SetPoint("TOPLEFT", L3, y - 4); c.fontLabel:Show()
-      c.fontSize:SetPoint("TOPLEFT", C3, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
-    else
-      c.sizeLabel:SetText("Width")
-      c.sizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.sizeLabel:Show()
-      c.iconSize:SetPoint("TOPLEFT", C1, y); c.iconSize:SetText(tostring(viewer.iconSize or 16)); c.iconSize:Show()
-      c.segHLabel:SetPoint("TOPLEFT", L2, y - 4); c.segHLabel:Show()
-      c.segH:SetPoint("TOPLEFT", C2, y); c.segH:SetText(tostring(viewer.segHeight or viewer.iconSize or 16)); c.segH:Show()
-      c.spacingLabel:SetPoint("TOPLEFT", L3, y - 4); c.spacingLabel:Show()
-      c.spacing:SetPoint("TOPLEFT", C3, y); c.spacing:SetText(tostring(viewer.spacing or 4)); c.spacing:Show()
+
+    -- The filling aura, and the controls that only exist once there is one
+    c.stackSub:SetText(st.subSpellID and tostring(st.subSpellID) or "")
+    local subCells = { { label = c.stackSubLabel, control = c.stackSub, width = 118 } }
+    if st.subSpellID then
+      c.stackSubMax:SetText(tostring(st.subMax or 3))
+      subCells[#subCells + 1] =
+        { label = c.stackSubMaxLabel, control = c.stackSubMax, width = 88 }
     end
-    y = y - 34
+    y = ns.FormCells(y, subCells, paneW)
+    if st.subSpellID then
+      c.stackSubDrain:SetChecked(st.subDrain ~= false)
+      c.stackSubdivide:SetChecked(st.subdivide == true)
+      y = ns.FormCells(y, {
+        { control = c.stackSubDrain,  width = 134 },
+        { control = c.stackSubdivide, width = 134 },
+      }, paneW)
+    end
+    c.stackSubHint:ClearAllPoints()
+    c.stackSubHint:SetPoint("TOPLEFT", 0, y); c.stackSubHint:Show()
+    y = y - 26
+
+    -- Sizes for the mode you are in, each labelled for that mode
+    if st.display == "bar" then
+      c.barW:SetText(tostring(viewer.barWidth or 200))
+      c.barH:SetText(tostring(viewer.barHeight or 16))
+      c.fontSize:SetText(tostring(viewer.fontSize or 11))
+      y = ns.FormCells(y, {
+        { label = c.barWLabel, control = c.barW,     width = 64 },
+        { label = c.barHLabel, control = c.barH,     width = 64 },
+        { label = c.fontLabel, control = c.fontSize, width = 64 },
+      }, paneW)
+    else
+      c.iconSize:SetText(tostring(viewer.iconSize or 16))
+      c.segH:SetText(tostring(viewer.segHeight or viewer.iconSize or 16))
+      c.spacing:SetText(tostring(viewer.spacing or 4))
+      y = ns.FormCells(y, {
+        { label = c.stackSegWLabel, control = c.iconSize, width = 84 },
+        { label = c.segHLabel,      control = c.segH,     width = 78 },
+        { label = c.spacingLabel,   control = c.spacing,  width = 64 },
+      }, paneW)
+    end
   elseif style == "shield" then
     viewer.shield = viewer.shield or { segments = 14, segW = 24, segH = 7, gap = 2,
       curve = 12, showValue = true, color = { 1, 0.72, 0.2 } }
-    c.shieldHeader:SetPoint("TOPLEFT", 0, y)
-    c.shieldHeader:Show()
-    y = y - 22
-    -- Row: Segments / Seg width / Seg height
-    c.shieldSegLabel:SetPoint("TOPLEFT", L1, y - 4); c.shieldSegLabel:Show()
-    c.shieldSegs:SetPoint("TOPLEFT", C1, y); c.shieldSegs:SetText(tostring(viewer.shield.segments or 14)); c.shieldSegs:Show()
-    c.shieldWLabel:SetPoint("TOPLEFT", L2, y - 4); c.shieldWLabel:Show()
-    c.shieldW:SetPoint("TOPLEFT", C2, y); c.shieldW:SetText(tostring(viewer.shield.segW or 24)); c.shieldW:Show()
-    c.shieldHLabel:SetPoint("TOPLEFT", L3, y - 4); c.shieldHLabel:Show()
-    c.shieldH:SetPoint("TOPLEFT", C3, y); c.shieldH:SetText(tostring(viewer.shield.segH or 7)); c.shieldH:Show()
-    y = y - 26
-    -- Row: Gap / Curve / Color
-    c.shieldGapLabel:SetPoint("TOPLEFT", L1, y - 4); c.shieldGapLabel:Show()
-    c.shieldGap:SetPoint("TOPLEFT", C1, y); c.shieldGap:SetText(tostring(viewer.shield.gap or 2)); c.shieldGap:Show()
-    c.shieldCurveLabel:SetPoint("TOPLEFT", L2, y - 4); c.shieldCurveLabel:Show()
-    c.shieldCurve:SetPoint("TOPLEFT", C2, y); c.shieldCurve:SetText(tostring(viewer.shield.curve or 12)); c.shieldCurve:Show()
-    c.shieldColorLabel:SetPoint("TOPLEFT", L3, y - 4); c.shieldColorLabel:Show()
-    c.shieldColor:SetPoint("TOPLEFT", C3, y)
+    c.shieldSegs:SetText(tostring(viewer.shield.segments or 14))
+    c.shieldW:SetText(tostring(viewer.shield.segW or 24))
+    c.shieldH:SetText(tostring(viewer.shield.segH or 7))
+    c.shieldGap:SetText(tostring(viewer.shield.gap or 2))
+    c.shieldCurve:SetText(tostring(viewer.shield.curve or 12))
+    c.spacing:SetText(tostring(viewer.spacing or 10))
+    c.fontSize:SetText(tostring(viewer.fontSize or 11))
+    y = ns.FormCells(y, {
+      { label = c.shieldSegLabel,   control = c.shieldSegs,  width = 64 },
+      { label = c.shieldWLabel,     control = c.shieldW,     width = 78 },
+      { label = c.shieldHLabel,     control = c.shieldH,     width = 78 },
+      { label = c.shieldGapLabel,   control = c.shieldGap,   width = 64 },
+      { label = c.shieldCurveLabel, control = c.shieldCurve, width = 64 },
+      { label = c.spacingLabel,     control = c.spacing,     width = 64 },
+      { label = c.fontLabel,        control = c.fontSize,    width = 64 },
+    }, paneW)
+
+    -- The swatch keeps its own row, as the power bar's do
+    c.shieldColorLabel:ClearAllPoints()
+    c.shieldColorLabel:SetPoint("TOPLEFT", 0, y); c.shieldColorLabel:Show()
+    c.shieldColor:ClearAllPoints()
+    c.shieldColor:SetPoint("TOPLEFT", 96, y + 2)
     c.shieldColor:SetColor(viewer.shield.color or { 1, 0.72, 0.2 })
     c.shieldColor:Show()
-    y = y - 26
-    -- Row: Spacing / Font / Show amount
-    c.spacingLabel:SetPoint("TOPLEFT", L1, y - 4); c.spacingLabel:Show()
-    c.spacing:SetPoint("TOPLEFT", C1, y); c.spacing:SetText(tostring(viewer.spacing or 10)); c.spacing:Show()
-    c.fontLabel:SetPoint("TOPLEFT", L2, y - 4); c.fontLabel:Show()
-    c.fontSize:SetPoint("TOPLEFT", C2, y); c.fontSize:SetText(tostring(viewer.fontSize or 11)); c.fontSize:Show()
-    c.shieldValue:SetPoint("TOPLEFT", C3 - 60, y)
+    y = y - 28
+
     c.shieldValue:SetChecked(viewer.shield.showValue ~= false)
-    c.shieldValue:Show()
-    y = y - 26
-    c.shieldHint:SetPoint("TOPLEFT", L1, y); c.shieldHint:Show()
+    y = ns.FormCells(y, { { control = c.shieldValue, width = 120 } }, paneW)
+
+    c.shieldHint:ClearAllPoints()
+    c.shieldHint:SetPoint("TOPLEFT", 0, y); c.shieldHint:Show()
     y = y - 48
   elseif style == "swing" then
     local sw = viewer.swing or {}
