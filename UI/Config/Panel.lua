@@ -1841,9 +1841,16 @@ local function RenderElementList(c, viewer, y, isReminders)
     if not row then
       row = CreateFrame("Frame", nil, win.content)
       row:SetHeight(22)
+      -- The position reads first, at the left edge, right-justified so 9 and 10
+      -- line up on their last digit.
+      row.index = W.CreateLabel(row, "", 11, W.colors.inkDim)
+      row.index:SetWidth(18)
+      row.index:SetJustifyH("RIGHT")
+      row.index:SetPoint("LEFT", row, "LEFT", 0, 0)
+
       row.icon = row:CreateTexture(nil, "ARTWORK")
       row.icon:SetSize(16, 16)
-      row.icon:SetPoint("LEFT")
+      row.icon:SetPoint("LEFT", row.index, "RIGHT", 6, 0)
       ns.CropIcon(row.icon)
       row.btn = W.CreateButton(row, "", 300, 20, function(self)
         state.selectedElement = state.selectedElement ~= self.elementIndex and self.elementIndex or nil
@@ -1944,10 +1951,6 @@ local function RenderElementList(c, viewer, y, isReminders)
       -- The glyphs are plain ASCII on purpose. U+25B2/25BC rendered as "?" in
       -- the client font -- it has Latin-1 (so the multiply sign below is fine)
       -- but not Geometric Shapes.
-      row.index = W.CreateLabel(row, "", 11, W.colors.inkDim)
-      row.index:SetWidth(20)
-      row.index:SetJustifyH("RIGHT")
-      row.index:SetPoint("RIGHT", row, "RIGHT", -2, 0)
       row.remove = W.CreateButton(row, "\195\151", 20, 20, function(self)
         local current = SelectedViewer()
         if not current then return end
@@ -1956,7 +1959,7 @@ local function RenderElementList(c, viewer, y, isReminders)
         Touch()
         Config:Render()
       end)
-      row.remove:SetPoint("RIGHT", row.index, "LEFT", -6, 0)
+      row.remove:SetPoint("RIGHT", row, "RIGHT", -2, 0)
       row.down = W.CreateButton(row, "v", 20, 20, function(self) Move(self, 1) end)
       row.down:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
       row.up = W.CreateButton(row, "^", 20, 20, function(self) Move(self, -1) end)
