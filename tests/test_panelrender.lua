@@ -113,6 +113,30 @@ for _, style in ipairs({ "icons", "bars", "shield" }) do
   end
 end
 
+-- The trigger builder, per element kind. Selecting a row is what opens it in the
+-- panel and the row pool is a Panel.lua local, but Load is the public entry that
+-- selection calls, so the builder's own branches are reachable from here.
+for _, kind in ipairs({ "cooldown", "buff", "debuff", "trinket", "item", "totem" }) do
+  local el = { kind = kind, name = "Fireball", conditions = {} }
+  if kind == "trinket" then el.slot = 13 end
+  local fine, e = pcall(function() ns.TriggerBuilder:Load(el, function() end) end)
+  if not fine then print("  trigger " .. kind .. ": " .. tostring(e)) end
+  check("the trigger builder renders for " .. kind, fine)
+end
+
+-- Conditions bucketed across two actions: one group header per action, each with
+-- its own join, and a sound on the glow group.
+check("the trigger builder renders grouped conditions", (function()
+  local el = { kind = "buff", name = "Fireball", conditions = {
+    { ctype = "remaining", op = "<", value = 3, action = "glow" },
+    { ctype = "combat", action = "glow" },
+    { ctype = "otheraura", action = "show", spell = "Bloodlust" },
+  }, condGroups = { glow = { join = "all", sound = "none" } } }
+  local fine, e = pcall(function() ns.TriggerBuilder:Load(el, function() end) end)
+  if not fine then print("  trigger groups: " .. tostring(e)) end
+  return fine
+end)())
+
 -- Every non-bar view
 for _, entry in ipairs({
   { "generalBtn", "Appearance" },

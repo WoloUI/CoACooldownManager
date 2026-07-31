@@ -236,7 +236,10 @@ local CELL_LABEL_H = 14
 local CELL_H = 20
 local CELL_ROW_H = CELL_LABEL_H + CELL_H + 8
 
-function ns.FormCells(y, cells, contentWidth)
+-- `x0` shifts the whole run right, for callers whose frame has its own padding
+-- (the trigger builder packs inside its own inset).
+function ns.FormCells(y, cells, contentWidth, x0)
+  x0 = x0 or 0
   local widths = {}
   for i, cell in ipairs(cells) do widths[i] = cell.width or 110 end
   local packed = ns.PackCells(contentWidth, widths, 12)
@@ -245,15 +248,16 @@ function ns.FormCells(y, cells, contentWidth)
   for _, pos in ipairs(packed) do
     local cell = cells[pos.index]
     local rowY = y - (pos.row - 1) * CELL_ROW_H
+    local x = x0 + pos.x
     if cell.label then
       cell.label:ClearAllPoints()
-      cell.label:SetPoint("TOPLEFT", pos.x, rowY)
+      cell.label:SetPoint("TOPLEFT", x, rowY)
       cell.label:Show()
       cell.control:ClearAllPoints()
-      cell.control:SetPoint("TOPLEFT", pos.x, rowY - CELL_LABEL_H)
+      cell.control:SetPoint("TOPLEFT", x, rowY - CELL_LABEL_H)
     else
       cell.control:ClearAllPoints()
-      cell.control:SetPoint("TOPLEFT", pos.x, rowY - CELL_LABEL_H)
+      cell.control:SetPoint("TOPLEFT", x, rowY - CELL_LABEL_H)
     end
     cell.control:Show()
     if pos.row > maxRow then maxRow = pos.row end

@@ -361,7 +361,7 @@ function TriggerBuilder:Create(parent)
   builder:SetHeight(1)
   W.ApplyBackdrop(builder, { 0.055, 0.07, 0.10, 1 })
 
-  builder.header = W.CreateSection(builder, "TRIGGER")
+  builder.header = W.CreateSectionHeader(builder, "TRIGGER")
   builder.kindLabel = W.CreateLabel(builder, "Track", 12, W.colors.inkDim)
   builder.kind = W.CreateDropdown(builder, 120, function(_, value)
     builder.element.kind = value
@@ -374,20 +374,23 @@ function TriggerBuilder:Create(parent)
   end)
   builder.kind:SetOptions(KIND_OPTIONS)
 
-  builder.unitLabel = W.CreateLabel(builder, "on", 12, W.colors.inkDim)
+  -- Capitalised: these read as column headings above their control now, not as
+  -- prose running left to right ("Track [Buff] on [Player]").
+  builder.unitLabel = W.CreateLabel(builder, "On", 12, W.colors.inkDim)
   builder.unit = W.CreateDropdown(builder, 90, function(_, value)
     builder.element.unit = value
   end)
   builder.unit:SetOptions(UNIT_OPTIONS)
 
   -- Trinket kind: pick the equipped slot instead of a unit
+  builder.slotLabel = W.CreateLabel(builder, "Slot", 12, W.colors.inkDim)
   builder.slot = W.CreateDropdown(builder, 90, function(_, value)
     builder.element.slot = value
   end)
   builder.slot:SetOptions(SLOT_OPTIONS)
 
   -- Trinket kind: optional proc buff override (auto-detected when left blank)
-  builder.procLabel = W.CreateLabel(builder, "Proc buff (optional, auto if blank)", 11, W.colors.inkDim)
+  builder.procLabel = W.CreateLabel(builder, "Proc buff (blank = auto)", 11, W.colors.inkDim)
   builder.proc = W.CreateEditBox(builder, 180, 20, function(self, text)
     builder.element.procName = (text and text ~= "") and text or nil
   end, "buff name (blank = auto)")
@@ -402,12 +405,12 @@ function TriggerBuilder:Create(parent)
   -- Totem kind: which spell plants it, for the re-plant cooldown sweep. Only
   -- needed when the totem's name is not the spell's (Graven Effigy plants a
   -- "Shadow Effigy"), which no API on this client can tell us.
-  builder.cdSpellLabel = W.CreateLabel(builder, "Planting spell (optional, for its cooldown)", 11, W.colors.inkDim)
+  builder.cdSpellLabel = W.CreateLabel(builder, "Planting spell (blank = auto)", 11, W.colors.inkDim)
   builder.cdSpell = W.CreateEditBox(builder, 180, 20, function(self, text)
     builder.element.cdSpell = (text and text ~= "") and text or nil
   end, "spell name (blank = auto)")
 
-  builder.showLabel = W.CreateLabel(builder, "show", 12, W.colors.inkDim)
+  builder.showLabel = W.CreateLabel(builder, "Show", 12, W.colors.inkDim)
   builder.show = W.CreateDropdown(builder, 180, function(_, value)
     builder.element.showWhen = value
   end)
@@ -417,7 +420,7 @@ function TriggerBuilder:Create(parent)
   end)
 
   -- No "(and...)" suffix any more: each group header states its own join
-  builder.condHeader = W.CreateSection(builder, "CONDITIONS")
+  builder.condHeader = W.CreateSectionHeader(builder, "CONDITIONS")
   builder.condRows = {}
   builder.groupHeads = {}
 
@@ -450,87 +453,54 @@ function TriggerBuilder:Load(element, onChange)
   local presenceShow = isAura or kind == "totem"
   local y = -PAD
 
+  -- The builder packs against its own width, inside its own padding. Before the
+  -- first layout pass GetWidth can be 0, and a zero pane would stack every cell
+  -- in one column rather than error.
+  local paneW = builder:GetWidth() - PAD * 2
+  if paneW < 1 then paneW = 1 end
+
   -- TRIGGER header
   builder.header:ClearAllPoints()
-  builder.header:SetPoint("TOPLEFT", PAD, y)
-  y = y - 17
+  builder.header:SetPoint("TOPLEFT", PAD, y - builder.header.LEAD)
+  builder.header:SetPoint("RIGHT", builder, "RIGHT", -PAD, 0)
+  y = y - builder.header.COST
 
-  -- Row: Track [kind] on [unit]
-  builder.kindLabel:ClearAllPoints()
-  builder.kindLabel:SetPoint("TOPLEFT", PAD, y - 5)
-  builder.kind:ClearAllPoints()
-  builder.kind:SetPoint("TOPLEFT", PAD + 40, y)
+  -- The base trigger on cells, labels above their controls. This block used to
+  -- be prose across fixed offsets -- Track at PAD+40, the unit at PAD+190, and
+  -- "Only my aura" at PAD+235, which the audit named as one of the hand-tuned
+  -- numbers that a resizable window makes wrong.
   builder.kind:SetValue(kind)
+  builder.show:SetOptions(presenceShow and SHOW_AURA or SHOW_COOLDOWN)
+  builder.show:SetValue(element.showWhen or "always")
+
+  local cells = { { label = builder.kindLabel, control = builder.kind, width = 128 } }
   if isAura then
-    builder.unitLabel:Show()
-    builder.unit:Show()
     builder.slot:Hide()
-    builder.unitLabel:ClearAllPoints()
-    builder.unitLabel:SetPoint("TOPLEFT", PAD + 170, y - 5)
-    builder.unit:ClearAllPoints()
-    builder.unit:SetPoint("TOPLEFT", PAD + 190, y)
     builder.unit:SetValue(element.unit or "player")
+    cells[#cells + 1] = { label = builder.unitLabel, control = builder.unit, width = 98 }
   elseif isTrinket then
     builder.unitLabel:Hide()
     builder.unit:Hide()
-    builder.slot:Show()
-    builder.slot:ClearAllPoints()
-    builder.slot:SetPoint("TOPLEFT", PAD + 170, y)
     builder.slot:SetValue(element.slot or 13)
+    cells[#cells + 1] = { label = builder.slotLabel, control = builder.slot, width = 98 }
   else
     builder.unitLabel:Hide()
     builder.unit:Hide()
     builder.slot:Hide()
   end
-  y = y - ROW_H
+  cells[#cells + 1] = { label = builder.showLabel, control = builder.show, width = 188 }
 
-  -- Row: show [mode] (+ Only my aura)
-  builder.showLabel:ClearAllPoints()
-  builder.showLabel:SetPoint("TOPLEFT", PAD, y - 5)
-  builder.show:ClearAllPoints()
-  builder.show:SetPoint("TOPLEFT", PAD + 40, y)
-  builder.show:SetOptions(presenceShow and SHOW_AURA or SHOW_COOLDOWN)
-  builder.show:SetValue(element.showWhen or "always")
-  if isAura then
-    builder.mine:Show()
-    builder.mine:ClearAllPoints()
-    builder.mine:SetPoint("TOPLEFT", PAD + 235, y + 2)
-    builder.mine:SetChecked(element.onlyMine)
-  else
-    builder.mine:Hide()
-  end
-  y = y - ROW_H - 4
-
-  -- Trinket: proc buff override + internal cooldown (own rows so they stay
-  -- inside the panel — the two side by side overflowed the frame)
+  -- Trinket: proc buff override + internal cooldown. Totem: the planting spell.
   if isTrinket then
-    builder.procLabel:Show()
-    builder.procLabel:ClearAllPoints()
-    builder.procLabel:SetPoint("TOPLEFT", PAD, y - 5)
-    builder.proc:Show()
-    builder.proc:ClearAllPoints()
-    builder.proc:SetPoint("TOPLEFT", PAD + 210, y)
     builder.proc:SetText(element.procName or "")
-    y = y - ROW_H - 4
-    builder.icdLabel:Show()
-    builder.icdLabel:ClearAllPoints()
-    builder.icdLabel:SetPoint("TOPLEFT", PAD, y - 5)
-    builder.icd:Show()
-    builder.icd:ClearAllPoints()
-    builder.icd:SetPoint("TOPLEFT", PAD + 210, y)
     builder.icd:SetText(element.icd and tostring(element.icd) or "")
-    y = y - ROW_H - 4
+    cells[#cells + 1] = { label = builder.procLabel, control = builder.proc, width = 188 }
+    cells[#cells + 1] = { label = builder.icdLabel, control = builder.icd, width = 68 }
     builder.cdSpellLabel:Hide()
     builder.cdSpell:Hide()
   elseif kind == "totem" then
-    builder.cdSpellLabel:Show()
-    builder.cdSpellLabel:ClearAllPoints()
-    builder.cdSpellLabel:SetPoint("TOPLEFT", PAD, y - 5)
-    builder.cdSpell:Show()
-    builder.cdSpell:ClearAllPoints()
-    builder.cdSpell:SetPoint("TOPLEFT", PAD + 250, y)
     builder.cdSpell:SetText(element.cdSpell or "")
-    y = y - ROW_H - 4
+    cells[#cells + 1] = { label = builder.cdSpellLabel, control = builder.cdSpell, width = 188 }
     builder.procLabel:Hide()
     builder.proc:Hide()
     builder.icdLabel:Hide()
@@ -542,12 +512,21 @@ function TriggerBuilder:Load(element, onChange)
     builder.icd:Hide()
     builder.cdSpellLabel:Hide()
     builder.cdSpell:Hide()
+  end
+  y = ns.FormCells(y, cells, paneW, PAD)
+
+  if isAura then
+    builder.mine:SetChecked(element.onlyMine)
+    y = ns.FormCells(y, { { control = builder.mine, width = 120 } }, paneW, PAD)
+  else
+    builder.mine:Hide()
   end
 
   -- CONDITIONS header
   builder.condHeader:ClearAllPoints()
-  builder.condHeader:SetPoint("TOPLEFT", PAD, y)
-  y = y - 17
+  builder.condHeader:SetPoint("TOPLEFT", PAD, y - builder.condHeader.LEAD)
+  builder.condHeader:SetPoint("RIGHT", builder, "RIGHT", -PAD, 0)
+  y = y - builder.condHeader.COST
 
   local conditions = element.conditions or {}
   element.conditions = conditions
