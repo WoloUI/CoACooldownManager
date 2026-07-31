@@ -1037,7 +1037,6 @@ function Config:BuildControls()
     "Your own casts and channels. Channel ticks are drawn one every N seconds\n(no per-spell tick API on this client - tune it to the channel).", 10, W.colors.inkDim)
 
   -- GCD history options
-  c.histHeader = W.CreateSection(parent, "HISTORY")
   local function HistCfg()
     local viewer = SelectedViewer()
     viewer.history = viewer.history or { iconSize = 32, spacing = 4, visible = 10,
@@ -3087,28 +3086,37 @@ function Config:Render()
     viewer.history = viewer.history or { iconSize = 32, spacing = 4, visible = 10,
       fade = 8, growth = "LEFT", tooltips = true, blacklist = "" }
     local hc = viewer.history
-    c.histHeader:SetPoint("TOPLEFT", 0, y)
-    c.histHeader:Show()
-    y = y - 22
-    -- Row: Size / Gap / Icons
-    c.histSizeLabel:SetPoint("TOPLEFT", L1, y - 4); c.histSizeLabel:Show()
-    c.histSize:SetPoint("TOPLEFT", C1, y); c.histSize:SetText(tostring(hc.iconSize or 32)); c.histSize:Show()
-    c.histGapLabel:SetPoint("TOPLEFT", L2, y - 4); c.histGapLabel:Show()
-    c.histGap:SetPoint("TOPLEFT", C2, y); c.histGap:SetText(tostring(hc.spacing or 4)); c.histGap:Show()
-    c.histCountLabel:SetPoint("TOPLEFT", L3, y - 4); c.histCountLabel:Show()
-    c.histCount:SetPoint("TOPLEFT", C3, y); c.histCount:SetText(tostring(hc.visible or 10)); c.histCount:Show()
-    y = y - 26
-    -- Row: Fade / Grows / Tooltips
-    c.histFadeLabel:SetPoint("TOPLEFT", L1, y - 4); c.histFadeLabel:Show()
-    c.histFade:SetPoint("TOPLEFT", C1, y); c.histFade:SetText(tostring(hc.fade or 8)); c.histFade:Show()
-    c.histGrowthLabel:SetPoint("TOPLEFT", L2, y - 4); c.histGrowthLabel:Show()
-    c.histGrowth:SetPoint("TOPLEFT", C2, y); c.histGrowth:SetValue(hc.growth or "LEFT"); c.histGrowth:Show()
-    c.histTooltips:SetPoint("TOPLEFT", C3, y); c.histTooltips:SetChecked(hc.tooltips ~= false); c.histTooltips:Show()
-    y = y - 28
-    -- Blacklist, on its own two lines: the label is long
-    c.histBlacklistLabel:SetPoint("TOPLEFT", L1, y); c.histBlacklistLabel:Show()
+    -- No Style cell here: c.style only renders in the icons/bars branch, so a
+    -- history bar cannot be re-styled from the panel at all. That gap is
+    -- panel-wide and not this conversion's to close.
+    --
+    -- The numeric clamps (20-80 / -2-10 / 1-30 / 0-60) live in the HistNum
+    -- helper these boxes were built with, not here, so moving the layout leaves
+    -- them alone.
+    c.histSize:SetText(tostring(hc.iconSize or 32))
+    c.histGap:SetText(tostring(hc.spacing or 4))
+    c.histCount:SetText(tostring(hc.visible or 10))
+    c.histFade:SetText(tostring(hc.fade or 8))
+    c.histGrowth:SetValue(hc.growth or "LEFT")
+    c.histTooltips:SetChecked(hc.tooltips ~= false)
+    y = ns.FormCells(y, {
+      { label = c.histSizeLabel,   control = c.histSize,   width = 64 },
+      { label = c.histGapLabel,    control = c.histGap,    width = 64 },
+      { label = c.histCountLabel,  control = c.histCount,  width = 64 },
+      { label = c.histFadeLabel,   control = c.histFade,   width = 64 },
+      { label = c.histGrowthLabel, control = c.histGrowth, width = 118 },
+    }, paneW)
+    y = ns.FormCells(y, { { control = c.histTooltips, width = 96 } }, paneW)
+
+    -- The blacklist keeps a full-width row of its own: its label is a sentence
+    -- and the box wants the whole pane, which is not a cell shape.
+    c.histBlacklistLabel:ClearAllPoints()
+    c.histBlacklistLabel:SetPoint("TOPLEFT", 0, y); c.histBlacklistLabel:Show()
     y = y - 18
-    c.histBlacklist:SetPoint("TOPLEFT", L1, y); c.histBlacklist:SetText(hc.blacklist or ""); c.histBlacklist:Show()
+    c.histBlacklist:ClearAllPoints()
+    c.histBlacklist:SetPoint("TOPLEFT", 0, y)
+    c.histBlacklist:SetWidth(math.max(paneW - 8, 120))
+    c.histBlacklist:SetText(hc.blacklist or ""); c.histBlacklist:Show()
     y = y - 30
   elseif style ~= "reminders" then
     -- icons and bars. Every control is set first, then packed: the cells decide
