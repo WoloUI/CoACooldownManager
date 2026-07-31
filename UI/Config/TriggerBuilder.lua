@@ -274,30 +274,28 @@ local function CreateConditionRow(parent)
 end
 
 -- Lays a row's widgets left-to-right, showing only what the ctype needs.
+--
+-- The condition type absorbs whatever width the rest of the row leaves, so a row
+-- reaches the right edge of the pane instead of stopping short of it, and so it
+-- grows when the window does. Widths are collected first for that reason: the
+-- type cannot be placed until everything after it has been measured.
 local function LayoutConditionRow(row, cond)
   local ctype = cond.ctype or "remaining"
-  local x = 0
-  local function place(widget, width)
-    widget:ClearAllPoints()
-    -- Center the widget vertically at half a row from the top
-    widget:SetPoint("LEFT", row, "TOPLEFT", x, -ROW_H / 2)
-    widget:Show()
-    x = x + width + 4
+  local trailing = {}
+  local function later(widget, width)
+    trailing[#trailing + 1] = { widget, width }
   end
-
-  row.ctype:SetValue(ctype)
-  place(row.ctype, 118)
 
   if NEEDS_SPELL[ctype] then
     row.spell:SetText(cond.spellName or (cond.spellID and tostring(cond.spellID)) or "")
-    place(row.spell, 76)
+    later(row.spell, 76)
   else
     row.spell:Hide()
   end
 
   if NEEDS_UNIT[ctype] then
     row.unit:SetValue(cond.unit or "player")
-    place(row.unit, 66)
+    later(row.unit, 66)
   else
     row.unit:Hide()
   end
@@ -305,27 +303,27 @@ local function LayoutConditionRow(row, cond)
   if NEEDS_PET[ctype] then
     row.pet:SetPlaceholder("pet name / id")
     row.pet:SetText(cond.petName or "")
-    place(row.pet, 90)
+    later(row.pet, 90)
   elseif NEEDS_TOTEM_NAME[ctype] then
     row.pet:SetPlaceholder("totem name")
     row.pet:SetText(cond.totemName or "")
-    place(row.pet, 90)
+    later(row.pet, 90)
   else
     row.pet:Hide()
   end
 
   if NEEDS_POWER[ctype] then
     row.power:SetValue(cond.powerType ~= nil and cond.powerType or "current")
-    place(row.power, 118)
+    later(row.power, 118)
   else
     row.power:Hide()
   end
 
   if NUMERIC[ctype] then
     row.op:SetValue(cond.op or "<")
-    place(row.op, 40)
+    later(row.op, 40)
     row.value:SetText(tostring(cond.value or 0))
-    place(row.value, 40)
+    later(row.value, 40)
     row.bool:Hide()
   elseif BOOL_OPTIONS[ctype] then
     row.op:Hide()
@@ -340,16 +338,41 @@ local function LayoutConditionRow(row, cond)
     -- The usable dropdown carries a longer label than the true/false pairs
     local boolW = BOOL_OPTIONS[ctype] == USABLE_OPTIONS and 128 or 100
     row.bool:SetWidth(boolW)
-    place(row.bool, boolW)
+    later(row.bool, boolW)
   else
     row.op:Hide()
     row.value:Hide()
     row.bool:Hide()
   end
 
-  row.action:SetValue(cond.action or "glow")
-  place(row.action, 92)
-  place(row.remove, 20)
+  -- No action dropdown: the group header above states the action, and repeating
+  -- it on every row is the redundancy that made the logic between conditions
+  -- unreadable in the first place. Which group a new condition joins is chosen
+  -- at "+ Add condition".
+  local rowW = row:GetWidth() or 0
+  local used = 20 + 4 -- the remove button and its gap
+  for _, item in ipairs(trailing) do used = used + item[2] + 4 end
+  local ctypeW = rowW - used - 4
+  if ctypeW < 118 then ctypeW = 118 end
+
+  local x = 0
+  local function place(widget, width)
+    widget:ClearAllPoints()
+    -- Center the widget vertically at half a row from the top
+    widget:SetPoint("LEFT", row, "TOPLEFT", x, -ROW_H / 2)
+    widget:Show()
+    x = x + width + 4
+  end
+
+  row.ctype:SetValue(ctype)
+  row.ctype:SetWidth(ctypeW)
+  place(row.ctype, ctypeW)
+  for _, item in ipairs(trailing) do place(item[1], item[2]) end
+
+  row.action:Hide()
+  row.remove:ClearAllPoints()
+  row.remove:SetPoint("RIGHT", row, "TOPRIGHT", 0, -ROW_H / 2)
+  row.remove:Show()
 
   -- Rows are always single-height now: the sound moved to the group header
   row:SetHeight(ROW_H)
@@ -424,9 +447,17 @@ function TriggerBuilder:Create(parent)
   builder.condRows = {}
   builder.groupHeads = {}
 
+  -- Which group the new condition joins. The rows no longer carry an action
+  -- dropdown, so without this the only group you could ever create is Glow.
+  builder.addAction = W.CreateDropdown(builder, 118, nil)
+  builder.addAction:SetOptions(ACTION_OPTIONS)
+  builder.addAction:SetValue("glow")
   builder.addCond = W.CreateButton(builder, "+ Add condition", 110, 20, function()
     builder.element.conditions = builder.element.conditions or {}
-    table.insert(builder.element.conditions, { ctype = "remaining", op = "<", value = 3, action = "glow" })
+    table.insert(builder.element.conditions, {
+      ctype = "remaining", op = "<", value = 3,
+      action = builder.addAction.value or "glow",
+    })
     Rebuild()
   end)
 
@@ -570,19 +601,24 @@ function TriggerBuilder:Load(element, onChange)
 
       local group = ns.Triggers.Group(element, action)
       if HAS_SOUND[action] then
-        head.soundLabel:ClearAllPoints()
-        head.soundLabel:SetPoint("LEFT", head, "TOPLEFT", 212, -ROW_H / 2)
+        -- The sound sits against the right edge, not at a fixed x after "of:".
+        -- Anchored from the right it stays put when the join phrase changes
+        -- length, and it follows the pane when the window is resized.
+        head.soundPlay:ClearAllPoints()
+        head.soundPlay:SetPoint("RIGHT", head, "TOPRIGHT", 0, -ROW_H / 2)
         head.sound:ClearAllPoints()
-        head.sound:SetPoint("LEFT", head, "TOPLEFT", 250, -ROW_H / 2)
+        head.sound:SetPoint("RIGHT", head.soundPlay, "LEFT", -4, 0)
         head.sound:SetOptions(SoundOptions())
         head.sound:SetValue((group and group.sound) or "")
-        head.soundPlay:ClearAllPoints()
-        head.soundPlay:SetPoint("LEFT", head, "TOPLEFT", 406, -ROW_H / 2)
+        head.soundLabel:ClearAllPoints()
+        head.soundLabel:SetPoint("RIGHT", head.sound, "LEFT", -6, 0)
         head.soundLabel:Show(); head.sound:Show(); head.soundPlay:Show()
         -- "on cooldown" only means something for a spell that has a cooldown
         if element.kind == "cooldown" then
+          -- Under the header at the left edge, where it reads as belonging to
+          -- the group rather than to the sound dropdown above it
           head.muteCD:ClearAllPoints()
-          head.muteCD:SetPoint("TOPLEFT", head, "TOPLEFT", 250, -ROW_H - 2)
+          head.muteCD:SetPoint("TOPLEFT", head, "TOPLEFT", 0, -ROW_H - 2)
           head.muteCD:SetChecked(group and group.muteOnCooldown)
           head.muteCD:Show()
           head:SetHeight(ROW_H * 2)
@@ -625,6 +661,9 @@ function TriggerBuilder:Load(element, onChange)
 
   builder.addCond:ClearAllPoints()
   builder.addCond:SetPoint("TOPLEFT", PAD, y - 2)
+  builder.addAction:ClearAllPoints()
+  builder.addAction:SetPoint("LEFT", builder.addCond, "RIGHT", 6, 0)
+  builder.addAction:Show()
   y = y - 24
 
   builder:SetHeight(-y + PAD)
