@@ -15,7 +15,9 @@ end
 
 print("test_panelayout")
 
-local MIN_H, MAX_H = 420, 1000
+-- Heights are SIDEBAR heights: the sidebar hangs below the 28px title bar, so
+-- these are the 420 and 1000 window bounds less that bar.
+local MIN_H, MAX_H = 420 - 28, 1000 - 28
 
 -- The window can never be shrunk into a broken layout
 local min = ns.SidebarMetrics(MIN_H, false)
@@ -28,13 +30,13 @@ check("a taller window fits more bars", tall.visibleRows > min.visibleRows)
 check("a taller window has a taller list", tall.listHeight > min.listHeight)
 
 -- Today's size still behaves sensibly
-local now = ns.SidebarMetrics(560, false)
+local now = ns.SidebarMetrics(560 - 28,false)
 check("560px fits more rows than the minimum", now.visibleRows > min.visibleRows)
 check("560px fits fewer rows than the maximum", now.visibleRows < tall.visibleRows)
 
 -- The create block eats exactly its own height out of the list
-local collapsed = ns.SidebarMetrics(560, false)
-local expanded = ns.SidebarMetrics(560, true)
+local collapsed = ns.SidebarMetrics(560 - 28,false)
+local expanded = ns.SidebarMetrics(560 - 28,true)
 check("expanding the create block shrinks the list by its height",
   collapsed.listHeight - expanded.listHeight == expanded.createBlockHeight)
 check("the collapsed block reports no create height", collapsed.createBlockHeight == 0)

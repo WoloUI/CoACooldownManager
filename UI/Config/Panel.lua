@@ -171,12 +171,15 @@ local function PinnedStackHeight(creating)
   return h
 end
 
-function ns.SidebarMetrics(windowHeight, creating)
+-- Takes the SIDEBAR's height, not the window's: the sidebar hangs below the
+-- title bar, so the two differ by 28px, and feeding this the window height puts
+-- the list exactly that far into the pinned block.
+function ns.SidebarMetrics(sidebarHeight, creating)
   local createBlockHeight = creating and CREATE_BLOCK_H or 0
   local pinned = PinnedStackHeight(creating)
   -- The list occupies from LIST_TOP down to the top of the pinned stack. Both are
-  -- measured from opposite edges, hence the subtraction from the window height.
-  local listHeight = windowHeight + LIST_TOP - pinned
+  -- measured from opposite edges, hence the subtraction from the sidebar height.
+  local listHeight = sidebarHeight + LIST_TOP - pinned
   -- A hard floor of one row: SetMinResize keeps the window at 420+, but a future
   -- change to the pinned stack must not be able to produce a negative height.
   if listHeight < LIST_ROW_H then listHeight = LIST_ROW_H end
@@ -254,6 +257,18 @@ local function BuildWindow()
 
   win.sidebar.header = W.CreateSection(win.sidebar, "BARS")
   win.sidebar.header:SetPoint("TOPLEFT", PAD, -148)
+
+  -- The bar list scrolls. Its height is whatever is left between the BARS header
+  -- and the pinned block below, so it can never reach the utility buttons.
+  win.barScroll = CreateFrame("ScrollFrame", "CoACDMConfigBarScroll", win.sidebar,
+    "UIPanelScrollFrameTemplate")
+  win.barScroll:SetPoint("TOPLEFT", PAD, LIST_TOP)
+  win.barScroll:SetWidth(SIDEBAR_W - 2 * PAD - 18) -- 18 for the scrollbar
+  win.barList = CreateFrame("Frame", nil, win.barScroll)
+  win.barList:SetWidth(SIDEBAR_W - 2 * PAD - 18)
+  win.barList:SetHeight(1) -- real height set per render, from the bar count
+  win.barScroll:SetScrollChild(win.barList)
+
   win.sidebar.buttons = {}
 
   win.newBar = W.CreateButton(win.sidebar, "+ New bar...", SIDEBAR_W - 2 * PAD, 22, function()
@@ -1586,14 +1601,18 @@ local function RenderSidebar()
     end
   end
 
-  local y = -168
+  local metrics = ns.SidebarMetrics(win.sidebar:GetHeight(), state.creating)
+
+  -- The scrolling list
+  win.barScroll:SetHeight(metrics.listHeight)
+  local y = 0
   local buttons = win.sidebar.buttons
   local index = 0
   for _, cfg in ipairs(ns.profile.viewers) do
     index = index + 1
     local btn = buttons[index]
     if not btn then
-      btn = W.CreateButton(win.sidebar, "", SIDEBAR_W - 2 * PAD, 21, function(self)
+      btn = W.CreateButton(win.barList, "", SIDEBAR_W - 2 * PAD - 18, 21, function(self)
         state.selected = self.viewerName
         state.selectedElement = nil
         -- The Add-element kind is a shared control; reset it so a bar left on
@@ -1606,7 +1625,7 @@ local function RenderSidebar()
     btn.viewerName = cfg.name
     btn:SetLabel(cfg.name)
     btn:ClearAllPoints()
-    btn:SetPoint("TOPLEFT", PAD, y)
+    btn:SetPoint("TOPLEFT", win.barList, "TOPLEFT", 0, y)
     if cfg.name == state.selected then
       btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       btn.text:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
@@ -1621,13 +1640,21 @@ local function RenderSidebar()
     y = y - 23
   end
   for i = index + 1, #buttons do buttons[i]:Hide() end
+  -- The scroll child must be as tall as its content or the scrollbar has nothing
+  -- to travel over. A single row minimum keeps an empty list from erroring.
+  win.barList:SetHeight(math.max(-y, 23))
 
+  -- The pinned block, measured from the sidebar bottom so it never moves into
+  -- the list's space no matter how many bars exist
   win.newBar:ClearAllPoints()
-  win.newBar:SetPoint("TOPLEFT", PAD, y - 4)
+  win.newBar:SetPoint("BOTTOMLEFT", PAD, metrics.newBarY)
   if state.creating then
-    win.newName:SetPoint("TOPLEFT", PAD, y - 30)
-    win.newStyle:SetPoint("TOPLEFT", PAD, y - 53)
-    win.newCreate:SetPoint("TOPLEFT", PAD, y - 76)
+    win.newName:ClearAllPoints()
+    win.newStyle:ClearAllPoints()
+    win.newCreate:ClearAllPoints()
+    win.newName:SetPoint("BOTTOMLEFT", PAD, metrics.newBarY - 23)
+    win.newStyle:SetPoint("BOTTOMLEFT", PAD, metrics.newBarY - 46)
+    win.newCreate:SetPoint("BOTTOMLEFT", PAD, metrics.newBarY - 69)
     win.newName:Show()
     win.newStyle:Show()
     win.newCreate:Show()
