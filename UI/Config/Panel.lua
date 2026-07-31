@@ -653,7 +653,7 @@ function Config:BuildControls()
   local function AppearanceCfg()
     return ns.DB.db.global.appearance
   end
-  c.genHeader = W.CreateSection(parent, "APPEARANCE (all bars)")
+  c.genHeader = W.CreateSectionHeader(parent, "APPEARANCE (all bars)")
   c.genFontLabel = W.CreateLabel(parent, "Font", 12, W.colors.inkDim)
   c.genFont = W.CreateDropdown(parent, 190, function(_, value)
     AppearanceCfg().font = value
@@ -717,13 +717,13 @@ function Config:BuildControls()
   c.genHint = W.CreateLabel(parent, "Applies to every bar. Each bar keeps its own base font size;\nthis scales them all together.", 10, W.colors.inkDim)
 
   -- Screen-space alert overlays, rendered at the bottom of the Tracking page
-  c.alertsHeader = W.CreateSection(parent, "ALERTS (screen overlays)")
+  c.alertsHeader = W.CreateSectionHeader(parent, "ALERTS (screen overlays)")
 
   -- Aggro alert overlay (global, in db.global.aggro)
   local function AggroCfg()
     return ns.DB.db.global.aggro
   end
-  c.aggroHeader = W.CreateSection(parent, "AGGRO ALERT")
+  c.aggroHeader = W.CreateSectionHeader(parent, "AGGRO ALERT")
   c.aggroEnable = W.CreateCheckbox(parent, "Show AGGRO ON YOU overlay", function(_, ck)
     AggroCfg().enabled = ck
     if ns.AggroAlert then ns.AggroAlert:Apply() end
@@ -761,7 +761,7 @@ function Config:BuildControls()
   local function ApplyRange()
     if ns.RangeAlert then ns.RangeAlert:Apply() end
   end
-  c.rangeHeader = W.CreateSection(parent, "OUT OF RANGE ALERT")
+  c.rangeHeader = W.CreateSectionHeader(parent, "OUT OF RANGE ALERT")
   c.rangeEnable = W.CreateCheckbox(parent, "Show OUT OF RANGE overlay", function(_, ck)
     RangeCfg().enabled = ck
     ApplyRange()
@@ -1275,7 +1275,7 @@ function Config:BuildControls()
 
   -- Where the overlay is allowed to appear. Unticking every box is the same as
   -- switching it off, which is fine - the enable checkbox is right above.
-  c.btWhereHeader = W.CreateSection(parent, "SHOW IN")
+  c.btWhereHeader = W.CreateSectionHeader(parent, "SHOW IN")
   c.btWhere = {}
   for _, entry in ipairs(CONTEXT_OPTIONS) do
     local box = W.CreateCheckbox(parent, entry.text, function(self, checked)
@@ -1287,7 +1287,7 @@ function Config:BuildControls()
     c.btWhere[#c.btWhere + 1] = box
   end
 
-  c.btCatHeader = W.CreateSection(parent, "RAID BUFF CATEGORIES")
+  c.btCatHeader = W.CreateSectionHeader(parent, "RAID BUFF CATEGORIES")
   c.btCatHint = W.CreateLabel(parent,
     "Resistance categories start off: with nobody in the group able to cast them\nthey would just shout forever. Click a category to edit its buff names.",
     10, W.colors.inkDim)
@@ -1305,7 +1305,7 @@ function Config:BuildControls()
     end
     return cfg.buffs[key]
   end
-  c.btBuffHeader = W.CreateSection(parent, "BUFFS IN CATEGORY")
+  c.btBuffHeader = W.CreateSectionHeader(parent, "BUFFS IN CATEGORY")
   c.btBuffRows = {}
   c.btBuffInput = W.CreateEditBox(parent, 190, 20, nil, "buff name")
   c.btAddBuff = W.CreateButton(parent, "Add", 50, 20, function()
@@ -1359,13 +1359,13 @@ function Config:BuildControls()
     end
     Config:Render()
   end)
-  c.profListHeader = W.CreateSection(parent, "SAVED PROFILES")
+  c.profListHeader = W.CreateSectionHeader(parent, "SAVED PROFILES")
   c.profRows = {}
-  c.assignHeader = W.CreateSection(parent, "SPEC ASSIGNMENTS")
+  c.assignHeader = W.CreateSectionHeader(parent, "SPEC ASSIGNMENTS")
   c.specRows = {}
 
   -- Profile sharing
-  c.shareHeader = W.CreateSection(parent, "PROFILE SHARING")
+  c.shareHeader = W.CreateSectionHeader(parent, "PROFILE SHARING")
   c.exportBtn = W.CreateButton(parent, "Export profile", 110, 22, function()
     Config:ShowIO("export")
   end)
@@ -1387,7 +1387,7 @@ function Config:BuildControls()
   c.trackHint = W.CreateLabel(parent,
     "Tracks YOUR HoTs on the party/raid unit frames (ElvUI or Blizzard).\nAdd a spell, then place its indicator with the frame preview below.\nTip: Test mode shows fake indicators so you can position without a group.",
     10, W.colors.inkDim)
-  c.trackListHeader = W.CreateSection(parent, "TRACKED SPELLS")
+  c.trackListHeader = W.CreateSectionHeader(parent, "TRACKED SPELLS")
   c.trackRows = {}
   c.trackAddLabel = W.CreateLabel(parent, "Add spell", 12, W.colors.inkDim)
   c.trackAddInput = W.CreateEditBox(parent, 170, 20, nil, "spell name or ID")
@@ -1408,7 +1408,7 @@ function Config:BuildControls()
   end)
   c.trackAddHint = W.CreateLabel(parent, "Type a HoT name or spell ID (e.g. Renew, Rejuvenation).", 10, W.colors.inkDim)
 
-  c.trackIndHeader = W.CreateSection(parent, "INDICATOR")
+  c.trackIndHeader = W.CreateSectionHeader(parent, "INDICATOR")
   c.trackPreview = CreateFrame("Frame", nil, parent)
   c.trackPreview:SetSize(180, 90)
   W.ApplyBackdrop(c.trackPreview, { 0.05, 0.06, 0.09, 1 })
@@ -1558,12 +1558,12 @@ function Config:BuildControls()
       Config:Render()
     end)
   end)
-  c.hudHeader = W.CreateSection(parent, "HIDDEN FRAMES")
+  c.hudHeader = W.CreateSectionHeader(parent, "HIDDEN FRAMES")
   c.hudEmpty = W.CreateLabel(parent, "Nothing hidden yet.", 11, W.colors.inkDim)
   c.hudRows = {}
 
   -- Spell scan (per character: the scanner state lives in the profile)
-  c.scanHeader = W.CreateSection(parent, "SPELL SCAN (this character)")
+  c.scanHeader = W.CreateSectionHeader(parent, "SPELL SCAN (this character)")
   c.scanClassOnly = W.CreateCheckbox(parent, "Only class/spec spells", function(_, checked)
     ns.profile.scanner.classOnly = checked
   end)
@@ -1575,7 +1575,7 @@ function Config:BuildControls()
     "Scan these spellbook tabs (racials and vanity toys live in the general tab):",
     11, W.colors.inkDim)
   c.scanTabRows = {}
-  c.scanExcludedHeader = W.CreateSection(parent, "EXCLUDED SPELLS")
+  c.scanExcludedHeader = W.CreateSectionHeader(parent, "EXCLUDED SPELLS")
   c.scanEmpty = W.CreateLabel(parent, "Nothing excluded yet. The X button in the scan window adds spells here.",
     11, W.colors.inkDim)
   c.scanClear = W.CreateButton(parent, "Clear all", 80, 20, function()
@@ -1883,12 +1883,16 @@ local function RenderAlertSections(c, y)
   local soundOpts = { { text = "None", value = "" } }
   for _, opt in ipairs(ns.GetSoundOptions()) do soundOpts[#soundOpts + 1] = opt end
 
-  c.alertsHeader:SetPoint("TOPLEFT", 0, y); c.alertsHeader:Show()
-  y = y - 26
+  c.alertsHeader:SetPoint("TOPLEFT", 0, y - c.alertsHeader.LEAD)
+  c.alertsHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+  c.alertsHeader:Show()
+  y = y - c.alertsHeader.COST
 
   local aggro = ns.DB.db.global.aggro or {}
-  c.aggroHeader:SetPoint("TOPLEFT", 0, y); c.aggroHeader:Show()
-  y = y - 24
+  c.aggroHeader:SetPoint("TOPLEFT", 0, y - c.aggroHeader.LEAD)
+  c.aggroHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+  c.aggroHeader:Show()
+  y = y - c.aggroHeader.COST
   c.aggroEnable:SetPoint("TOPLEFT", 0, y); c.aggroEnable:SetChecked(aggro.enabled ~= false); c.aggroEnable:Show()
   y = y - 26
   c.aggroSizeLabel:SetPoint("TOPLEFT", 0, y - 4); c.aggroSizeLabel:Show()
@@ -1907,8 +1911,10 @@ local function RenderAlertSections(c, y)
   y = y - 44
 
   local range = ns.DB.db.global.range or {}
-  c.rangeHeader:SetPoint("TOPLEFT", 0, y); c.rangeHeader:Show()
-  y = y - 24
+  c.rangeHeader:SetPoint("TOPLEFT", 0, y - c.rangeHeader.LEAD)
+  c.rangeHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+  c.rangeHeader:Show()
+  y = y - c.rangeHeader.COST
   c.rangeEnable:SetPoint("TOPLEFT", 0, y); c.rangeEnable:SetChecked(range.enabled ~= false); c.rangeEnable:Show()
   y = y - 26
   c.rangeTextLabel:SetPoint("TOPLEFT", 0, y - 4); c.rangeTextLabel:Show()
@@ -2003,8 +2009,10 @@ function Config:Render()
     c2.title:SetText("General")
     c2.title:Show()
     y2 = y2 - 34
-    c2.genHeader:SetPoint("TOPLEFT", 0, y2); c2.genHeader:Show()
-    y2 = y2 - 24
+    c2.genHeader:SetPoint("TOPLEFT", 0, y2 - c2.genHeader.LEAD)
+    c2.genHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.genHeader:Show()
+    y2 = y2 - c2.genHeader.COST
     -- Options come from LibSharedMedia when another addon provides it
     c2.genFont:SetOptions(ns.GetFontOptions())
     c2.genTex:SetOptions(ns.GetTextureOptions())
@@ -2059,8 +2067,10 @@ function Config:Render()
     y2 = y2 - 34
     -- Aggro / out-of-range overlays now live in Tracking; profile sharing in Profiles
     -- Spell scan
-    c2.scanHeader:SetPoint("TOPLEFT", 0, y2); c2.scanHeader:Show()
-    y2 = y2 - 24
+    c2.scanHeader:SetPoint("TOPLEFT", 0, y2 - c2.scanHeader.LEAD)
+    c2.scanHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.scanHeader:Show()
+    y2 = y2 - c2.scanHeader.COST
     c2.scanClassOnly:SetPoint("TOPLEFT", 0, y2)
     c2.scanClassOnly:SetChecked(ns.profile.scanner.classOnly == true)
     c2.scanClassOnly:Show()
@@ -2095,8 +2105,10 @@ function Config:Render()
     end
     if #tabList == 0 then y2 = y2 - 4 end
     y2 = y2 - 12
-    c2.scanExcludedHeader:SetPoint("TOPLEFT", 0, y2); c2.scanExcludedHeader:Show()
-    y2 = y2 - 20
+    c2.scanExcludedHeader:SetPoint("TOPLEFT", 0, y2 - c2.scanExcludedHeader.LEAD)
+    c2.scanExcludedHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.scanExcludedHeader:Show()
+    y2 = y2 - c2.scanExcludedHeader.COST
     local excluded = ns.Scanner:ExcludedNames()
     for i, name in ipairs(excluded) do
       local row = c2.scanRows[i]
@@ -2151,8 +2163,10 @@ function Config:Render()
 
     -- Saved profiles
     local names = ns.DB:GetNamedProfileNames()
-    c2.profListHeader:SetPoint("TOPLEFT", 0, y2); c2.profListHeader:Show()
-    y2 = y2 - 20
+    c2.profListHeader:SetPoint("TOPLEFT", 0, y2 - c2.profListHeader.LEAD)
+    c2.profListHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.profListHeader:Show()
+    y2 = y2 - c2.profListHeader.COST
     local currentAssignment = ns.DB.char.assignments[ns.DB:GetSpecKey()]
     for i, name in ipairs(names) do
       local row = c2.profRows[i]
@@ -2195,8 +2209,10 @@ function Config:Render()
 
     -- Spec assignments
     y2 = y2 - 8
-    c2.assignHeader:SetPoint("TOPLEFT", 0, y2); c2.assignHeader:Show()
-    y2 = y2 - 20
+    c2.assignHeader:SetPoint("TOPLEFT", 0, y2 - c2.assignHeader.LEAD)
+    c2.assignHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.assignHeader:Show()
+    y2 = y2 - c2.assignHeader.COST
     local specs = ns.DB:GetSpecs()
     local currentKey = ns.DB:GetSpecKey()
     local options = { { text = "(keep own bars)", value = "__none" } }
@@ -2232,8 +2248,10 @@ function Config:Render()
 
     -- Profile sharing (import/export strings)
     y2 = y2 - 28
-    c2.shareHeader:SetPoint("TOPLEFT", 0, y2); c2.shareHeader:Show()
-    y2 = y2 - 22
+    c2.shareHeader:SetPoint("TOPLEFT", 0, y2 - c2.shareHeader.LEAD)
+    c2.shareHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.shareHeader:Show()
+    y2 = y2 - c2.shareHeader.COST
     c2.exportBtn:SetPoint("TOPLEFT", 0, y2); c2.exportBtn:Show()
     c2.importBtn:SetPoint("TOPLEFT", 120, y2); c2.importBtn:Show()
     y2 = y2 - 28
@@ -2267,8 +2285,10 @@ function Config:Render()
     y2 = y2 - 30
     c2.trackHint:SetPoint("TOPLEFT", 0, y2); c2.trackHint:Show()
     y2 = y2 - 48
-    c2.trackListHeader:SetPoint("TOPLEFT", 0, y2); c2.trackListHeader:Show()
-    y2 = y2 - 20
+    c2.trackListHeader:SetPoint("TOPLEFT", 0, y2 - c2.trackListHeader.LEAD)
+    c2.trackListHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.trackListHeader:Show()
+    y2 = y2 - c2.trackListHeader.COST
 
     if state.selectedTrack and not tracking.indicators[state.selectedTrack] then
       state.selectedTrack = nil
@@ -2331,9 +2351,11 @@ function Config:Render()
 
     local ind = state.selectedTrack and tracking.indicators[state.selectedTrack]
     if ind then
-      c2.trackIndHeader:SetText("INDICATOR - " .. tostring(ind.spell))
-      c2.trackIndHeader:SetPoint("TOPLEFT", 0, y2); c2.trackIndHeader:Show()
-      y2 = y2 - 20
+      c2.trackIndHeader:SetLabel("INDICATOR - " .. tostring(ind.spell))
+      c2.trackIndHeader:SetPoint("TOPLEFT", 0, y2 - c2.trackIndHeader.LEAD)
+      c2.trackIndHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      c2.trackIndHeader:Show()
+      y2 = y2 - c2.trackIndHeader.COST
       c2.trackPreview:ClearAllPoints()
       c2.trackPreview:SetPoint("TOPLEFT", 0, y2)
       c2.trackPreview:Show()
@@ -2403,8 +2425,10 @@ function Config:Render()
     y2 = y2 - 48
     c2.hudPickBtn:SetPoint("TOPLEFT", 0, y2); c2.hudPickBtn:Show()
     y2 = y2 - 34
-    c2.hudHeader:SetPoint("TOPLEFT", 0, y2); c2.hudHeader:Show()
-    y2 = y2 - 20
+    c2.hudHeader:SetPoint("TOPLEFT", 0, y2 - c2.hudHeader.LEAD)
+    c2.hudHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.hudHeader:Show()
+    y2 = y2 - c2.hudHeader.COST
 
     local names = {}
     for name in pairs(ns.HudHider:Hidden()) do names[#names + 1] = name end
@@ -2478,8 +2502,10 @@ function Config:Render()
     c2.btColor:SetPoint("TOPLEFT", 430, y2); c2.btColor:Show()
     y2 = y2 - 34
 
-    c2.btWhereHeader:SetPoint("TOPLEFT", 0, y2); c2.btWhereHeader:Show()
-    y2 = y2 - 20
+    c2.btWhereHeader:SetPoint("TOPLEFT", 0, y2 - c2.btWhereHeader.LEAD)
+    c2.btWhereHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.btWhereHeader:Show()
+    y2 = y2 - c2.btWhereHeader.COST
     for i, box in ipairs(c2.btWhere) do
       box:SetChecked(ns.MissingBuffs.ContextEnabled(cfg, box.contextKey))
       box:SetPoint("TOPLEFT", (i - 1) * 130, y2)
@@ -2487,8 +2513,10 @@ function Config:Render()
     end
     y2 = y2 - 30
 
-    c2.btCatHeader:SetPoint("TOPLEFT", 0, y2); c2.btCatHeader:Show()
-    y2 = y2 - 18
+    c2.btCatHeader:SetPoint("TOPLEFT", 0, y2 - c2.btCatHeader.LEAD)
+    c2.btCatHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c2.btCatHeader:Show()
+    y2 = y2 - c2.btCatHeader.COST
     c2.btCatHint:SetPoint("TOPLEFT", 0, y2); c2.btCatHint:Show()
     y2 = y2 - 32
 
@@ -2547,9 +2575,15 @@ function Config:Render()
     local selected = state.selectedCategory and ns.RaidBuffByKey[state.selectedCategory]
     if selected then
       y2 = y2 - 8
-      c2.btBuffHeader:SetPoint("TOPLEFT", 0, y2); c2.btBuffHeader:Show()
-      c2.btResetBuffs:SetPoint("TOPLEFT", 180, y2 - 4); c2.btResetBuffs:Show()
-      y2 = y2 - 22
+      -- The only header sharing its row with a control, so its rule stops at the
+      -- Reset button instead of running the full width and crossing it.
+      c2.btResetBuffs:ClearAllPoints()
+      c2.btResetBuffs:SetPoint("TOPLEFT", 180, y2 - c2.btBuffHeader.LEAD - 4)
+      c2.btResetBuffs:Show()
+      c2.btBuffHeader:SetPoint("TOPLEFT", 0, y2 - c2.btBuffHeader.LEAD)
+      c2.btBuffHeader:SetPoint("RIGHT", c2.btResetBuffs, "LEFT", -8, 0)
+      c2.btBuffHeader:Show()
+      y2 = y2 - c2.btBuffHeader.COST
       local names = ns.RaidBuffNames(selected, cfg)
       for i, buffName in ipairs(names) do
         local row = c2.btBuffRows[i]
