@@ -297,8 +297,9 @@ local function BuildWindow()
   win.sidebar:SetPoint("BOTTOMLEFT")
   win.sidebar:SetWidth(SIDEBAR_W)
   W.ApplyBackdrop(win.sidebar, { 0.063, 0.078, 0.11, 1 })
-  win.sidebar.genHeader = W.CreateSection(win.sidebar, "GENERAL")
-  win.sidebar.genHeader:SetPoint("TOPLEFT", PAD, -10)
+  win.sidebar.genHeader = W.CreateSectionHeader(win.sidebar, "GENERAL")
+  win.sidebar.genHeader:SetPoint("TOPLEFT", PAD, -12)
+  win.sidebar.genHeader:SetPoint("RIGHT", win.sidebar, "RIGHT", -PAD, 0)
   win.generalBtn = W.CreateButton(win.sidebar, "Appearance", SIDEBAR_W - 2 * PAD, 21, function()
     state.selected = "__general"
     state.selectedElement = nil
@@ -334,19 +335,34 @@ local function BuildWindow()
   end)
   win.hudBtn:SetPoint("TOPLEFT", PAD, -118)
 
-  win.sidebar.header = W.CreateSection(win.sidebar, "BARS")
-  win.sidebar.header:SetPoint("TOPLEFT", PAD, -148)
+  win.sidebar.header = W.CreateSectionHeader(win.sidebar, "BARS")
+  win.sidebar.header:SetPoint("TOPLEFT", PAD, -150)
+  win.sidebar.header:SetPoint("RIGHT", win.sidebar, "RIGHT", -PAD, 0)
+
+  -- The list sits in a well of its own, so the scroll region reads as one object
+  -- rather than as buttons floating between two headers.
+  win.barWell = CreateFrame("Frame", nil, win.sidebar)
+  W.ApplyBackdrop(win.barWell, { 0.043, 0.055, 0.078, 1 })
 
   -- The bar list scrolls. Its height is whatever is left between the BARS header
   -- and the pinned block below, so it can never reach the utility buttons.
   win.barScroll = CreateFrame("ScrollFrame", "CoACDMConfigBarScroll", win.sidebar,
     "UIPanelScrollFrameTemplate")
-  win.barScroll:SetPoint("TOPLEFT", PAD, LIST_TOP)
+  win.barScroll:SetPoint("TOPLEFT", PAD + 4, LIST_TOP - 4)
   win.barScroll:SetWidth(SIDEBAR_W - 2 * PAD - 18) -- 18 for the scrollbar
   win.barList = CreateFrame("Frame", nil, win.barScroll)
   win.barList:SetWidth(SIDEBAR_W - 2 * PAD - 18)
   win.barList:SetHeight(1) -- real height set per render, from the bar count
   win.barScroll:SetScrollChild(win.barList)
+  W.StyleScrollBar(win.barScroll, 14)
+
+  -- The well tracks the scroll region, whose height is set per render
+  win.barWell:SetPoint("TOPLEFT", win.barScroll, "TOPLEFT", -4, 4)
+  win.barWell:SetPoint("BOTTOMRIGHT", win.barScroll, "BOTTOMRIGHT", 22, -4)
+  if win.barWell.SetFrameLevel and win.barScroll.GetFrameLevel then
+    local level = win.barScroll:GetFrameLevel() or 1
+    win.barWell:SetFrameLevel(level > 1 and level - 1 or 1)
+  end
 
   win.sidebar.buttons = {}
 
@@ -379,6 +395,7 @@ local function BuildWindow()
   win.scroll = CreateFrame("ScrollFrame", "CoACDMConfigScroll", win, "UIPanelScrollFrameTemplate")
   win.scroll:SetPoint("TOPLEFT", win.sidebar, "TOPRIGHT", PAD, 0)
   win.scroll:SetPoint("BOTTOMRIGHT", -28, 10)
+  W.StyleScrollBar(win.scroll, 16)
   win.content = CreateFrame("Frame", nil, win.scroll)
   win.content:SetWidth(ns.ContentWidth(win:GetWidth()))
   win.content:SetHeight(600)
@@ -1706,8 +1723,10 @@ local function RenderSidebar()
 
   local metrics = ns.SidebarMetrics(win.sidebar:GetHeight(), state.creating)
 
-  -- The scrolling list
-  win.barScroll:SetHeight(metrics.listHeight)
+  -- The scrolling list. Eight pixels come off for the well's inset: the list
+  -- bottom lands exactly on the top of "+ New bar...", so a well drawn 4px
+  -- proud of the scroll region on each side would sit on it.
+  win.barScroll:SetHeight(math.max(metrics.listHeight - 8, 23))
   local y = 0
   local buttons = win.sidebar.buttons
   local index = 0
@@ -1805,6 +1824,10 @@ local function SetArrowEnabled(btn, enabled)
   end
 end
 
+-- One element row plus its gap. Named because the drag-to-reorder drop target is
+-- computed from it, so the stride and the hit arithmetic cannot drift apart.
+local ELEMENT_ROW_H = 24
+
 local function RenderElementList(c, viewer, y, isReminders)
   c.elementsHeader:SetPoint("TOPLEFT", 0, y - c.elementsHeader.LEAD)
   c.elementsHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
@@ -1846,11 +1869,51 @@ local function RenderElementList(c, viewer, y, isReminders)
         Touch()
         Config:Render()
       end
-      row.up = W.CreateButton(row, "^", 20, 20, function(self) Move(self, -1) end)
+      -- Drag the row itself to reorder. The arrows stay: one press for one step
+      -- is faster than a drag when the element only needs to move once, and a
+      -- drag beats seven presses when it has to cross the list.
+      --
+      -- Dropping is arithmetic off the cursor's y (ns.DropIndex) rather than a
+      -- hit test, because the rows are a fixed-height stack and the one being
+      -- dragged is still sitting in it.
+      row.btn:RegisterForDrag("LeftButton")
+      row.btn:SetScript("OnDragStart", function(self)
+        local current = SelectedViewer()
+        if not current or #current.elements < 2 then return end
+        state.draggingElement = self.elementIndex
+        self:SetAlpha(0.5)
+      end)
+      row.btn:SetScript("OnDragStop", function(self)
+        self:SetAlpha(1)
+        local from = state.draggingElement
+        state.draggingElement = nil
+        local current = SelectedViewer()
+        if not from or not current then return end
+
+        local firstRow = c.elementRows[1]
+        local top = firstRow and firstRow.GetTop and firstRow:GetTop()
+        if not top then return end
+        local _, cursorY = GetCursorPosition()
+        cursorY = cursorY / UIParent:GetEffectiveScale()
+
+        local to = ns.DropIndex(top, ELEMENT_ROW_H, #current.elements, cursorY)
+        local moved = ns.MoveElementTo(current.elements, from, to)
+        if not moved then return end
+        -- Selection follows the element you dragged, so an open trigger builder
+        -- stays on the same element rather than on whatever slid into its slot.
+        if state.selectedElement == from then
+          state.selectedElement = moved
+        elseif state.selectedElement then
+          state.selectedElement = nil
+        end
+        Touch()
+        Config:Render()
+      end)
+      row.up = W.CreateButton(row, "\226\150\178", 20, 20, function(self) Move(self, -1) end)
       row.up:SetPoint("LEFT", row.btn, "RIGHT", 4, 0)
-      row.down = W.CreateButton(row, "v", 20, 20, function(self) Move(self, 1) end)
+      row.down = W.CreateButton(row, "\226\150\188", 20, 20, function(self) Move(self, 1) end)
       row.down:SetPoint("LEFT", row.up, "RIGHT", 2, 0)
-      row.remove = W.CreateButton(row, "X", 20, 20, function(self)
+      row.remove = W.CreateButton(row, "\195\151", 20, 20, function(self)
         local current = SelectedViewer()
         if not current then return end
         table.remove(current.elements, self.elementIndex)
@@ -1878,7 +1941,7 @@ local function RenderElementList(c, viewer, y, isReminders)
     row:SetPoint("TOPLEFT", 0, y)
     row:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
     row:Show()
-    y = y - 24
+    y = y - ELEMENT_ROW_H
 
     -- Trigger builder under the selected element (not for reminders)
     if not isReminders and state.selectedElement == i then
@@ -2682,32 +2745,58 @@ function Config:Render()
   if style == "icons" or style == "bars" or style == "shield" then
     y = RenderElementList(c, viewer, y, false)
     y = y - 6
-    c.addLabel:SetPoint("TOPLEFT", L1, y - 4); c.addLabel:Show()
+    -- The Add row reads left to right the way the audit lays it out: the kind
+    -- first, because it decides what the box beside it means, then the box
+    -- filling whatever width is left, then Add pinned to the right edge. The
+    -- "Add spell" label is gone -- the section says CONTENTS and the button
+    -- says Add, so the label was naming what was already obvious and eating
+    -- the width the input wanted.
+    c.addLabel:Hide()
     if style == "shield" and c.addKind.value == "cooldown" then
       c.addKind:SetValue("buff") -- shields are buffs; save the extra click
     end
     local isTrinket = c.addKind.value == "trinket"
     local isTotem = c.addKind.value == "totem"
     local totemByName = isTotem and c.addTotemSlot.value == "name"
+
+    local addPaneW = ns.ContentWidth(win:GetWidth())
+    local KIND_W, ADD_W, ADD_GAP = 126, 52, 8
+    local fieldX = KIND_W + ADD_GAP
+    local fieldW = addPaneW - ADD_W - ADD_GAP - fieldX
+    if fieldW < 90 then fieldW = 90 end
+
+    c.addKind:ClearAllPoints()
+    c.addKind:SetPoint("TOPLEFT", 0, y)
+    c.addKind:Show()
     if isTrinket then
       -- Trinket picks an equipped slot; the spell text box is not used
       c.addInput:Hide()
-      c.addSlot:SetPoint("TOPLEFT", C1, y); c.addSlot:Show()
+      c.addSlot:ClearAllPoints()
+      c.addSlot:SetPoint("TOPLEFT", fieldX, y)
+      c.addSlot:Show()
     elseif isTotem then
-      -- Totem picks a slot; the name box gets its own line below (the row is
-      -- already full at the kind dropdown)
+      -- Totem picks a slot; the name box gets its own line below
       c.addSlot:Hide()
       c.addInput:Hide()
-      c.addTotemSlot:SetPoint("TOPLEFT", C1, y); c.addTotemSlot:Show()
+      c.addTotemSlot:ClearAllPoints()
+      c.addTotemSlot:SetPoint("TOPLEFT", fieldX, y)
+      c.addTotemSlot:Show()
     else
       c.addSlot:Hide()
-      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
+      c.addInput:ClearAllPoints()
+      c.addInput:SetPoint("TOPLEFT", fieldX, y)
+      c.addInput:SetWidth(fieldW)
+      c.addInput:Show()
     end
-    c.addKind:SetPoint("TOPLEFT", C1 + 176, y); c.addKind:Show()
-    c.addBtn:SetPoint("TOPLEFT", C1 + 302, y); c.addBtn:Show()
+    c.addBtn:ClearAllPoints()
+    c.addBtn:SetPoint("TOPLEFT", addPaneW - ADD_W, y)
+    c.addBtn:Show()
     y = y - 24
     if totemByName then
-      c.addInput:SetPoint("TOPLEFT", C1, y); c.addInput:Show()
+      c.addInput:ClearAllPoints()
+      c.addInput:SetPoint("TOPLEFT", fieldX, y)
+      c.addInput:SetWidth(fieldW)
+      c.addInput:Show()
       y = y - 24
     end
     local addHint
@@ -2725,7 +2814,10 @@ function Config:Render()
       addHint = "Type a name or spell ID, or drag a spell from your spellbook."
     end
     c.addHint:SetText(addHint)
-    c.addHint:SetPoint("TOPLEFT", C1, y); c.addHint:Show()
+    -- Left edge, not C1: the "Add spell" label that used to hold that column is
+    -- gone, so an indented hint would be indented under nothing.
+    c.addHint:ClearAllPoints()
+    c.addHint:SetPoint("TOPLEFT", 0, y); c.addHint:Show()
     y = y - 24
   elseif style == "reminders" then
     y = RenderElementList(c, viewer, y, true)

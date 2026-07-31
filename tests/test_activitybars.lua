@@ -144,4 +144,32 @@ check("list stayed intact after refused moves",
 check("single-element list cannot move", ns.MoveElement({ "only" }, 1, 1) == nil)
 check("missing index is refused", ns.MoveElement(list, 9, -1) == nil)
 
+--------------------------------------------------------------------------------
+-- Drag-and-drop reordering. A drag is a lift-and-insert, not a swap: dragging
+-- the last row onto the first must push everything else down one, where the
+-- arrows' swap would trade the two ends and leave the middle alone.
+--------------------------------------------------------------------------------
+local dragged = { "a", "b", "c", "d" }
+check("dragging to the top pushes the rest down", ns.MoveElementTo(dragged, 4, 1) == 1
+  and dragged[1] == "d" and dragged[2] == "a" and dragged[3] == "b" and dragged[4] == "c")
+check("dragging down pulls the rest up", ns.MoveElementTo(dragged, 1, 3) == 3
+  and dragged[1] == "a" and dragged[2] == "b" and dragged[3] == "d" and dragged[4] == "c")
+check("dropping on itself does nothing", ns.MoveElementTo(dragged, 2, 2) == nil)
+check("a drop past the end clamps to the last slot",
+  ns.MoveElementTo({ "a", "b", "c" }, 1, 99) == 3)
+check("a drop above the top clamps to the first slot",
+  ns.MoveElementTo({ "a", "b", "c" }, 3, -5) == 1)
+check("a single-element list cannot be dragged", ns.MoveElementTo({ "only" }, 1, 1) == nil)
+check("a missing index is refused", ns.MoveElementTo(dragged, 9, 1) == nil)
+check("the list keeps its length", #dragged == 4)
+
+-- Drop target from the cursor. listTop is the top of the first row, y grows up.
+check("a cursor on the first row drops at 1", ns.DropIndex(500, 24, 5, 495) == 1)
+check("a cursor one row down drops at 2", ns.DropIndex(500, 24, 5, 470) == 2)
+check("a cursor on the last row drops at the last", ns.DropIndex(500, 24, 5, 390) == 5)
+check("a cursor above the list clamps to 1", ns.DropIndex(500, 24, 5, 900) == 1)
+check("a cursor below the list clamps to the count", ns.DropIndex(500, 24, 5, 0) == 5)
+check("an empty list drops at 1", ns.DropIndex(500, 24, 0, 400) == 1)
+check("a zero row height cannot divide by zero", ns.DropIndex(500, 0, 5, 400) == 1)
+
 return T

@@ -389,6 +389,41 @@ function ns.MoveElement(list, index, delta)
   return target
 end
 
+-- Drops an element at an arbitrary slot, for drag-and-drop reordering.
+--
+-- MoveElement above SWAPS with a neighbour, which is right for the arrows: one
+-- press, one step. A drag is not a swap -- dragging row 6 onto row 2 must push
+-- 2-5 down, not trade 6 with 2 -- so this lifts and re-inserts instead.
+-- Returns the index the element ended up at, or nil if nothing moved.
+function ns.MoveElementTo(list, from, to)
+  if type(list) ~= "table" or type(from) ~= "number" or type(to) ~= "number" then
+    return nil
+  end
+  local count = #list
+  if not list[from] or count < 2 then return nil end
+  if to < 1 then to = 1 elseif to > count then to = count end
+  if to == from then return nil end
+  local item = table.remove(list, from)
+  table.insert(list, to, item)
+  return to
+end
+
+-- Which slot a drag landed in. Rows are a fixed height stacked downward from the
+-- top of the list, so the drop target is arithmetic on the cursor's y rather than
+-- a hit test against every row.
+--
+-- `listTop` and `cursorY` are both in screen coordinates, y growing upward.
+function ns.DropIndex(listTop, rowHeight, count, cursorY)
+  count = tonumber(count) or 0
+  if count < 1 then return 1 end
+  rowHeight = tonumber(rowHeight) or 0
+  if rowHeight <= 0 then return 1 end
+  local index = math.floor((listTop - cursorY) / rowHeight) + 1
+  if index < 1 then return 1 end
+  if index > count then return count end
+  return index
+end
+
 -- Resolves a spell reference (numeric ID or exact name) to id, name, icon.
 function ns.ResolveSpell(input)
   local id = tonumber(input)

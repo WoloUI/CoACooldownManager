@@ -297,6 +297,55 @@ function W.CreateSection(parent, title)
   return fs
 end
 
+-- Blizzard's scroll bar is a chunky bordered widget with an arrow button at each
+-- end. The panel is drawn flat and dark, so the arrows go and what is left is a
+-- track with a thumb on it.
+--
+-- Everything here is guarded: the template's child names are what the client
+-- happens to build, and this addon is opened against Ascension builds that have
+-- drifted. A scroll bar that fails to restyle is cosmetic; one that errors takes
+-- the panel down.
+function W.StyleScrollBar(scroll, inset)
+  local name = scroll.GetName and scroll:GetName()
+  if not name then return end
+  local bar = _G[name .. "ScrollBar"]
+  if not bar or not bar.SetPoint then return end
+
+  local up = _G[name .. "ScrollBarScrollUpButton"]
+  local down = _G[name .. "ScrollBarScrollDownButton"]
+  if up then up:Hide() end
+  if down then down:Hide() end
+
+  -- The template hangs the bar between those two buttons, so with them gone it
+  -- has to be re-anchored or it floats short at both ends.
+  bar:ClearAllPoints()
+  bar:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", inset or 18, -2)
+  bar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", inset or 18, 2)
+  bar:SetWidth(6)
+
+  local thumb = bar.GetThumbTexture and bar:GetThumbTexture()
+  if bar.GetRegions then
+    for _, region in ipairs({ bar:GetRegions() }) do
+      if region ~= thumb and region.GetObjectType and region:GetObjectType() == "Texture" then
+        region:SetTexture(nil)
+      end
+    end
+  end
+
+  if not bar.cdmTrack then
+    bar.cdmTrack = bar:CreateTexture(nil, "BACKGROUND")
+    bar.cdmTrack:SetTexture("Interface\\Buttons\\WHITE8X8")
+    bar.cdmTrack:SetVertexColor(COLORS.line[1], COLORS.line[2], COLORS.line[3], 0.55)
+    bar.cdmTrack:SetPoint("TOPLEFT", 1, 0)
+    bar.cdmTrack:SetPoint("BOTTOMRIGHT", -1, 0)
+  end
+  if thumb then
+    thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
+    thumb:SetVertexColor(0.29, 0.35, 0.44, 1)
+    thumb:SetWidth(6)
+  end
+end
+
 -- A section header with a hairline that fills the remaining width.
 --
 -- CreateSection above is a bare gold string with no rule and no consistent space
