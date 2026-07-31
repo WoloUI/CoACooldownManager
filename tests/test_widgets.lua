@@ -51,4 +51,20 @@ box:SetFocus()
 box:ClearFocus()
 check("untouched box commits nothing", #committed == 3)
 
+--------------------------------------------------------------------------------
+-- Section headers cost the same vertical space regardless of title length: a
+-- long section name must not shift the rows beneath it.
+--------------------------------------------------------------------------------
+local shortHead = W.CreateSectionHeader(stub.MakeFrame(), "LOOK")
+local longHead = W.CreateSectionHeader(stub.MakeFrame(),
+  "TRACKED RESOURCE (aura stacks)")
+check("a section header reports a cost", type(shortHead.COST) == "number" and shortHead.COST > 0)
+check("cost is independent of title length", shortHead.COST == longHead.COST)
+check("a header reports its leading space", shortHead.LEAD > 0)
+check("lead is part of the cost", shortHead.COST > shortHead.LEAD)
+check("a header can be relabelled", (function()
+  longHead:SetLabel("LOOK")
+  return true
+end)())
+
 return T

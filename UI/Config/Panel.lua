@@ -200,6 +200,67 @@ function ns.ContentWidth(windowWidth)
   return w > 0 and w or 0
 end
 
+-- Packs a row of form cells against the available width.
+--
+-- The old grid pinned labels to 0/160/320 and controls to 92/252/412, which left
+-- a label 68px before it reached the control in the column to its left -- so
+-- "Summon duration (s)" collided and "Seg width" did not. Labels sit above their
+-- controls now and the cells pack, which makes the collision structurally
+-- impossible and lets a resized window fit more per row instead of leaving dead
+-- space.
+--
+-- Returns one entry per width, in input order: { index, row, x }.
+function ns.PackCells(contentWidth, widths, gap)
+  gap = gap or 12
+  local out = {}
+  local row, x = 1, 0
+  for i, w in ipairs(widths) do
+    -- Wrap when this cell would run past the pane -- but never wrap a cell that
+    -- is already at x 0, or an oversized cell would loop forever looking for room
+    -- it can never have.
+    if x > 0 and (x + w) > contentWidth then
+      row = row + 1
+      x = 0
+    end
+    out[#out + 1] = { index = i, row = row, x = x }
+    x = x + w + gap
+  end
+  return out
+end
+
+-- Positions a run of form cells and returns the cursor below them.
+--
+-- `cells` is an array of { label = fontString, control = frame, width = n }.
+-- A cell with no label is a bare control (a checkbox carries its own text).
+local CELL_LABEL_H = 14
+local CELL_H = 20
+local CELL_ROW_H = CELL_LABEL_H + CELL_H + 8
+
+function ns.FormCells(y, cells, contentWidth)
+  local widths = {}
+  for i, cell in ipairs(cells) do widths[i] = cell.width or 110 end
+  local packed = ns.PackCells(contentWidth, widths, 12)
+
+  local maxRow = 0
+  for _, pos in ipairs(packed) do
+    local cell = cells[pos.index]
+    local rowY = y - (pos.row - 1) * CELL_ROW_H
+    if cell.label then
+      cell.label:ClearAllPoints()
+      cell.label:SetPoint("TOPLEFT", pos.x, rowY)
+      cell.label:Show()
+      cell.control:ClearAllPoints()
+      cell.control:SetPoint("TOPLEFT", pos.x, rowY - CELL_LABEL_H)
+    else
+      cell.control:ClearAllPoints()
+      cell.control:SetPoint("TOPLEFT", pos.x, rowY - CELL_LABEL_H)
+    end
+    cell.control:Show()
+    if pos.row > maxRow then maxRow = pos.row end
+  end
+  return y - maxRow * CELL_ROW_H
+end
+
 --------------------------------------------------------------------------------
 -- Window skeleton
 --------------------------------------------------------------------------------

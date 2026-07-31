@@ -297,6 +297,39 @@ function W.CreateSection(parent, title)
   return fs
 end
 
+-- A section header with a hairline that fills the remaining width.
+--
+-- CreateSection above is a bare gold string with no rule and no consistent space
+-- around it, so on a crowded tab it reads as one more label rather than a break.
+-- This one owns its leading and trailing space, and reports that space as COST so
+-- callers advance their y cursor by the same amount for every title -- a long
+-- section name must not shift the rows beneath it.
+local SECTION_LEAD = 14
+local SECTION_TRAIL = 8
+local SECTION_LABEL_H = 12
+
+function W.CreateSectionHeader(parent, title)
+  local head = CreateFrame("Frame", nil, parent)
+  head:SetHeight(SECTION_LABEL_H)
+
+  head.label = W.CreateLabel(head, title, 11, COLORS.gold)
+  head.label:SetPoint("LEFT")
+
+  head.rule = head:CreateTexture(nil, "ARTWORK")
+  head.rule:SetTexture("Interface\\Buttons\\WHITE8X8")
+  head.rule:SetVertexColor(COLORS.line[1], COLORS.line[2], COLORS.line[3], 1)
+  head.rule:SetHeight(1)
+  head.rule:SetPoint("LEFT", head.label, "RIGHT", 8, 0)
+  head.rule:SetPoint("RIGHT", head, "RIGHT", 0, 0)
+
+  function head:SetLabel(text) self.label:SetText(text) end
+
+  -- Identical for every title, by construction
+  head.COST = SECTION_LEAD + SECTION_LABEL_H + SECTION_TRAIL
+  head.LEAD = SECTION_LEAD
+  return head
+end
+
 function W.CreateWindow(name, width, height, titleText, opts)
   local win = CreateFrame("Frame", name, UIParent)
   win:SetSize(width, height)

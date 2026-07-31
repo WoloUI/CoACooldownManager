@@ -13,6 +13,7 @@ local files = {
   "tests/test_extraaction.lua",
   "tests/test_widgets.lua",
   "tests/test_panelayout.lua",
+  "tests/test_formlayout.lua",
   "tests/test_power.lua",
   "tests/test_castlog.lua",
   "tests/test_capture.lua",
