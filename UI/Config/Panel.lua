@@ -612,7 +612,6 @@ function Config:BuildControls()
   c.visibility:SetOptions(VISIBILITY_OPTIONS)
 
   -- Power options
-  c.powerHeader = W.CreateSection(parent, "RESOURCES")
   c.bar1Label = W.CreateLabel(parent, "Bar 1", 12, W.colors.inkDim)
   c.powerBar1 = W.CreateDropdown(parent, 110, function(_, value)
     SelectedViewer().power.bar1 = value
@@ -2839,66 +2838,72 @@ function Config:Render()
   end
 
   -- Appearance / per-style sections
+  -- LOOK. Every style has one, and the controls that used to sit in a top-level
+  -- section of their own -- RESOURCES, TRACKED RESOURCE, NANSHIELD, SWING BARS,
+  -- CAST BAR, HISTORY -- live inside it. They were never a separate concern from
+  -- appearance; they are the appearance controls that only one style has. The
+  -- next style adds cells here instead of a seventh section.
+  local paneW = ns.ContentWidth(win:GetWidth())
+  c.lookHeader:SetPoint("TOPLEFT", 0, y - c.lookHeader.LEAD)
+  c.lookHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+  c.lookHeader:Show()
+  y = y - c.lookHeader.COST
+
   if style == "power" then
     local type1, type2 = ns.Power:GetTypes()
-    c.powerHeader:SetPoint("TOPLEFT", 0, y)
-    c.powerHeader:Show()
-    y = y - 22
-    -- Row: Bar 1 [dd]        Color [sw][Auto]
-    c.bar1Label:SetPoint("TOPLEFT", L1, y - 4); c.bar1Label:Show()
-    c.powerBar1:SetPoint("TOPLEFT", C1, y); c.powerBar1:SetValue(viewer.power.bar1 or "auto"); c.powerBar1:Show()
-    c.color1Label:SetPoint("TOPLEFT", LW, y - 4); c.color1Label:Show()
-    c.color1:SetPoint("TOPLEFT", CW, y)
-    c.color1:SetColor(viewer.power.color1 or ns.Power:GetBar(type1).color)
-    c.color1:Show()
-    c.color1Reset:SetPoint("TOPLEFT", CW + 26, y); c.color1Reset:Show()
-    y = y - 26
-    -- Row: Bar 2 [dd]        Color [sw][Auto]
-    c.bar2Label:SetPoint("TOPLEFT", L1, y - 4); c.bar2Label:Show()
-    c.powerBar2:SetPoint("TOPLEFT", C1, y); c.powerBar2:SetValue(viewer.power.bar2 or "auto"); c.powerBar2:Show()
-    if type2 then
-      c.color2Label:SetPoint("TOPLEFT", LW, y - 4); c.color2Label:Show()
-      c.color2:SetPoint("TOPLEFT", CW, y)
-      c.color2:SetColor(viewer.power.color2 or ns.Power:GetBar(type2).color)
-      c.color2:Show()
-      c.color2Reset:SetPoint("TOPLEFT", CW + 26, y); c.color2Reset:Show()
-    end
-    y = y - 26
-    -- Row: Width / Height / Bar 2 height. The Width box is meaningless while the
-    -- bar follows another one, so it gives up its column to Height.
-    local cols = { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 }
-    if viewer.widthMode ~= "match" then
-      c.powerWLabel:SetPoint("TOPLEFT", L1, y - 4); c.powerWLabel:Show()
-      c.powerW:SetPoint("TOPLEFT", C1, y); c.powerW:SetText(tostring(viewer.power.width or 340)); c.powerW:Show()
-      c.powerHLabel:SetPoint("TOPLEFT", L2, y - 4); c.powerHLabel:Show()
-      c.powerH:SetPoint("TOPLEFT", C2, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
-      c.powerSubHLabel:SetPoint("TOPLEFT", L3, y - 4); c.powerSubHLabel:Show()
-      c.powerSubH:SetPoint("TOPLEFT", C3, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
-    else
-      c.powerHLabel:SetPoint("TOPLEFT", L1, y - 4); c.powerHLabel:Show()
-      c.powerH:SetPoint("TOPLEFT", C1, y); c.powerH:SetText(tostring(viewer.power.height or 26)); c.powerH:Show()
-      c.powerSubHLabel:SetPoint("TOPLEFT", L2, y - 4); c.powerSubHLabel:Show()
-      c.powerSubH:SetPoint("TOPLEFT", C2, y); c.powerSubH:SetText(tostring(viewer.power.subHeight or 18)); c.powerSubH:Show()
-    end
-    y = y - 28
-    y = RenderWidthMode(c, viewer, y, cols)
-    -- Row: Text 1 [dd]      Text 2 [dd]
-    c.text1Label:SetPoint("TOPLEFT", L1, y - 4); c.text1Label:Show()
-    c.powerText1:SetPoint("TOPLEFT", C1, y)
+    c.powerBar1:SetValue(viewer.power.bar1 or "auto")
+    c.powerBar2:SetValue(viewer.power.bar2 or "auto")
     c.powerText1:SetValue(viewer.power.text1 or "curmax")
-    c.powerText1:Show()
+    c.powerH:SetText(tostring(viewer.power.height or 26))
+    c.powerSubH:SetText(tostring(viewer.power.subHeight or 18))
+
+    -- Bar 2's selector always shows -- it is how you force or silence a second
+    -- resource. Its text and colour only exist once one is actually active.
+    local cells = {
+      { label = c.bar1Label,  control = c.powerBar1,  width = 118 },
+      { label = c.text1Label, control = c.powerText1, width = 118 },
+      { label = c.bar2Label,  control = c.powerBar2,  width = 118 },
+    }
     if type2 then
-      c.text2Label:SetPoint("TOPLEFT", LW, y - 4); c.text2Label:Show()
-      c.powerText2:SetPoint("TOPLEFT", CW, y)
       c.powerText2:SetValue(viewer.power.text2 or "curmax")
-      c.powerText2:Show()
+      cells[#cells + 1] = { label = c.text2Label, control = c.powerText2, width = 118 }
     end
-    y = y - 28
-    -- Row: toggles, aligned to the control column
-    c.ticks:SetPoint("TOPLEFT", C1, y); c.ticks:SetChecked(viewer.power.showTicks); c.ticks:Show()
-    c.combo:SetPoint("TOPLEFT", C2, y); c.combo:SetChecked(viewer.power.showCombo); c.combo:Show()
-    c.powerName:SetPoint("TOPLEFT", C3 - 60, y); c.powerName:SetChecked(viewer.power.showLabel ~= false); c.powerName:Show()
-    y = y - 32
+    c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
+    cells[#cells + 1] = { label = c.widthModeLabel, control = c.widthMode, width = 118 }
+    if viewer.widthMode == "match" then
+      -- The Width box is meaningless while the bar follows another one
+      AppendWidthSourceCells(c, viewer, cells)
+    else
+      c.powerW:SetText(tostring(viewer.power.width or 340))
+      cells[#cells + 1] = { label = c.powerWLabel, control = c.powerW, width = 64 }
+    end
+    cells[#cells + 1] = { label = c.powerHLabel,    control = c.powerH,    width = 64 }
+    cells[#cells + 1] = { label = c.powerSubHLabel, control = c.powerSubH, width = 64 }
+    y = ns.FormCells(y, cells, paneW)
+
+    -- Swatches keep a row of their own: a swatch plus its reset button is a
+    -- compound control, and forcing it into a one-control cell would read worse
+    -- than the exception does.
+    c.color1Label:ClearAllPoints(); c.color1Label:SetPoint("TOPLEFT", 0, y); c.color1Label:Show()
+    c.color1:ClearAllPoints(); c.color1:SetPoint("TOPLEFT", 96, y + 2)
+    c.color1:SetColor(viewer.power.color1 or ns.Power:GetBar(type1).color); c.color1:Show()
+    c.color1Reset:ClearAllPoints(); c.color1Reset:SetPoint("TOPLEFT", 122, y + 2); c.color1Reset:Show()
+    if type2 then
+      c.color2Label:ClearAllPoints(); c.color2Label:SetPoint("TOPLEFT", 220, y); c.color2Label:Show()
+      c.color2:ClearAllPoints(); c.color2:SetPoint("TOPLEFT", 316, y + 2)
+      c.color2:SetColor(viewer.power.color2 or ns.Power:GetBar(type2).color); c.color2:Show()
+      c.color2Reset:ClearAllPoints(); c.color2Reset:SetPoint("TOPLEFT", 342, y + 2); c.color2Reset:Show()
+    end
+    y = y - 30
+
+    c.ticks:SetChecked(viewer.power.showTicks)
+    c.combo:SetChecked(viewer.power.showCombo)
+    c.powerName:SetChecked(viewer.power.showLabel ~= false)
+    y = ns.FormCells(y, {
+      { control = c.ticks,     width = 118 },
+      { control = c.combo,     width = 118 },
+      { control = c.powerName, width = 130 },
+    }, paneW)
   elseif style == "stacks" then
     viewer.stack = viewer.stack or { maxStacks = 3, onlyMine = true }
     c.stackHeader:SetPoint("TOPLEFT", 0, y)
@@ -3087,12 +3092,6 @@ function Config:Render()
   elseif style ~= "reminders" then
     -- icons and bars. Every control is set first, then packed: the cells decide
     -- where things land, so nothing here carries a hand-tuned offset.
-    local paneW = ns.ContentWidth(win:GetWidth())
-    c.lookHeader:SetPoint("TOPLEFT", 0, y - c.lookHeader.LEAD)
-    c.lookHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
-    c.lookHeader:Show()
-    y = y - c.lookHeader.COST
-
     c.style:SetValue(style)
     c.growth:SetOptions(style == "bars" and GROWTH_BARS or GROWTH_ICONS)
     c.growth:SetValue(viewer.growth or (style == "bars" and "UP" or "CENTER"))
