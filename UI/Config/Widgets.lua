@@ -311,10 +311,22 @@ function W.StyleScrollBar(scroll, inset)
   local bar = _G[name .. "ScrollBar"]
   if not bar or not bar.SetPoint then return end
 
-  local up = _G[name .. "ScrollBarScrollUpButton"]
-  local down = _G[name .. "ScrollBarScrollDownButton"]
-  if up then up:Hide() end
-  if down then down:Hide() end
+  -- Hidden is not enough: the template's own scroll-range handler shows these
+  -- again whenever the content resizes, which is why the arrows came back on
+  -- the content pane. Transparent and untouchable survives a re-Show.
+  for _, suffix in ipairs({ "ScrollBarScrollUpButton", "ScrollBarScrollDownButton" }) do
+    local btn = _G[name .. suffix]
+    if btn then
+      btn:Hide()
+      if btn.SetAlpha then btn:SetAlpha(0) end
+      if btn.EnableMouse then btn:EnableMouse(false) end
+      for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture",
+                                "GetDisabledTexture", "GetHighlightTexture" }) do
+        local tex = btn[getter] and btn[getter](btn)
+        if tex and tex.SetTexture then tex:SetTexture(nil) end
+      end
+    end
+  end
 
   -- The template hangs the bar between those two buttons, so with them gone it
   -- has to be re-anchored or it floats short at both ends.
@@ -439,6 +451,25 @@ function W.CreateWindow(name, width, height, titleText, opts)
       win:StopMovingOrSizing()
       if opts.onResize then opts.onResize(win:GetWidth(), win:GetHeight()) end
     end)
+
+    -- Reflowing only on mouse-up left everything inside the window laid out for
+    -- the size it had when the drag started -- the sidebar's pinned block and
+    -- the content pane both read the window's size at render time. This reflows
+    -- as it is dragged, throttled to whole steps so it is not a relayout per
+    -- frame.
+    if opts.onReflow then
+      win.lastReflowW, win.lastReflowH = width, height
+      win:SetScript("OnSizeChanged", function(self)
+        local w, h = self:GetWidth(), self:GetHeight()
+        if not w or not h then return end
+        if math.abs(w - (self.lastReflowW or 0)) < 4
+          and math.abs(h - (self.lastReflowH or 0)) < 4 then
+          return
+        end
+        self.lastReflowW, self.lastReflowH = w, h
+        opts.onReflow(w, h)
+      end)
+    end
     win.grip:SetScript("OnEnter", function()
       for _, pip in ipairs(win.grip.pips) do
         pip:SetVertexColor(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], 1)

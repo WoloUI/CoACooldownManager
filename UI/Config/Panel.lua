@@ -286,6 +286,8 @@ local function BuildWindow()
         store.width, store.height = w, h
         Config:Render()
       end,
+      -- During the drag, not just at the end of it
+      onReflow = function() Config:Render() end,
     })
 
   win.profileLabel = W.CreateLabel(win.titleBar, "", 11, W.colors.inkDim)
@@ -1843,9 +1845,25 @@ local function RenderElementList(c, viewer, y, isReminders)
         state.selectedElement = state.selectedElement ~= self.elementIndex and self.elementIndex or nil
         Config:Render()
       end)
-      row.btn:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
       row.btn.text:ClearAllPoints()
       row.btn.text:SetPoint("LEFT", 6, 0)
+
+      -- Selection has to survive the hover scripts: CreateButton's OnLeave
+      -- resets the border unconditionally, which wiped the gold edge off the
+      -- selected row the moment the cursor left it.
+      row.btn:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3], 1)
+        -- Tracked here so a drag knows what it is hovering. OnEnter still fires
+        -- while dragging because nothing is attached to the cursor.
+        if state.draggingElement then state.dragOverElement = self.elementIndex end
+      end)
+      row.btn:SetScript("OnLeave", function(self)
+        if self.selected then
+          self:SetBackdropBorderColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3], 1)
+        else
+          self:SetBackdropBorderColor(W.colors.line[1], W.colors.line[2], W.colors.line[3], 1)
+        end
+      end)
       -- Rows are pooled and reused across bars: always resolve the CURRENT
       -- selected viewer here, never capture `viewer` from an old render.
       -- Element order IS display order, so these reorder the bar itself.
@@ -1877,22 +1895,33 @@ local function RenderElementList(c, viewer, y, isReminders)
         local current = SelectedViewer()
         if not current or #current.elements < 2 then return end
         state.draggingElement = self.elementIndex
-        self:SetAlpha(0.5)
+        state.dragOverElement = nil
+        -- Visible confirmation that the drag took: without it there is no way to
+        -- tell a drag that did nothing from a drag that never started.
+        self:SetAlpha(0.4)
       end)
       row.btn:SetScript("OnDragStop", function(self)
         self:SetAlpha(1)
         local from = state.draggingElement
+        local over = state.dragOverElement
         state.draggingElement = nil
+        state.dragOverElement = nil
         local current = SelectedViewer()
         if not from or not current then return end
 
-        local firstRow = c.elementRows[1]
-        local top = firstRow and firstRow.GetTop and firstRow:GetTop()
-        if not top then return end
-        local _, cursorY = GetCursorPosition()
-        cursorY = cursorY / UIParent:GetEffectiveScale()
+        -- The row the cursor is actually over is the honest answer. The
+        -- arithmetic is the fallback for when the drop lands off the rows
+        -- (past the end of the list, or on the gap between two of them).
+        local to = over
+        if not to then
+          local firstRow = c.elementRows[1]
+          local top = firstRow and firstRow.GetTop and firstRow:GetTop()
+          if not top then return end
+          local _, cursorY = GetCursorPosition()
+          cursorY = cursorY / UIParent:GetEffectiveScale()
+          to = ns.DropIndex(top, ELEMENT_ROW_H, #current.elements, cursorY)
+        end
 
-        local to = ns.DropIndex(top, ELEMENT_ROW_H, #current.elements, cursorY)
         local moved = ns.MoveElementTo(current.elements, from, to)
         if not moved then return end
         -- Selection follows the element you dragged, so an open trigger builder
@@ -1905,10 +1934,16 @@ local function RenderElementList(c, viewer, y, isReminders)
         Touch()
         Config:Render()
       end)
-      row.up = W.CreateButton(row, "\226\150\178", 20, 20, function(self) Move(self, -1) end)
-      row.up:SetPoint("LEFT", row.btn, "RIGHT", 4, 0)
-      row.down = W.CreateButton(row, "\226\150\188", 20, 20, function(self) Move(self, 1) end)
-      row.down:SetPoint("LEFT", row.up, "RIGHT", 2, 0)
+      -- Anchored right to left so the name field takes whatever is left over:
+      -- the row stretches with the pane, the buttons keep their size.
+      --
+      -- The glyphs are plain ASCII on purpose. U+25B2/25BC rendered as "?" in
+      -- the client font -- it has Latin-1 (so the multiply sign below is fine)
+      -- but not Geometric Shapes.
+      row.index = W.CreateLabel(row, "", 11, W.colors.inkDim)
+      row.index:SetWidth(20)
+      row.index:SetJustifyH("RIGHT")
+      row.index:SetPoint("RIGHT", row, "RIGHT", -2, 0)
       row.remove = W.CreateButton(row, "\195\151", 20, 20, function(self)
         local current = SelectedViewer()
         if not current then return end
@@ -1917,7 +1952,13 @@ local function RenderElementList(c, viewer, y, isReminders)
         Touch()
         Config:Render()
       end)
-      row.remove:SetPoint("LEFT", row.down, "RIGHT", 4, 0)
+      row.remove:SetPoint("RIGHT", row.index, "LEFT", -6, 0)
+      row.down = W.CreateButton(row, "v", 20, 20, function(self) Move(self, 1) end)
+      row.down:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
+      row.up = W.CreateButton(row, "^", 20, 20, function(self) Move(self, -1) end)
+      row.up:SetPoint("RIGHT", row.down, "LEFT", -2, 0)
+      row.btn:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
+      row.btn:SetPoint("RIGHT", row.up, "LEFT", -4, 0)
       c.elementRows[i] = row
     end
     row.btn.elementIndex = i
@@ -1928,10 +1969,18 @@ local function RenderElementList(c, viewer, y, isReminders)
     SetArrowEnabled(row.down, i < #viewer.elements)
     row.icon:SetTexture(el.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
     row.btn:SetLabel(ElementLabel(el))
-    if state.selectedElement == i then
+    -- The position, so a reorder is legible: after a move you can see where the
+    -- element landed instead of having to re-read the whole list.
+    row.index:SetText(tostring(i))
+    row.btn.selected = state.selectedElement == i
+    if row.btn.selected then
       row.btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
+      row.btn:SetBackdropBorderColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3], 1)
+      row.index:SetTextColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3])
     else
       row.btn:SetBackdropColor(W.colors.panel2[1], W.colors.panel2[2], W.colors.panel2[3], 1)
+      row.btn:SetBackdropBorderColor(W.colors.line[1], W.colors.line[2], W.colors.line[3], 1)
+      row.index:SetTextColor(W.colors.inkDim[1], W.colors.inkDim[2], W.colors.inkDim[3])
     end
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT", 0, y)
