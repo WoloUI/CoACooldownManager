@@ -1830,6 +1830,23 @@ end
 -- computed from it, so the stride and the hit arithmetic cannot drift apart.
 local ELEMENT_ROW_H = 24
 
+-- Places an explanatory hint and returns the cursor below it.
+--
+-- Hints run to several lines and the height of those lines depends on the font
+-- the profile picked, so the space they need is measured, never guessed. Guessing
+-- is what put the stack bar's size row on top of the last two lines of the
+-- filling-aura hint: three lines of text under a 26px reservation.
+local function PlaceHint(fs, y, paneW)
+  fs:ClearAllPoints()
+  fs:SetPoint("TOPLEFT", 0, y)
+  -- A width also makes long hints wrap into the pane instead of running past it
+  if paneW and paneW > 0 then fs:SetWidth(paneW) end
+  fs:Show()
+  local height = fs.GetStringHeight and fs:GetStringHeight()
+  if not height or height <= 0 then height = 14 end
+  return y - height - 10
+end
+
 local function RenderElementList(c, viewer, y, isReminders)
   c.elementsHeader:SetPoint("TOPLEFT", 0, y - c.elementsHeader.LEAD)
   c.elementsHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
@@ -2910,9 +2927,7 @@ function Config:Render()
     c.addHint:SetText(addHint)
     -- Left edge, not C1: the "Add spell" label that used to hold that column is
     -- gone, so an indented hint would be indented under nothing.
-    c.addHint:ClearAllPoints()
-    c.addHint:SetPoint("TOPLEFT", 0, y); c.addHint:Show()
-    y = y - 24
+    y = PlaceHint(c.addHint, y, addPaneW)
   elseif style == "reminders" then
     y = RenderElementList(c, viewer, y, true)
     y = y - 6
@@ -3030,9 +3045,7 @@ function Config:Render()
       { control = c.stackGradient, width = 110 },
     }, paneW)
 
-    c.stackMaxHint:ClearAllPoints()
-    c.stackMaxHint:SetPoint("TOPLEFT", 0, y); c.stackMaxHint:Show()
-    y = y - 24
+    y = PlaceHint(c.stackMaxHint, y, paneW)
 
     -- The filling aura, and the controls that only exist once there is one
     c.stackSub:SetText(st.subSpellID and tostring(st.subSpellID) or "")
@@ -3051,9 +3064,7 @@ function Config:Render()
         { control = c.stackSubdivide, width = 134 },
       }, paneW)
     end
-    c.stackSubHint:ClearAllPoints()
-    c.stackSubHint:SetPoint("TOPLEFT", 0, y); c.stackSubHint:Show()
-    y = y - 26
+    y = PlaceHint(c.stackSubHint, y, paneW)
 
     -- Sizes for the mode you are in, each labelled for that mode
     if st.display == "bar" then
@@ -3107,9 +3118,7 @@ function Config:Render()
     c.shieldValue:SetChecked(viewer.shield.showValue ~= false)
     y = ns.FormCells(y, { { control = c.shieldValue, width = 120 } }, paneW)
 
-    c.shieldHint:ClearAllPoints()
-    c.shieldHint:SetPoint("TOPLEFT", 0, y); c.shieldHint:Show()
-    y = y - 48
+    y = PlaceHint(c.shieldHint, y, paneW)
   elseif style == "swing" then
     local sw = viewer.swing or {}
     c.swingW:SetText(tostring(sw.width or 200))
@@ -3139,9 +3148,7 @@ function Config:Render()
       { control = c.swingRanged,   width = 92 },
     }, paneW)
 
-    c.swingHint:ClearAllPoints()
-    c.swingHint:SetPoint("TOPLEFT", 0, y); c.swingHint:Show()
-    y = y - 40
+    y = PlaceHint(c.swingHint, y, paneW)
   elseif style == "cast" then
     local ca = viewer.cast or {}
     c.castW:SetText(tostring(ca.width or 220))
@@ -3172,9 +3179,7 @@ function Config:Render()
       { control = c.castTicksChk, width = 92 },
     }, paneW)
 
-    c.castHint:ClearAllPoints()
-    c.castHint:SetPoint("TOPLEFT", 0, y); c.castHint:Show()
-    y = y - 40
+    y = PlaceHint(c.castHint, y, paneW)
   elseif style == "history" then
     viewer.history = viewer.history or { iconSize = 32, spacing = 4, visible = 10,
       fade = 8, growth = "LEFT", tooltips = true, blacklist = "" }
