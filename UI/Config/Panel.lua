@@ -1848,9 +1848,34 @@ local function RenderElementList(c, viewer, y, isReminders)
       row.index:SetJustifyH("RIGHT")
       row.index:SetPoint("LEFT", row, "LEFT", 0, 0)
 
+      -- Three stacked lines: the conventional "this row can be dragged" mark.
+      -- Drawn rather than typed -- the client font has no U+2261, and the arrow
+      -- glyphs already proved it renders those as "?".
+      row.grip = CreateFrame("Button", nil, row)
+      row.grip:SetSize(10, 14)
+      row.grip:SetPoint("LEFT", row.index, "RIGHT", 6, 0)
+      row.grip.lines = {}
+      for line = 1, 3 do
+        local tex = row.grip:CreateTexture(nil, "ARTWORK")
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        tex:SetVertexColor(W.colors.inkDim[1], W.colors.inkDim[2], W.colors.inkDim[3], 0.6)
+        tex:SetSize(10, 1)
+        tex:SetPoint("TOP", row.grip, "TOP", 0, -3 - (line - 1) * 4)
+        row.grip.lines[line] = tex
+      end
+      function row.grip:SetHighlighted(on)
+        for _, tex in ipairs(self.lines) do
+          if on then
+            tex:SetVertexColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3], 1)
+          else
+            tex:SetVertexColor(W.colors.inkDim[1], W.colors.inkDim[2], W.colors.inkDim[3], 0.6)
+          end
+        end
+      end
+
       row.icon = row:CreateTexture(nil, "ARTWORK")
       row.icon:SetSize(16, 16)
-      row.icon:SetPoint("LEFT", row.index, "RIGHT", 6, 0)
+      row.icon:SetPoint("LEFT", row.grip, "RIGHT", 6, 0)
       ns.CropIcon(row.icon)
       row.btn = W.CreateButton(row, "", 300, 20, function(self)
         state.selectedElement = state.selectedElement ~= self.elementIndex and self.elementIndex or nil
@@ -1966,6 +1991,22 @@ local function RenderElementList(c, viewer, y, isReminders)
       row.up:SetPoint("RIGHT", row.down, "LEFT", -2, 0)
       row.btn:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
       row.btn:SetPoint("RIGHT", row.up, "LEFT", -4, 0)
+
+      -- The grip advertises the drag, so it had better perform it: a handle that
+      -- looks draggable and does nothing when you pull it is worse than no
+      -- handle. It delegates to the row's own scripts rather than repeating
+      -- them, so the two can never drift.
+      row.grip:RegisterForDrag("LeftButton")
+      row.grip:SetScript("OnDragStart", function()
+        row.btn:GetScript("OnDragStart")(row.btn)
+      end)
+      row.grip:SetScript("OnDragStop", function()
+        row.btn:GetScript("OnDragStop")(row.btn)
+      end)
+      row.grip:SetScript("OnEnter", function(self) self:SetHighlighted(true) end)
+      row.grip:SetScript("OnLeave", function(self)
+        self:SetHighlighted(row.btn.selected)
+      end)
       c.elementRows[i] = row
     end
     row.btn.elementIndex = i
@@ -1980,6 +2021,7 @@ local function RenderElementList(c, viewer, y, isReminders)
     -- element landed instead of having to re-read the whole list.
     row.index:SetText(tostring(i))
     row.btn.selected = state.selectedElement == i
+    row.grip:SetHighlighted(row.btn.selected)
     if row.btn.selected then
       row.btn:SetBackdropColor(0.137, 0.173, 0.247, 1)
       row.btn:SetBackdropBorderColor(W.colors.gold[1], W.colors.gold[2], W.colors.gold[3], 1)
