@@ -995,7 +995,6 @@ function Config:BuildControls()
       showTime = true, show_mh = true, show_oh = true, show_ranged = true }
     return viewer.swing
   end
-  c.swingHeader = W.CreateSection(parent, "SWING BARS")
   c.swingWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
   c.swingW = W.CreateEditBox(parent, 46, 20, function(_, text)
     SwingCfg().width = math.max(tonumber(text) or 200, 20); Touch()
@@ -1019,7 +1018,6 @@ function Config:BuildControls()
       showTime = true, showTicks = true, tickSeconds = 1.0 }
     return viewer.cast
   end
-  c.castHeader = W.CreateSection(parent, "CAST BAR")
   c.castWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
   c.castW = W.CreateEditBox(parent, 46, 20, function(_, text)
     CastCfg().width = math.max(tonumber(text) or 220, 20); Touch()
@@ -3022,45 +3020,68 @@ function Config:Render()
     y = y - 48
   elseif style == "swing" then
     local sw = viewer.swing or {}
-    c.swingHeader:SetPoint("TOPLEFT", 0, y); c.swingHeader:Show()
-    y = y - 22
-    c.swingWLabel:SetPoint("TOPLEFT", L1, y - 4); c.swingWLabel:Show()
-    c.swingW:SetPoint("TOPLEFT", C1, y); c.swingW:SetText(tostring(sw.width or 200)); c.swingW:Show()
-    c.swingHLabel:SetPoint("TOPLEFT", L2, y - 4); c.swingHLabel:Show()
-    c.swingH:SetPoint("TOPLEFT", C2, y); c.swingH:SetText(tostring(sw.height or 16)); c.swingH:Show()
-    y = y - 28
-    y = RenderWidthMode(c, viewer, y,
-      { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 })
-    c.swingLabelChk:SetPoint("TOPLEFT", C1, y); c.swingLabelChk:SetChecked(sw.showLabel ~= false); c.swingLabelChk:Show()
-    c.swingTimeChk:SetPoint("TOPLEFT", C2, y); c.swingTimeChk:SetChecked(sw.showTime ~= false); c.swingTimeChk:Show()
-    y = y - 26
-    c.swingMH:SetPoint("TOPLEFT", C1, y); c.swingMH:SetChecked(sw.show_mh ~= false); c.swingMH:Show()
-    c.swingOH:SetPoint("TOPLEFT", C2, y); c.swingOH:SetChecked(sw.show_oh ~= false); c.swingOH:Show()
-    c.swingRanged:SetPoint("TOPLEFT", C3, y); c.swingRanged:SetChecked(sw.show_ranged ~= false); c.swingRanged:Show()
-    y = y - 26
-    c.swingHint:SetPoint("TOPLEFT", L1, y); c.swingHint:Show()
+    c.swingW:SetText(tostring(sw.width or 200))
+    c.swingH:SetText(tostring(sw.height or 16))
+
+    local cells = {}
+    c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
+    cells[#cells + 1] = { label = c.widthModeLabel, control = c.widthMode, width = 118 }
+    if viewer.widthMode == "match" then
+      AppendWidthSourceCells(c, viewer, cells)
+    else
+      cells[#cells + 1] = { label = c.swingWLabel, control = c.swingW, width = 64 }
+    end
+    cells[#cells + 1] = { label = c.swingHLabel, control = c.swingH, width = 64 }
+    y = ns.FormCells(y, cells, paneW)
+
+    c.swingLabelChk:SetChecked(sw.showLabel ~= false)
+    c.swingTimeChk:SetChecked(sw.showTime ~= false)
+    c.swingMH:SetChecked(sw.show_mh ~= false)
+    c.swingOH:SetChecked(sw.show_oh ~= false)
+    c.swingRanged:SetChecked(sw.show_ranged ~= false)
+    y = ns.FormCells(y, {
+      { control = c.swingLabelChk, width = 104 },
+      { control = c.swingTimeChk,  width = 104 },
+      { control = c.swingMH,       width = 100 },
+      { control = c.swingOH,       width = 100 },
+      { control = c.swingRanged,   width = 92 },
+    }, paneW)
+
+    c.swingHint:ClearAllPoints()
+    c.swingHint:SetPoint("TOPLEFT", 0, y); c.swingHint:Show()
     y = y - 40
   elseif style == "cast" then
     local ca = viewer.cast or {}
-    c.castHeader:SetPoint("TOPLEFT", 0, y); c.castHeader:Show()
-    y = y - 22
-    c.castWLabel:SetPoint("TOPLEFT", L1, y - 4); c.castWLabel:Show()
-    c.castW:SetPoint("TOPLEFT", C1, y); c.castW:SetText(tostring(ca.width or 220)); c.castW:Show()
-    c.castHLabel:SetPoint("TOPLEFT", L2, y - 4); c.castHLabel:Show()
-    c.castH:SetPoint("TOPLEFT", C2, y); c.castH:SetText(tostring(ca.height or 22)); c.castH:Show()
-    y = y - 28
-    y = RenderWidthMode(c, viewer, y,
-      { L1 = L1, C1 = C1, L2 = L2, C2 = C2, L3 = L3, C3 = C3 })
-    c.castIconChk:SetPoint("TOPLEFT", C1, y); c.castIconChk:SetChecked(ca.showIcon ~= false); c.castIconChk:Show()
-    c.castTimeChk:SetPoint("TOPLEFT", C2, y); c.castTimeChk:SetChecked(ca.showTime ~= false); c.castTimeChk:Show()
-    y = y - 26
-    c.castTicksChk:SetPoint("TOPLEFT", C1, y); c.castTicksChk:SetChecked(ca.showTicks ~= false); c.castTicksChk:Show()
-    if ca.showTicks ~= false then
-      c.castTickLabel:SetPoint("TOPLEFT", LW, y - 4); c.castTickLabel:Show()
-      c.castTick:SetPoint("TOPLEFT", CW, y); c.castTick:SetText(tostring(ca.tickSeconds or 1.0)); c.castTick:Show()
+    c.castW:SetText(tostring(ca.width or 220))
+    c.castH:SetText(tostring(ca.height or 22))
+
+    local cells = {}
+    c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
+    cells[#cells + 1] = { label = c.widthModeLabel, control = c.widthMode, width = 118 }
+    if viewer.widthMode == "match" then
+      AppendWidthSourceCells(c, viewer, cells)
+    else
+      cells[#cells + 1] = { label = c.castWLabel, control = c.castW, width = 64 }
     end
-    y = y - 28
-    c.castHint:SetPoint("TOPLEFT", L1, y); c.castHint:Show()
+    cells[#cells + 1] = { label = c.castHLabel, control = c.castH, width = 64 }
+    -- The tick interval only means something while ticks are drawn
+    if ca.showTicks ~= false then
+      c.castTick:SetText(tostring(ca.tickSeconds or 1.0))
+      cells[#cells + 1] = { label = c.castTickLabel, control = c.castTick, width = 84 }
+    end
+    y = ns.FormCells(y, cells, paneW)
+
+    c.castIconChk:SetChecked(ca.showIcon ~= false)
+    c.castTimeChk:SetChecked(ca.showTime ~= false)
+    c.castTicksChk:SetChecked(ca.showTicks ~= false)
+    y = ns.FormCells(y, {
+      { control = c.castIconChk,  width = 78 },
+      { control = c.castTimeChk,  width = 104 },
+      { control = c.castTicksChk, width = 92 },
+    }, paneW)
+
+    c.castHint:ClearAllPoints()
+    c.castHint:SetPoint("TOPLEFT", 0, y); c.castHint:Show()
     y = y - 40
   elseif style == "history" then
     viewer.history = viewer.history or { iconSize = 32, spacing = 4, visible = 10,
