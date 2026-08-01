@@ -106,22 +106,3 @@ function ns.ClassResource(key)
   return nil
 end
 
--- A preset as a stack-bar config table. Pure: the caller decides what to do
--- with it.
-function ns.ClassResourceStack(entry)
-  if not entry then return nil end
-  return {
-    spellID = entry.aura,          -- a NAME: it survives Ascension's ID changes
-    maxStacks = entry.max or 3,    -- 0 = learn the ceiling (Auto max)
-    display = entry.display or "segments",
-    unit = "player",
-    onlyMine = true,
-    showCount = true,
-    color = ns.StackColorRGB[entry.color],
-    colorName = entry.color,
-    gradient = entry.gradient or nil,
-    subSpellID = entry.sub,
-    subMax = entry.subMax,
-    subDrain = entry.subDrain,
-  }
-end

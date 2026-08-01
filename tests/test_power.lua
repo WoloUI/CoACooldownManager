@@ -129,4 +129,51 @@ check("legacy combo points are not repeated under the bars above",
 check("combo points can be pinned to a chosen bar",
   opts({ showCombo1 = true }, 1, 3) == "false/true/true")
 
+--------------------------------------------------------------------------------
+-- Class resources as a power row
+--------------------------------------------------------------------------------
+-- Heat and Insanity sit in the Resource dropdown next to Mana and Rage even
+-- though no UnitPower index answers for them: the row reads the aura instead.
+stub.loadAddonFile("Data/SpellHints.lua", ns)
+
+local auras = {}
+ns.Auras = { GetAura = function(_, unit, name) return auras[name] end }
+
+check("a resource key is recognised", ns.Power.ResourceKey("res:heat") == "heat")
+check("a power index is not a resource key", ns.Power.ResourceKey(0) == nil)
+check("a stray string is not a resource key", ns.Power.ResourceKey("auto") == nil)
+
+auras["Heat"] = { count = 63 }
+local heatBar = ns.Power:GetBar("res:heat")
+check("an aura resource reads its stack count", heatBar.cur == 63)
+check("an aura resource carries the catalogue ceiling", heatBar.max == 100)
+check("an aura resource is labelled", heatBar.label == "Heat")
+check("an aura resource takes the catalogue colour",
+  heatBar.color[1] == ns.StackColorRGB.orange[1])
+check("an aura resource has no energy ticks", not heatBar.ticks)
+
+auras["Heat"] = nil
+check("a missing aura reads as empty, not as an error", ns.Power:GetBar("res:heat").cur == 0)
+
+-- Static has no fixed ceiling: it learns one from the highest value it sees,
+-- and never shrinks back down mid-session.
+auras["Static"] = { count = 12 }
+check("a ceiling-less resource learns its maximum", ns.Power:GetBar("res:static").max == 12)
+auras["Static"] = { count = 4 }
+check("the learned maximum does not shrink", ns.Power:GetBar("res:static").max == 12)
+check("the current value still tracks the aura", ns.Power:GetBar("res:static").cur == 4)
+
+check("an unknown resource key does not error",
+  ns.Power:GetBar("res:nonsense").max >= 1)
+
+-- And it has to survive the selector, not just GetBar
+powerCfg = nil
+ns.DB = { GetViewer = function(_, name) return name == "Power" and { power = powerCfg } or nil end }
+check("a resource can be picked for any row",
+  types({ bar2 = "res:heat", bar3 = "res:insanity" }) == "0/res:heat/res:insanity")
+check("the same resource twice is dropped like a repeated power type",
+  types({ bar2 = "res:heat", bar3 = "res:heat" }) == "0/res:heat/nil")
+ns.DB = nil
+ns.Auras = nil
+
 return T

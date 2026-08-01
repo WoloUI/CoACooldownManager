@@ -28,9 +28,23 @@ Power.info = {
 local SECONDARY_AUTO = { POWER_ENERGY, POWER_RUNIC, POWER_RAGE, POWER_FOCUS }
 Power._SECONDARY_AUTO = SECONDARY_AUTO -- test seam
 
+-- CoA class resources travel through the power-type code paths as the string
+-- "res:<key>". They are auras, not UnitPower indexes -- /cdm power on a
+-- Pyromancer reports nothing for Heat -- but everything ABOVE the read is the
+-- same: a row with a label, a colour, a current and a maximum. A prefixed
+-- string can never collide with a real index (always >= 0), with the health
+-- sentinel, or with "auto"/"none".
+local RESOURCE_PREFIX = "res:"
+
+function Power.ResourceKey(ptype)
+  if type(ptype) ~= "string" then return nil end
+  return ptype:match("^" .. RESOURCE_PREFIX .. "(.+)$")
+end
+
 local function ResolveBar(setting, primary, taken)
   if setting == "none" then return nil end
   if type(setting) == "number" then return setting end
+  if Power.ResourceKey(setting) then return setting end
   return nil -- "auto" is resolved by caller
 end
 
@@ -76,7 +90,38 @@ function Power:GetTypes()
   return out[1], out[2], out[3]
 end
 
+-- Learned ceilings for the resources that ship without one (Static). Session
+-- scoped on purpose:
+-- ponytail: a per-tick config write is the alternative, and a relog re-learns
+-- the ceiling within one fight. Persist it if that turns out to matter.
+local observedMax = {}
+
+function Power:GetResourceBar(key)
+  local entry = ns.ClassResource and ns.ClassResource(key)
+  if not entry then
+    return { type = RESOURCE_PREFIX .. key, cur = 0, max = 1,
+      label = key, color = { 0.6, 0.6, 0.6 } }
+  end
+  local aura = ns.Auras and ns.Auras:GetAura("player", entry.aura, false)
+  -- An aura that is up with no stack count is one stack, matching the stack bar
+  local cur = aura and math.max(aura.count or 0, 1) or 0
+  local max = entry.max or 0
+  if max <= 0 then
+    observedMax[key] = math.max(observedMax[key] or 1, cur)
+    max = observedMax[key]
+  end
+  return {
+    type = RESOURCE_PREFIX .. key,
+    cur = cur,
+    max = math.max(max, 1),
+    label = entry.label,
+    color = ns.StackColorRGB[entry.color] or { 0.6, 0.6, 0.6 },
+  }
+end
+
 function Power:GetBar(ptype)
+  local key = Power.ResourceKey(ptype)
+  if key then return self:GetResourceBar(key) end
   local info = self.info[ptype] or { label = "Power", color = { 0.6, 0.6, 0.6 } }
   local cur, max
   if ptype == POWER_HEALTH then

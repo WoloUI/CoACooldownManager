@@ -503,21 +503,6 @@ function DB:AddViewer(name, style)
   return viewer
 end
 
--- Add a bar for one of the CoA class resources (Data/SpellHints.lua). Returns
--- the EXISTING bar when there already is one: the picker is a shortcut, and a
--- shortcut that errors on the second press is a worse shortcut than none.
-function DB:AddClassResource(key)
-  local entry = ns.ClassResource and ns.ClassResource(key)
-  if not entry then return nil end
-  local existing = self:GetViewer(entry.label)
-  if existing then return existing end
-  local viewer = self:AddViewer(entry.label, "stacks")
-  if not viewer then return nil end
-  viewer.stack = ns.ClassResourceStack(entry)
-  ns:Fire("VIEWERS_CHANGED")
-  return viewer
-end
-
 function DB:DeleteViewer(name)
   if name == "Power" then return end -- root anchor is not deletable
   for i, v in ipairs(self.profile.viewers) do
