@@ -28,6 +28,31 @@ _G.__auras = {
 ns.Auras:ForceScan("player")
 ns.Auras:ForceScan("target")
 
+-- A tracked DEBUFF has to survive the same round trip a buff does, and the
+-- diagnostics have to be able to show it: /cdm debug used to list the first ten
+-- cached names with the buffs scanned first, so on a raid-buffed ally the one
+-- debuff being hunted was always past the cut.
+_G.__units.party1 = true
+_G.__auras.party1 = {
+  { name = "Blessing of Kings", filter = "HELPFUL", unitCaster = "other" },
+  { name = "Arcane Intellect", filter = "HELPFUL", unitCaster = "other" },
+  { name = "Void Shield", filter = "HARMFUL", unitCaster = "player",
+    count = 1, duration = 10, expirationTime = 10 },
+}
+ns.Auras:ForceScan("party1")
+check("a debuff lands in the cache", ns.Auras:GetAura("party1", "Void Shield") ~= nil)
+check("a debuff cast by you is yours", ns.Auras:GetAura("party1", "Void Shield").mine == true)
+check("the cache records which filter found it",
+  ns.Auras:GetAura("party1", "Void Shield").filter == "HARMFUL")
+check("every name is listed unfiltered", #ns.Auras:CachedNames("party1") == 3)
+check("debuffs can be listed on their own",
+  #ns.Auras:CachedNames("party1", "HARMFUL") == 1)
+check("and the one listed is the debuff",
+  ns.Auras:CachedNames("party1", "HARMFUL")[1]:find("Void Shield", 1, true) ~= nil)
+check("buffs can be listed on their own",
+  #ns.Auras:CachedNames("party1", "HELPFUL") == 2)
+check("an uncached unit still answers nil", ns.Auras:CachedNames("raid9") == nil)
+
 -- The cache itself, by name and case-insensitively (hand-typed names)
 local aura = ns.Auras:GetAura("player", "Oath of the Templar")
 check("aura found by exact name", aura ~= nil and aura.icon == OATH)

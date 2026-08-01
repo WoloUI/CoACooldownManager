@@ -268,15 +268,21 @@ function Tracking:Debug()
     if tracking and #tracking.indicators > 0 then ns.Auras:ForceScan(unit) end
     ns:Print(line)
     -- What the unit actually carries, so misnamed HoTs are easy to spot
-    local names = ns.Auras:CachedNames(unit)
-    if names and #names > 0 then
-      local shown = {}
-      for i = 1, math.min(#names, 10) do shown[i] = names[i] end
-      ns:Print("    auras: " .. table.concat(shown, ", ")
-        .. (#names > 10 and (" (+" .. (#names - 10) .. " more)") or ""))
-    else
-      ns:Print("    auras: none cached for this unit")
+    -- Buffs and debuffs listed SEPARATELY. One capped list scanned buffs first,
+    -- so on a raid-buffed ally the tracked debuff was always past the cut and
+    -- the output read as "that aura is not on this unit".
+    local any = false
+    for label, filter in pairs({ buffs = "HELPFUL", debuffs = "HARMFUL" }) do
+      local names = ns.Auras:CachedNames(unit, filter)
+      if names and #names > 0 then
+        any = true
+        local shown = {}
+        for i = 1, math.min(#names, 8) do shown[i] = names[i] end
+        ns:Print("    " .. label .. ": " .. table.concat(shown, ", ")
+          .. (#names > 8 and (" (+" .. (#names - 8) .. " more)") or ""))
+      end
     end
+    if not any then ns:Print("    auras: none cached for this unit") end
     -- Render diagnostic: run the real display path, then inspect the widgets so
     -- we can tell detection failures apart from pure visibility problems.
     if tracking and #tracking.indicators > 0 then
@@ -291,8 +297,8 @@ function Tracking:Debug()
         -- never matched, "mine=false" means it is someone else's cast and only
         -- the per-indicator "Any caster" option would show it
         local auraInfo = aura
-          and string.format("found mine=%s caster=%s",
-            tostring(aura.mine), tostring(aura.hasCaster))
+          and string.format("found %s mine=%s caster=%s",
+            tostring(aura.filter), tostring(aura.mine), tostring(aura.hasCaster))
           or "none"
         ns:Print(string.format("    [%s] aura=%s%s eval=%s widget=%s alpha=%.1f",
           tostring(cfg.spell), auraInfo, cfg.anyCaster and " anyCaster" or "",

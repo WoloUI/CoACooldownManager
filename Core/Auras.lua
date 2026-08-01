@@ -167,7 +167,14 @@ function Auras:Diagnose(query)
   local anyExact = false -- did ANY unit match the name as typed?
   ns:Print('aura diagnose: "' .. query .. '"')
 
-  for _, unit in ipairs({ "player", "target", "focus", "pet" }) do
+  -- Group units included: the HoT tracker draws on party and raid frames, so a
+  -- command that could only see player/target/focus/pet was blind to the case
+  -- it gets asked about most.
+  local units = { "player", "target", "focus", "pet" }
+  for i = 1, 4 do units[#units + 1] = "party" .. i end
+  for i = 1, 40 do units[#units + 1] = "raid" .. i end
+
+  for _, unit in ipairs(units) do
     if UnitExists(unit) then
       local store = cache[unit]
       if not store then
@@ -257,12 +264,20 @@ function Auras:ForceScan(unit)
 end
 
 -- Debug helper: cached aura names on the unit ("*" = cast by the player)
-function Auras:CachedNames(unit)
+-- Cached aura names, optionally only those found by one filter.
+--
+-- The filter argument exists for the diagnostics: the listing is capped, buffs
+-- are scanned first, and a raid-buffed ally carries twenty of them -- so the one
+-- debuff being hunted was always past the cut, and the tool said "not there"
+-- about an aura that was.
+function Auras:CachedNames(unit, filter)
   local store = cache[unit]
   if not store then return nil end
   local names = {}
   for name, aura in pairs(store.byName) do
-    names[#names + 1] = name .. (aura.mine and "*" or "")
+    if not filter or aura.filter == filter then
+      names[#names + 1] = name .. (aura.mine and "*" or "")
+    end
   end
   table.sort(names)
   return names
