@@ -172,4 +172,21 @@ check("a cursor below the list clamps to the count", ns.DropIndex(500, 24, 5, 0)
 check("an empty list drops at 1", ns.DropIndex(500, 24, 0, 400) == 1)
 check("a zero row height cannot divide by zero", ns.DropIndex(500, 0, 5, 400) == 1)
 
+--------------------------------------------------------------------------------
+-- Cast bar: what a STOP / FAILED / INTERRUPTED event should do
+--------------------------------------------------------------------------------
+-- UNIT_SPELLCAST_FAILED carries no promise that it is about the spell on the
+-- bar: spamming a button during a channel fires it for the REFUSED spell while
+-- the channel keeps running. Clearing on it blanked the bar mid-channel (Dark
+-- Veil). The client is the authority -- if it still reports something in
+-- progress, the bar stays.
+local Verdict = ns.CastBar.StopVerdict
+check("a finished cast clears", Verdict(true, false, false) == "clear")
+check("a real interrupt flashes red", Verdict(true, true, false) == "flash")
+check("a refused spell during a channel keeps the bar", Verdict(true, true, true) == "keep")
+check("a stop event during a live cast keeps the bar", Verdict(true, false, true) == "keep")
+check("an event with no cast on the bar clears", Verdict(false, true, false) == "clear")
+check("an event with no cast on the bar clears even mid-cast",
+  Verdict(false, false, true) == "clear")
+
 return T

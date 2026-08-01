@@ -462,9 +462,23 @@ function Config:BuildControls()
       return
     end
     local anchor = ns.CopyTable(ns.DB:GetAnchor(viewer))
+    local wasFree = (anchor.parent or "FREE") == "FREE"
+    if value == "FREE" and not wasFree then
+      -- Detach in place. The stored x/y are an offset from the PARENT, so they
+      -- mean nothing against the screen: read where the bar sits right now and
+      -- keep it there, rather than teleporting it to the middle.
+      anchor.point, anchor.relPoint = "CENTER", "CENTER"
+      local x, y = ns.ScreenOffset(ns.Viewer:GetFrame(viewer.name))
+      if x then anchor.x, anchor.y = x, y end
+    elseif value ~= "FREE" and wasFree then
+      -- A free bar carries CENTER/CENTER, which against a parent would stack it
+      -- ON the parent. Attach with the pair the Side dropdown shows by default.
+      anchor.point, anchor.relPoint, anchor.x, anchor.y = "BOTTOM", "TOP", 0, 6
+    end
     anchor.parent = value
     ns.DB:SetAnchor(viewer, anchor)
     Touch()
+    Config:Render()
   end)
   c.anchorPosLabel = W.CreateLabel(parent, "Side", 12, W.colors.inkDim)
   c.anchorPos = W.CreateDropdown(parent, 130, function(_, value)

@@ -370,8 +370,26 @@ local function ReadCast()
   end
 end
 
+-- What a STOP / FAILED / INTERRUPTED event should do to the bar (pure seam).
+--
+-- None of those events promise to be about the spell ON the bar. Pressing a
+-- button that the client refuses fires UNIT_SPELLCAST_FAILED for the REFUSED
+-- spell, and during a channel that is exactly what a player spamming their
+-- rotation does -- which blanked the bar while the channel kept running (Dark
+-- Veil). The client is the authority: if it still reports a cast or a channel,
+-- the bar stays and re-reads it.
+function CastBar.StopVerdict(active, interrupted, stillCasting)
+  if not active then return "clear" end
+  if stillCasting then return "keep" end
+  return interrupted and "flash" or "clear"
+end
+
 local function ClearCast(interrupted)
-  if interrupted and castState.active then
+  local stillCasting = (UnitCastingInfo("player") or UnitChannelInfo("player")) and true or false
+  local verdict = CastBar.StopVerdict(castState.active, interrupted, stillCasting)
+  if verdict == "keep" then
+    ReadCast()
+  elseif verdict == "flash" then
     -- Brief red flash so an interrupt/failure reads clearly
     castState.interrupted = true
     castState.endTime = GetTime() + 0.25

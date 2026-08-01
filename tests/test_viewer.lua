@@ -447,6 +447,35 @@ local selfRef = { name = "S", style = "bars", barWidth = 250, widthMode = "match
 Viewers({ selfRef })
 check("a bar following itself falls back", ns.ResolveWidth(selfRef, 250) == 250)
 
+--------------------------------------------------------------------------------
+-- Anchor points: a detached bar is measured from the screen centre
+--------------------------------------------------------------------------------
+-- The bug: switching "Attach to" to Screen (free) only rewrote anchor.parent,
+-- so a bar that had been anchored above another one kept point=BOTTOM /
+-- relPoint=TOP and got pinned to the TOP EDGE of the screen -- off-view, with
+-- the Side dropdown hidden in free mode so there was no way back.
+local function points(anchor, hasParent)
+  local p, rp = ns.ResolveAnchorPoints(anchor, hasParent)
+  return p .. "/" .. rp
+end
+
+check("a free bar with parented leftovers centres itself",
+  points({ point = "BOTTOM", relPoint = "TOP" }, false) == "CENTER/CENTER")
+check("a free bar left of centre still centres itself",
+  points({ point = "RIGHT", relPoint = "LEFT" }, false) == "CENTER/CENTER")
+check("a free bar with nothing stored centres itself",
+  points({}, false) == "CENTER/CENTER")
+check("an anchored bar keeps its stored pair",
+  points({ point = "BOTTOM", relPoint = "TOP" }, true) == "BOTTOM/TOP")
+check("an anchored bar keeps a sideways pair",
+  points({ point = "LEFT", relPoint = "RIGHT" }, true) == "LEFT/RIGHT")
+check("an anchored bar with nothing stored sits above its parent",
+  points({}, true) == "BOTTOM/TOP")
+-- CENTER/CENTER is what a free bar carries, and stacking a newly attached bar
+-- ON TOP of its parent is never what "Attach to" means.
+check("an anchored bar never inherits the free pair",
+  points({ point = "CENTER", relPoint = "CENTER" }, true) == "BOTTOM/TOP")
+
 ns.DB = nil
 
 return T

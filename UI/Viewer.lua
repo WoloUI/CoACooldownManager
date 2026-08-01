@@ -47,12 +47,37 @@ end
 --------------------------------------------------------------------------------
 -- Anchors
 --------------------------------------------------------------------------------
+-- The point pair a bar anchors with. A free bar is positioned ON THE SCREEN,
+-- and a screen position is always measured from the centre: the stored pair
+-- describes a relationship to a PARENT bar and means something else entirely
+-- against UIParent. Detaching a bar anchored above another one used to keep
+-- point=BOTTOM/relPoint=TOP, which pinned it to the top EDGE of the screen --
+-- out of view at any x/y, including 0,0, with the Side dropdown hidden in free
+-- mode so there was no way back. The reverse holds too: CENTER/CENTER against a
+-- parent stacks the bar on top of it, so attaching resets to the "above" pair.
+function ns.ResolveAnchorPoints(anchor, hasParent)
+  if not hasParent then return "CENTER", "CENTER" end
+  local point, relPoint = anchor.point, anchor.relPoint
+  if not point or not relPoint or relPoint == "CENTER" then return "BOTTOM", "TOP" end
+  return point, relPoint
+end
+
+-- Where a frame's centre sits relative to the screen centre -- the x/y a free
+-- anchor needs to leave a bar exactly where it already is.
+function ns.ScreenOffset(frame)
+  if not frame or not frame.GetCenter then return nil end
+  local cx, cy = frame:GetCenter()
+  local px, py = UIParent:GetCenter()
+  if not cx or not px then return nil end
+  return cx - px, cy - py
+end
+
 local function ApplyAnchor(frame, cfg, resolving)
   local anchor = ns.DB:GetAnchor(cfg)
   frame:ClearAllPoints()
   if anchor.parent == "FREE" or not anchor.parent then
-    frame:SetPoint(anchor.point or "CENTER", UIParent, anchor.relPoint or anchor.point or "CENTER",
-      anchor.x or 0, anchor.y or 0)
+    local point, relPoint = ns.ResolveAnchorPoints(anchor, false)
+    frame:SetPoint(point, UIParent, relPoint, anchor.x or 0, anchor.y or 0)
     return
   end
   local parentCfg = ns.DB:GetViewer(anchor.parent)
@@ -62,8 +87,8 @@ local function ApplyAnchor(frame, cfg, resolving)
     frame:SetPoint("CENTER", UIParent, "CENTER", anchor.x or 0, anchor.y or 0)
     return
   end
-  frame:SetPoint(anchor.point or "BOTTOM", parentFrame, anchor.relPoint or "TOP",
-    anchor.x or 0, anchor.y or 0)
+  local point, relPoint = ns.ResolveAnchorPoints(anchor, true)
+  frame:SetPoint(point, parentFrame, relPoint, anchor.x or 0, anchor.y or 0)
 end
 
 -- Layer all bars at the configured strata so the user can push them behind
