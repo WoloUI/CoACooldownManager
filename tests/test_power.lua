@@ -62,4 +62,38 @@ check("the health condition reads UnitHealth", hpCur == 50 and hpMax == 100)
 local manaCur, manaMax = ctx.power(0)
 check("a real power type still reads UnitPower", manaCur == 40 and manaMax == 100)
 
+--------------------------------------------------------------------------------
+-- Three resource slots
+--------------------------------------------------------------------------------
+-- A Pyromancer runs Mana + Heat + Ember, so two rows is one short. The stub
+-- answers UnitPowerType 0 (mana) and a max of 100 for every type, which is
+-- exactly the "everything is available" case the auto picker has to order.
+local powerCfg
+ns.DB = { GetViewer = function(_, name) return name == "Power" and { power = powerCfg } or nil end }
+
+local function types(cfg)
+  powerCfg = cfg
+  local a, b, c = ns.Power:GetTypes()
+  return tostring(a) .. "/" .. tostring(b) .. "/" .. tostring(c)
+end
+
+-- Bar 3 is off unless asked for. Bars 1 and 2 auto-detect because nearly every
+-- spec has two resources; a third is the exception, and defaulting it to auto
+-- would hand a surprise row to every existing profile on upgrade.
+check("a fresh config shows two bars, not three",
+  types({}) == "0/3/nil")
+check("bar 3 auto-detects once it is asked to",
+  types({ bar3 = "auto" }) == "0/3/6")
+check("explicit picks are honoured in every slot",
+  types({ bar1 = 1, bar2 = 3, bar3 = 6 }) == "1/3/6")
+check("none silences a middle bar without shifting the third",
+  types({ bar2 = "none", bar3 = 6 }) == "0/nil/6")
+check("a duplicate of an earlier bar is dropped",
+  types({ bar2 = 0, bar3 = 3 }) == "0/nil/3")
+-- Bar 1 has always fallen back to the primary rather than going blank: an
+-- empty root bar is unrecoverable in edit mode.
+check("bar 1 keeps falling back to the primary",
+  types({ bar1 = "none" }) == "0/3/nil")
+ns.DB = nil
+
 return T

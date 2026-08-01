@@ -653,31 +653,25 @@ function Config:BuildControls()
   end)
   c.visibility:SetOptions(VISIBILITY_OPTIONS)
 
-  -- Power options
-  c.bar1Label = W.CreateLabel(parent, "Bar 1", 12, W.colors.inkDim)
-  c.powerBar1 = W.CreateDropdown(parent, 110, function(_, value)
-    SelectedViewer().power.bar1 = value
-    Touch()
-  end)
-  c.powerBar1:SetOptions(POWER_TYPE_OPTIONS)
-  c.bar2Label = W.CreateLabel(parent, "Bar 2", 12, W.colors.inkDim)
-  c.powerBar2 = W.CreateDropdown(parent, 110, function(_, value)
-    SelectedViewer().power.bar2 = value
-    Touch()
-  end)
-  c.powerBar2:SetOptions(POWER_TYPE_OPTIONS)
-  c.text1Label = W.CreateLabel(parent, "Text 1", 12, W.colors.inkDim)
-  c.powerText1 = W.CreateDropdown(parent, 110, function(_, value)
-    SelectedViewer().power.text1 = value
-    Touch()
-  end)
-  c.powerText1:SetOptions(POWER_TEXT_OPTIONS)
-  c.text2Label = W.CreateLabel(parent, "Text 2", 12, W.colors.inkDim)
-  c.powerText2 = W.CreateDropdown(parent, 110, function(_, value)
-    SelectedViewer().power.text2 = value
-    Touch()
-  end)
-  c.powerText2:SetOptions(POWER_TEXT_OPTIONS)
+  -- Power options. One group per resource row: the three of them used to run
+  -- together on one line, which read as a single setting with numbered
+  -- variants rather than as three independent bars.
+  for i = 1, 3 do
+    c["powerHead" .. i] = W.CreateSectionHeader(parent, "BAR " .. i)
+    c["bar" .. i .. "Label"] = W.CreateLabel(parent, "Resource", 12, W.colors.inkDim)
+    c["powerBar" .. i] = W.CreateDropdown(parent, 110, function(_, value)
+      SelectedViewer().power["bar" .. i] = value
+      Touch()
+      Config:Render() -- a silenced bar drops its own text and colour cells
+    end)
+    c["powerBar" .. i]:SetOptions(POWER_TYPE_OPTIONS)
+    c["text" .. i .. "Label"] = W.CreateLabel(parent, "Text", 12, W.colors.inkDim)
+    c["powerText" .. i] = W.CreateDropdown(parent, 110, function(_, value)
+      SelectedViewer().power["text" .. i] = value
+      Touch()
+    end)
+    c["powerText" .. i]:SetOptions(POWER_TEXT_OPTIONS)
+  end
   c.powerWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
   c.powerW = W.CreateEditBox(parent, 46, 20, function(_, text)
     SelectedViewer().power.width = tonumber(text) or 340
@@ -695,26 +689,18 @@ function Config:BuildControls()
     SelectedViewer().power.showLabel = checked
     Touch()
   end)
-  c.color1Label = W.CreateLabel(parent, "Color 1", 12, W.colors.inkDim)
-  c.color1 = W.CreateColorSwatch(parent, function(_, color)
-    SelectedViewer().power.color1 = color
-    Touch()
-  end)
-  c.color1Reset = W.CreateButton(parent, "Auto", 44, 20, function()
-    SelectedViewer().power.color1 = nil
-    Touch()
-    Config:Render()
-  end)
-  c.color2Label = W.CreateLabel(parent, "Color 2", 12, W.colors.inkDim)
-  c.color2 = W.CreateColorSwatch(parent, function(_, color)
-    SelectedViewer().power.color2 = color
-    Touch()
-  end)
-  c.color2Reset = W.CreateButton(parent, "Auto", 44, 20, function()
-    SelectedViewer().power.color2 = nil
-    Touch()
-    Config:Render()
-  end)
+  for i = 1, 3 do
+    c["color" .. i .. "Label"] = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
+    c["color" .. i] = W.CreateColorSwatch(parent, function(_, color)
+      SelectedViewer().power["color" .. i] = color
+      Touch()
+    end)
+    c["color" .. i .. "Reset"] = W.CreateButton(parent, "Auto", 44, 20, function()
+      SelectedViewer().power["color" .. i] = nil
+      Touch()
+      Config:Render()
+    end)
+  end
 
   -- General (appearance) tab
   local function AppearanceCfg()
@@ -979,15 +965,21 @@ function Config:BuildControls()
     { text = "Target", value = "target" },
   })
 
-  -- Power bar heights
-  c.powerHLabel = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
-  c.powerH = W.CreateEditBox(parent, 40, 20, function(_, text)
+  -- Power bar heights, one per group. Bar 2 keeps the `subHeight` key every
+  -- saved profile already carries; only the label moved into its group.
+  c.powerH1Label = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
+  c.powerH1 = W.CreateEditBox(parent, 40, 20, function(_, text)
     SelectedViewer().power.height = tonumber(text) or 26
     Touch()
   end, "26")
-  c.powerSubHLabel = W.CreateLabel(parent, "Bar 2 height", 12, W.colors.inkDim)
-  c.powerSubH = W.CreateEditBox(parent, 40, 20, function(_, text)
+  c.powerH2Label = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
+  c.powerH2 = W.CreateEditBox(parent, 40, 20, function(_, text)
     SelectedViewer().power.subHeight = tonumber(text) or 18
+    Touch()
+  end, "18")
+  c.powerH3Label = W.CreateLabel(parent, "Height", 12, W.colors.inkDim)
+  c.powerH3 = W.CreateEditBox(parent, 40, 20, function(_, text)
+    SelectedViewer().power.height3 = tonumber(text) or 18
     Touch()
   end, "18")
 
@@ -3009,26 +3001,13 @@ function Config:Render()
   y = y - c.lookHeader.COST
 
   if style == "power" then
-    local type1, type2 = ns.Power:GetTypes()
-    c.powerBar1:SetValue(viewer.power.bar1 or "auto")
-    c.powerBar2:SetValue(viewer.power.bar2 or "auto")
-    c.powerText1:SetValue(viewer.power.text1 or "curmax")
-    c.powerH:SetText(tostring(viewer.power.height or 26))
-    c.powerSubH:SetText(tostring(viewer.power.subHeight or 18))
+    local types = {}
+    types[1], types[2], types[3] = ns.Power:GetTypes()
 
-    -- Bar 2's selector always shows -- it is how you force or silence a second
-    -- resource. Its text and colour only exist once one is actually active.
-    local cells = {
-      { label = c.bar1Label,  control = c.powerBar1,  width = 118 },
-      { label = c.text1Label, control = c.powerText1, width = 118 },
-      { label = c.bar2Label,  control = c.powerBar2,  width = 118 },
-    }
-    if type2 then
-      c.powerText2:SetValue(viewer.power.text2 or "curmax")
-      cells[#cells + 1] = { label = c.text2Label, control = c.powerText2, width = 118 }
-    end
+    -- Width first: it belongs to the whole bar, not to any one resource, so it
+    -- sits above the per-bar groups rather than trailing the last of them.
     c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
-    cells[#cells + 1] = { label = c.widthModeLabel, control = c.widthMode, width = 118 }
+    local cells = { { label = c.widthModeLabel, control = c.widthMode, width = 118 } }
     if viewer.widthMode == "match" then
       -- The Width box is meaningless while the bar follows another one
       AppendWidthSourceCells(c, viewer, cells)
@@ -3036,24 +3015,48 @@ function Config:Render()
       c.powerW:SetText(tostring(viewer.power.width or 340))
       cells[#cells + 1] = { label = c.powerWLabel, control = c.powerW, width = 64 }
     end
-    cells[#cells + 1] = { label = c.powerHLabel,    control = c.powerH,    width = 64 }
-    cells[#cells + 1] = { label = c.powerSubHLabel, control = c.powerSubH, width = 64 }
     y = ns.FormCells(y, cells, paneW)
 
-    -- Swatches keep a row of their own: a swatch plus its reset button is a
-    -- compound control, and forcing it into a one-control cell would read worse
-    -- than the exception does.
-    c.color1Label:ClearAllPoints(); c.color1Label:SetPoint("TOPLEFT", 0, y); c.color1Label:Show()
-    c.color1:ClearAllPoints(); c.color1:SetPoint("TOPLEFT", 96, y + 2)
-    c.color1:SetColor(viewer.power.color1 or ns.Power:GetBar(type1).color); c.color1:Show()
-    c.color1Reset:ClearAllPoints(); c.color1Reset:SetPoint("TOPLEFT", 122, y + 2); c.color1Reset:Show()
-    if type2 then
-      c.color2Label:ClearAllPoints(); c.color2Label:SetPoint("TOPLEFT", 220, y); c.color2Label:Show()
-      c.color2:ClearAllPoints(); c.color2:SetPoint("TOPLEFT", 316, y + 2)
-      c.color2:SetColor(viewer.power.color2 or ns.Power:GetBar(type2).color); c.color2:Show()
-      c.color2Reset:ClearAllPoints(); c.color2Reset:SetPoint("TOPLEFT", 342, y + 2); c.color2Reset:Show()
+    -- One group per resource row. Every selector shows -- that is how a bar is
+    -- forced or silenced -- but a silenced bar's text, height and colour do
+    -- not, since they describe something that is not on screen.
+    local heights = ns.PowerBarHeights(viewer.power)
+    for i = 1, 3 do
+      local head = c["powerHead" .. i]
+      head:SetPoint("TOPLEFT", 0, y - head.LEAD)
+      head:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+      head:Show()
+      y = y - head.COST
+
+      -- Bar 3 reads None until it is picked, matching Power:GetTypes
+      c["powerBar" .. i]:SetValue(viewer.power["bar" .. i] or (i == 3 and "none" or "auto"))
+      local barCells = {
+        { label = c["bar" .. i .. "Label"], control = c["powerBar" .. i], width = 118 },
+      }
+      if types[i] then
+        c["powerText" .. i]:SetValue(viewer.power["text" .. i] or "curmax")
+        c["powerH" .. i]:SetText(tostring(heights[i]))
+        barCells[#barCells + 1] =
+          { label = c["text" .. i .. "Label"], control = c["powerText" .. i], width = 118 }
+        barCells[#barCells + 1] =
+          { label = c["powerH" .. i .. "Label"], control = c["powerH" .. i], width = 64 }
+      end
+      y = ns.FormCells(y, barCells, paneW)
+
+      -- Swatches keep a row of their own: a swatch plus its reset button is a
+      -- compound control, and forcing it into a one-control cell would read
+      -- worse than the exception does.
+      if types[i] then
+        local label, swatch, reset =
+          c["color" .. i .. "Label"], c["color" .. i], c["color" .. i .. "Reset"]
+        label:ClearAllPoints(); label:SetPoint("TOPLEFT", 0, y); label:Show()
+        swatch:ClearAllPoints(); swatch:SetPoint("TOPLEFT", 96, y + 2)
+        swatch:SetColor(viewer.power["color" .. i] or ns.Power:GetBar(types[i]).color)
+        swatch:Show()
+        reset:ClearAllPoints(); reset:SetPoint("TOPLEFT", 122, y + 2); reset:Show()
+        y = y - 30
+      end
     end
-    y = y - 30
 
     c.ticks:SetChecked(viewer.power.showTicks)
     c.combo:SetChecked(viewer.power.showCombo)

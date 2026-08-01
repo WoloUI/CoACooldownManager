@@ -34,24 +34,46 @@ local function ResolveBar(setting, primary, taken)
   return nil -- "auto" is resolved by caller
 end
 
--- Returns up to two power types to display, honoring config overrides.
+local BAR_KEYS = { "bar1", "bar2", "bar3" }
+
+-- Returns up to THREE power types to display, honoring config overrides. Two
+-- was one short: a Pyromancer runs Mana + Heat + Ember, and a resource that has
+-- no row of its own is a resource the player has to track somewhere else.
+--
+-- Bar 1 falls back to the primary even when set to "none" -- it always has,
+-- and a root bar with nothing in it is not grabbable in edit mode.
 function Power:GetTypes()
   local cfg = ns.DB:GetViewer("Power")
   local pcfg = cfg and cfg.power or {}
   local primary = UnitPowerType("player")
 
-  local bar1 = ResolveBar(pcfg.bar1) or primary
-  local bar2 = ResolveBar(pcfg.bar2)
-  if bar2 == nil and pcfg.bar2 ~= "none" then -- auto
-    for _, ptype in ipairs(SECONDARY_AUTO) do
-      if ptype ~= bar1 and UnitPowerMax("player", ptype) > 0 then
-        bar2 = ptype
-        break
+  local out, taken = {}, {}
+  for i, key in ipairs(BAR_KEYS) do
+    local setting = pcfg[key]
+    -- Bars 1 and 2 auto-detect, bar 3 stays off until it is picked: a third
+    -- resource is the exception, and defaulting it to auto would grow a row on
+    -- every profile that upgrades into this version.
+    if i == 3 and setting == nil then setting = "none" end
+    local ptype = ResolveBar(setting)
+    if ptype == nil and setting ~= "none" then -- auto
+      if i == 1 then
+        ptype = primary
+      else
+        for _, candidate in ipairs(SECONDARY_AUTO) do
+          if not taken[candidate] and UnitPowerMax("player", candidate) > 0 then
+            ptype = candidate
+            break
+          end
+        end
       end
     end
+    if i == 1 and ptype == nil then ptype = primary end
+    -- The same resource twice is two copies of one bar, never what was meant
+    if ptype ~= nil and taken[ptype] then ptype = nil end
+    if ptype ~= nil then taken[ptype] = true end
+    out[i] = ptype
   end
-  if bar2 == bar1 then bar2 = nil end
-  return bar1, bar2
+  return out[1], out[2], out[3]
 end
 
 function Power:GetBar(ptype)
@@ -74,6 +96,34 @@ end
 
 function Power:GetComboPoints()
   return GetComboPoints("player", "target") or 0
+end
+
+-- /cdm power: every power index the client answers for, with what it holds
+-- right now. The only way to find out whether a CoA resource -- a Pyromancer's
+-- Heat and Ember, a Cultist's Insanity -- is a real UnitPower index (so a Power
+-- bar row can show it) or an aura the stack bar has to read instead. Cannot be
+-- checked offline: the stub answers for every index.
+local POWER_SCAN_MAX = 12
+function Power:Diagnose()
+  ns:Print(("primary power type: %s (%s)"):format(
+    tostring(UnitPowerType("player")),
+    (self.info[UnitPowerType("player")] or {}).label or "unnamed"))
+  local found = 0
+  for ptype = 0, POWER_SCAN_MAX do
+    local max = UnitPowerMax("player", ptype) or 0
+    if max > 0 then
+      found = found + 1
+      local known = self.info[ptype]
+      ns:Print(("  index %d: %d / %d  %s"):format(
+        ptype, UnitPower("player", ptype) or 0, max,
+        known and known.label or "|cffffd100unnamed - candidate custom resource|r"))
+    end
+  end
+  if found == 0 then
+    ns:Print("no power index reported a maximum above 0.")
+  end
+  ns:Print("indexes listed as 'unnamed' can go straight in a Power bar row; "
+    .. "a resource that does NOT appear here is an aura, and belongs on a stack bar.")
 end
 
 --------------------------------------------------------------------------------

@@ -73,32 +73,40 @@ end
 --------------------------------------------------------------------------------
 -- Style interface
 --------------------------------------------------------------------------------
+local BARS = { "bar1", "bar2", "bar3" }
+local BAR_GAP = 3
+
+-- Per-bar height. Bar 2's key stays `subHeight` -- it is what every saved
+-- profile already carries -- and bar 3 defaults to whatever bar 2 uses, so a
+-- third resource appears matching the second rather than at some other size.
+function ns.PowerBarHeights(p)
+  local sub = p.subHeight or 18
+  return { p.height or 26, sub, p.height3 or sub }
+end
+
 function PowerBar:Build(frame, cfg)
   if not frame.bar1 then
     frame.bar1 = CreateResourceBar(frame)
     frame.bar2 = CreateResourceBar(frame)
+    frame.bar3 = CreateResourceBar(frame)
     frame.combo = CreateComboRow(frame)
   end
   local p = cfg.power
   local width = ns.ResolveWidth(cfg, p.width or 340)
-  local h1, h2 = p.height or 26, p.subHeight or 18
+  local heights = ns.PowerBarHeights(p)
 
-  frame.bar1:SetSize(width, h1)
-  frame.bar1:ClearAllPoints()
-  frame.bar1:SetPoint("TOP", frame, "TOP", 0, 0)
-
-  frame.bar2:SetSize(width, h2)
-  frame.bar2:ClearAllPoints()
-  frame.bar2:SetPoint("TOP", frame.bar1, "BOTTOM", 0, -3)
-
-  frame.combo:ClearAllPoints()
-
+  -- Sizes here, positions in Update: which bars are stacked depends on which
+  -- resources are live, and only Update knows that.
   local font = ns.GetFont()
   local texture = ns.GetTexture()
-  frame.bar1.bar:SetStatusBarTexture(texture)
-  frame.bar2.bar:SetStatusBarTexture(texture)
-  frame.bar1.text:SetFont(font, ns.FontSize(p.fontSize or 12), "OUTLINE")
-  frame.bar2.text:SetFont(font, ns.FontSize(math.max((p.fontSize or 12) - 1, 8)), "OUTLINE")
+  local base = p.fontSize or 12
+  for i, key in ipairs(BARS) do
+    local holder = frame[key]
+    holder:SetSize(width, heights[i])
+    holder.bar:SetStatusBarTexture(texture)
+    holder.text:SetFont(font, ns.FontSize(i == 1 and base or math.max(base - 1, 8)), "OUTLINE")
+  end
+  frame.combo:ClearAllPoints()
 end
 
 local function UpdateResourceBar(holder, data, showTicks, colorOverride, showLabel, textMode)
@@ -116,21 +124,36 @@ end
 
 function PowerBar:Update(frame, cfg)
   local p = cfg.power
-  local type1, type2 = ns.Power:GetTypes()
+  -- Held by index, not unpacked: a silenced middle bar leaves a nil that would
+  -- truncate any ipairs walk over the results.
+  local types = {}
+  types[1], types[2], types[3] = ns.Power:GetTypes()
   local showLabel = p.showLabel ~= false
-  local height = 0
+  local heights = ns.PowerBarHeights(p)
+  local colors = { p.color1, p.color2, p.color3 }
+  local texts = { p.text1, p.text2, p.text3 }
+  local height, lastBar = 0, nil
 
-  UpdateResourceBar(frame.bar1, ns.Power:GetBar(type1), p.showTicks, p.color1, showLabel, p.text1)
-  height = height + (p.height or 26)
-
-  if type2 then
-    frame.bar2:Show()
-    UpdateResourceBar(frame.bar2, ns.Power:GetBar(type2), p.showTicks, p.color2, showLabel, p.text2)
-    height = height + 3 + (p.subHeight or 18)
-  else
-    frame.bar2:Hide()
+  for i, key in ipairs(BARS) do
+    local holder = frame[key]
+    local ptype = types[i]
+    if ptype then
+      holder:Show()
+      holder:ClearAllPoints()
+      if lastBar then
+        holder:SetPoint("TOP", lastBar, "BOTTOM", 0, -BAR_GAP)
+        height = height + BAR_GAP
+      else
+        holder:SetPoint("TOP", frame, "TOP", 0, 0)
+      end
+      UpdateResourceBar(holder, ns.Power:GetBar(ptype), p.showTicks, colors[i], showLabel, texts[i])
+      height = height + heights[i]
+      lastBar = holder
+    else
+      holder:Hide()
+    end
   end
-  local lastBar = type2 and frame.bar2 or frame.bar1
+  lastBar = lastBar or frame.bar1
 
   -- Combo points
   local combo = p.showCombo and ns.Power:GetComboPoints() or 0
