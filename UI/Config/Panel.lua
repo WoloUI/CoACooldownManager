@@ -270,6 +270,21 @@ end
 --------------------------------------------------------------------------------
 local controls = {}
 
+local SCALE_STEP = 0.1
+
+-- The config window's own scale, applied and persisted in one place: the title
+-- bar buttons and /cdm scale both come through here. Safe before the window
+-- exists, which is what makes /cdm scale a way out of a bad value.
+function ns.SetPanelScale(value)
+  local scale = ns.Widgets.SetUIScale(value)
+  local store = ns.DB and ns.DB.db and ns.DB.db.global and ns.DB.db.global.configWindow
+  if store then store.scale = scale end
+  if win and win.scaleValue then
+    win.scaleValue:SetText(math.floor(scale * 100 + 0.5) .. "%")
+  end
+  return scale
+end
+
 local function BuildWindow()
   W = ns.Widgets
   -- The minimum width stays at the shipped 780: the content pane is a grid at
@@ -295,20 +310,26 @@ local function BuildWindow()
 
   -- Window scale, top right. The game's UI Scale drives this window like every
   -- other frame, and at the 0.53 a lot of players run it comes out unreadable,
-  -- so it carries its own multiplier on top.
+  -- so it carries its own multiplier on top. Stepped buttons rather than a
+  -- slider: see the note in Widgets.lua for why a slider cannot live inside the
+  -- frame it scales.
+  win.scaleReset = W.CreateButton(win.titleBar, "Reset", 40, 18, function()
+    ns.SetPanelScale(1)
+  end)
+  win.scaleReset:SetPoint("RIGHT", win.close, "LEFT", -6, 0)
+  win.scaleUp = W.CreateButton(win.titleBar, "+", 18, 18, function()
+    ns.SetPanelScale(W.uiScale + SCALE_STEP)
+  end)
+  win.scaleUp:SetPoint("RIGHT", win.scaleReset, "LEFT", -4, 0)
   win.scaleValue = W.CreateLabel(win.titleBar, "100%", 11, W.colors.inkDim)
-  win.scaleValue:SetPoint("RIGHT", win.close, "LEFT", -8, 0)
-  win.scaleSlider = W.CreateSlider(win.titleBar, 76, ns.SCALE_MIN, ns.SCALE_MAX, 0.05,
-    function(_, value)
-      local scale = W.SetUIScale(value)
-      ns.DB.db.global.configWindow.scale = scale
-      win.scaleValue:SetText(math.floor(scale * 100 + 0.5) .. "%")
-    end)
-  win.scaleSlider:SetPoint("RIGHT", win.scaleValue, "LEFT", -6, 0)
-  win.scaleSlider:SetValueSilently(W.uiScale)
-  win.scaleValue:SetText(math.floor(W.uiScale * 100 + 0.5) .. "%")
+  win.scaleValue:SetPoint("RIGHT", win.scaleUp, "LEFT", -6, 0)
+  win.scaleDown = W.CreateButton(win.titleBar, "-", 18, 18, function()
+    ns.SetPanelScale(W.uiScale - SCALE_STEP)
+  end)
+  win.scaleDown:SetPoint("RIGHT", win.scaleValue, "LEFT", -6, 0)
   win.scaleLabel = W.CreateLabel(win.titleBar, "Scale", 11, W.colors.inkDim)
-  win.scaleLabel:SetPoint("RIGHT", win.scaleSlider, "LEFT", -6, 0)
+  win.scaleLabel:SetPoint("RIGHT", win.scaleDown, "LEFT", -6, 0)
+  ns.SetPanelScale(W.uiScale)
 
   win.profileLabel = W.CreateLabel(win.titleBar, "", 11, W.colors.inkDim)
   win.profileLabel:SetPoint("RIGHT", win.scaleLabel, "LEFT", -12, 0)

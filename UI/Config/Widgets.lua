@@ -401,41 +401,10 @@ function W.SetUIScale(scale)
   return W.uiScale
 end
 
--- A slider on the native Slider widget: the drag, the stepping and the
--- min/max clamping are the client's, only the skin is ours.
-function W.CreateSlider(parent, width, minValue, maxValue, step, onChange)
-  local slider = CreateFrame("Slider", nil, parent)
-  slider:SetOrientation("HORIZONTAL")
-  slider:SetSize(width, 12)
-  slider:SetMinMaxValues(minValue, maxValue)
-  slider:SetValueStep(step)
-  if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-
-  local groove = slider:CreateTexture(nil, "BACKGROUND")
-  groove:SetTexture("Interface\\Buttons\\WHITE8X8")
-  groove:SetVertexColor(COLORS.panel2[1], COLORS.panel2[2], COLORS.panel2[3], 1)
-  groove:SetHeight(3)
-  groove:SetPoint("LEFT")
-  groove:SetPoint("RIGHT")
-
-  local thumb = slider:CreateTexture(nil, "OVERLAY")
-  thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
-  thumb:SetSize(6, 12)
-  thumb:SetVertexColor(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], 1)
-  slider:SetThumbTexture(thumb)
-
-  slider:SetScript("OnValueChanged", function(self, value)
-    -- Guard the round trip: SetValue inside the handler would re-enter it.
-    if self.settingValue then return end
-    if onChange then onChange(self, value) end
-  end)
-  function slider:SetValueSilently(value)
-    self.settingValue = true
-    self:SetValue(value)
-    self.settingValue = false
-  end
-  return slider
-end
+-- No slider drives this. A slider that lives inside the frame it scales is a
+-- feedback loop: every step of the drag resizes the window under the cursor,
+-- which moves the thumb, which reads as another drag step -- the value runs
+-- away to one end and will not come back. Stepped buttons have no such loop.
 
 function W.CreateWindow(name, width, height, titleText, opts)
   local win = CreateFrame("Frame", name, UIParent)

@@ -1524,6 +1524,18 @@ SlashCmdList["COACDM"] = function(input)
     ns.Cooldowns:DiagnoseGCD()
   elseif msg == "power" then
     ns.Power:Diagnose()
+  elseif msg == "scale" then
+    -- The way back from a config window scaled too small to use, without
+    -- hand-editing SavedVariables.
+    if arg == "" then
+      ns:Print(("config window scale: %d%%  (/cdm scale <40-300> to change, "
+        .. "/cdm scale reset for 100%%)"):format(math.floor((ns.Widgets.uiScale or 1) * 100 + 0.5)))
+    else
+      local value = arg == "reset" and 1 or (tonumber(arg) or 0)
+      if value > 5 then value = value / 100 end -- "125" reads as 125%
+      ns:Print(("config window scale set to %d%%."):format(
+        math.floor(ns.SetPanelScale(value) * 100 + 0.5)))
+    end
   elseif msg == "usable" then
     ns.Cooldowns:DiagnoseUsable(arg)
   elseif msg == "totems" then
