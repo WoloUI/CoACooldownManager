@@ -90,7 +90,7 @@ ns.ClassResources = {
     display = "segments", max = 3, color = "purple",
     sub = "Soul Fragment", subMax = 3, subDrain = true, gradient = true },
   { key = "static", label = "Static", spec = "Stormbringer", aura = "Static",
-    display = "bar", max = 0, color = "electric" },
+    display = "bar", max = 100, color = "electric" },
   { key = "felfury", label = "Felfury", spec = "Felsworn", aura = "Felfury",
     display = "segments", max = 6, color = "fel" },
   { key = "demonfire", label = "Demonfire", spec = "Knight of Xoroth", aura = "Demonfire",

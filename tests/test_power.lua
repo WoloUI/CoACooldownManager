@@ -155,13 +155,22 @@ check("an aura resource has no energy ticks", not heatBar.ticks)
 auras["Heat"] = nil
 check("a missing aura reads as empty, not as an error", ns.Power:GetBar("res:heat").cur == 0)
 
--- Static has no fixed ceiling: it learns one from the highest value it sees,
--- and never shrinks back down mid-session.
-auras["Static"] = { count = 12 }
-check("a ceiling-less resource learns its maximum", ns.Power:GetBar("res:static").max == 12)
 auras["Static"] = { count = 4 }
-check("the learned maximum does not shrink", ns.Power:GetBar("res:static").max == 12)
-check("the current value still tracks the aura", ns.Power:GetBar("res:static").cur == 4)
+check("a percentage resource keeps its catalogue ceiling",
+  ns.Power:GetBar("res:static").max == 100)
+check("the current value tracks the aura", ns.Power:GetBar("res:static").cur == 4)
+
+-- Every shipped resource has a known ceiling today. max = 0 stays supported for
+-- the next one that does not: the row learns the ceiling from the highest value
+-- it sees, and never shrinks back down mid-session.
+table.insert(ns.ClassResources,
+  { key = "learner", label = "Learner", spec = "Test", aura = "Learner",
+    display = "bar", max = 0, color = "gold" })
+auras["Learner"] = { count = 12 }
+check("a ceiling-less resource learns its maximum", ns.Power:GetBar("res:learner").max == 12)
+auras["Learner"] = { count = 4 }
+check("the learned maximum does not shrink", ns.Power:GetBar("res:learner").max == 12)
+table.remove(ns.ClassResources)
 
 check("an unknown resource key does not error",
   ns.Power:GetBar("res:nonsense").max >= 1)

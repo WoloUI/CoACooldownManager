@@ -334,8 +334,7 @@ for _, entry in ipairs(ns.ClassResources) do
   check("preset " .. tostring(entry.key) .. " is complete", ok)
 end
 
--- Static ships without a ceiling on purpose: the power row learns one.
-check("a ceiling-less resource says so", ns.ClassResource("static").max == 0)
+check("a percentage resource carries its ceiling", ns.ClassResource("static").max == 100)
 -- The Reaper's second aura is recorded even though a power row cannot draw it:
 -- it is what the resource IS, and losing it means asking for it again.
 check("the Reaper entry names its filling aura",
