@@ -58,3 +58,70 @@ ns.SpellHints = {
   [6603]  = "ignore", -- Auto Attack
   [75]    = "ignore", -- Auto Shot
 }
+
+--------------------------------------------------------------------------------
+-- CoA class resources
+--
+-- None of these are a UnitPower index -- /cdm power on a Pyromancer reports
+-- nothing for Heat or Ember. They are AURAS carrying a stack count, which is
+-- what the stack bar already reads, so a preset here is a fully configured
+-- stack bar rather than a new mechanism.
+--
+-- `aura` is the aura's name, assumed to match the resource's until proven
+-- otherwise in game; `/cdm aura <text>` prints what the client really calls it,
+-- and the Aura box on the created bar takes the correction. `max = 0` means
+-- auto: the bar learns the ceiling from the highest value it sees.
+-- `color` names an entry in ns.StackColorRGB.
+--------------------------------------------------------------------------------
+ns.ClassResources = {
+  { key = "heat", label = "Heat", spec = "Pyromancer", aura = "Heat",
+    display = "bar", max = 100, color = "orange" },
+  { key = "ember", label = "Ember", spec = "Pyromancer", aura = "Ember",
+    display = "segments", max = 5, color = "red" },
+  { key = "insanity", label = "Insanity", spec = "Cultist", aura = "Insanity",
+    display = "bar", max = 100, color = "purple" },
+  { key = "scrap", label = "Scrap", spec = "Tinker", aura = "Scrap",
+    display = "bar", max = 100, color = "grey" },
+  { key = "solarpower", label = "Solar Power", spec = "Sun Cleric", aura = "Solar Power",
+    display = "bar", max = 20, color = "gold" },
+  -- The Reaper needs two auras: Reaped Soul fills whole segments, Soul Fragment
+  -- fills the one in progress three at a time and drains as it expires.
+  { key = "souls", label = "Souls", spec = "Reaper", aura = "Reaped Soul",
+    display = "segments", max = 3, color = "purple",
+    sub = "Soul Fragment", subMax = 3, subDrain = true, gradient = true },
+  { key = "static", label = "Static", spec = "Stormbringer", aura = "Static",
+    display = "bar", max = 0, color = "electric" },
+  { key = "felfury", label = "Felfury", spec = "Felsworn", aura = "Felfury",
+    display = "segments", max = 6, color = "fel" },
+  { key = "demonfire", label = "Demonfire", spec = "Knight of Xoroth", aura = "Demonfire",
+    display = "segments", max = 6, color = "fire" },
+  { key = "advantage", label = "Advantage", spec = "Ranger", aura = "Advantage",
+    display = "segments", max = 5, color = "moss" },
+}
+
+function ns.ClassResource(key)
+  for _, entry in ipairs(ns.ClassResources) do
+    if entry.key == key then return entry end
+  end
+  return nil
+end
+
+-- A preset as a stack-bar config table. Pure: the caller decides what to do
+-- with it.
+function ns.ClassResourceStack(entry)
+  if not entry then return nil end
+  return {
+    spellID = entry.aura,          -- a NAME: it survives Ascension's ID changes
+    maxStacks = entry.max or 3,    -- 0 = learn the ceiling (Auto max)
+    display = entry.display or "segments",
+    unit = "player",
+    onlyMine = true,
+    showCount = true,
+    color = ns.StackColorRGB[entry.color],
+    colorName = entry.color,
+    gradient = entry.gradient or nil,
+    subSpellID = entry.sub,
+    subMax = entry.subMax,
+    subDrain = entry.subDrain,
+  }
+end

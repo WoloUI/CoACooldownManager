@@ -99,16 +99,9 @@ local CONTEXT_OPTIONS = {
   { text = "Raid", value = "raid" },
   { text = "Battleground", value = "bg" },
 }
-local STACK_COLORS = {
-  { text = "Gold", value = "gold" }, { text = "Red", value = "red" },
-  { text = "Green", value = "green" }, { text = "Blue", value = "blue" },
-  { text = "Purple", value = "purple" }, { text = "Cyan", value = "cyan" },
-}
-local STACK_COLOR_RGB = {
-  gold = { 0.88, 0.64, 0.29 }, red = { 0.82, 0.25, 0.25 },
-  green = { 0.30, 0.78, 0.36 }, blue = { 0.25, 0.52, 0.90 },
-  purple = { 0.62, 0.35, 0.85 }, cyan = { 0.25, 0.75, 0.85 },
-}
+-- Palette and its resolution live in Core/Init.lua: the class-resource presets
+-- name a colour and are read outside this file.
+local STACK_COLORS, STACK_COLOR_RGB = ns.StackColors, ns.StackColorRGB
 
 local function SelectedViewer()
   return ns.DB:GetViewer(state.selected)
@@ -712,6 +705,36 @@ function Config:BuildControls()
     SelectedViewer().power.width = tonumber(text) or 340
     Touch()
   end, "340")
+  -- Class resources. None of them is a power index -- they are auras with a
+  -- stack count -- so the picker builds a preconfigured stack bar rather than a
+  -- fourth power row. It lives on the Power page because that is where someone
+  -- looking for their resource looks first.
+  c.classResHeader = W.CreateSectionHeader(parent, "CLASS RESOURCES")
+  c.classResLabel = W.CreateLabel(parent, "Resource", 12, W.colors.inkDim)
+  c.classRes = W.CreateDropdown(parent, 210, function(_, value)
+    state.classResource = value
+  end)
+  local resourceOptions = {}
+  for _, entry in ipairs(ns.ClassResources or {}) do
+    resourceOptions[#resourceOptions + 1] =
+      { text = entry.label .. "  (" .. entry.spec .. ")", value = entry.key }
+  end
+  c.classRes:SetOptions(resourceOptions)
+  c.classResAdd = W.CreateButton(parent, "Add bar", 62, 20, function()
+    local key = state.classResource or (resourceOptions[1] and resourceOptions[1].value)
+    local viewer = key and ns.DB:AddClassResource(key)
+    if not viewer then return end
+    state.selected = viewer.name
+    state.selectedElement = nil
+    ns:Print(viewer.name .. " added. If the bar stays empty the aura is named "
+      .. "something else -- /cdm aura " .. viewer.name .. " prints what the client calls it.")
+    Config:Render()
+  end)
+  c.classResHint = W.CreateLabel(parent,
+    "Heat, Ember, Insanity and the rest are auras, not power types, so each one gets its own\n"
+    .. "bar with its colour and scale already set. Everything stays editable afterwards.",
+    10, W.colors.inkDim)
+
   for i = 1, 3 do
     c["color" .. i .. "Label"] = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
     c["color" .. i] = W.CreateColorSwatch(parent, function(_, color)
@@ -3093,6 +3116,19 @@ function Config:Render()
         }, paneW)
       end
     end
+
+    c.classResHeader:SetPoint("TOPLEFT", 0, y - c.classResHeader.LEAD)
+    c.classResHeader:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
+    c.classResHeader:Show()
+    y = y - c.classResHeader.COST
+    c.classRes:SetValue(state.classResource
+      or (ns.ClassResources[1] and ns.ClassResources[1].key))
+    y = ns.FormCells(y, {
+      { label = c.classResLabel, control = c.classRes,    width = 218 },
+      { control = c.classResAdd, width = 70 },
+    }, paneW)
+    c.classResHint:SetPoint("TOPLEFT", 0, y); c.classResHint:Show()
+    y = y - 30
   elseif style == "stacks" then
     viewer.stack = viewer.stack or { maxStacks = 3, onlyMine = true }
     local st = viewer.stack

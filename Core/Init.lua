@@ -271,6 +271,26 @@ function ns.GetBarScale()
   return ns.ClampScale(Appearance().barScale or 1)
 end
 
+-- Stack-bar palette. Lives here rather than in the config panel because the
+-- class-resource presets in Data/SpellHints.lua name their colour and something
+-- outside the panel has to resolve it.
+ns.StackColors = {
+  { text = "Gold", value = "gold" }, { text = "Red", value = "red" },
+  { text = "Green", value = "green" }, { text = "Blue", value = "blue" },
+  { text = "Purple", value = "purple" }, { text = "Cyan", value = "cyan" },
+  { text = "Orange", value = "orange" }, { text = "Grey", value = "grey" },
+  { text = "Electric blue", value = "electric" }, { text = "Fel green", value = "fel" },
+  { text = "Moss green", value = "moss" }, { text = "Fire red", value = "fire" },
+}
+ns.StackColorRGB = {
+  gold = { 0.88, 0.64, 0.29 }, red = { 0.82, 0.25, 0.25 },
+  green = { 0.30, 0.78, 0.36 }, blue = { 0.25, 0.52, 0.90 },
+  purple = { 0.62, 0.35, 0.85 }, cyan = { 0.25, 0.75, 0.85 },
+  orange = { 0.98, 0.52, 0.12 }, grey = { 0.66, 0.68, 0.72 },
+  electric = { 0.30, 0.78, 1.00 }, fel = { 0.48, 0.90, 0.25 },
+  moss = { 0.48, 0.66, 0.36 }, fire = { 0.95, 0.33, 0.10 },
+}
+
 
 ns.GlowOptions = {
   { text = "Proc (WeakAuras style)", value = "proc" },

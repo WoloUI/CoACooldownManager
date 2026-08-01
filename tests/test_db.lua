@@ -6,6 +6,7 @@ local ns = {}
 stub.loadAddonFile("Core/Init.lua", ns)
 stub.loadAddonFile("Core/DB.lua", ns)
 stub.loadAddonFile("Data/EquivGroups.lua", ns)
+stub.loadAddonFile("Data/SpellHints.lua", ns)
 
 local T = {}
 local function check(name, cond)
@@ -318,5 +319,51 @@ check("old style config is dropped", retire.viewers[1].totems == nil)
 check("other bars are untouched", retire.viewers[2].style == "icons")
 check("running it again converts nothing", ns.DB.RetireTotemStyle(retire) == 0)
 check("a junk profile is tolerated", ns.DB.RetireTotemStyle(nil) == 0)
+
+--------------------------------------------------------------------------------
+-- Class resource presets
+--------------------------------------------------------------------------------
+-- Every CoA class resource is an aura with a stack count, not a power index,
+-- so a preset is a fully configured stack bar. The point of the catalogue is
+-- that adding one is a pick, not eleven fields typed by hand.
+check("the catalogue is looked up by key", ns.ClassResource("heat").spec == "Pyromancer")
+check("an unknown key returns nil", ns.ClassResource("nonsense") == nil)
+for _, entry in ipairs(ns.ClassResources) do
+  local ok = entry.key and entry.label and entry.aura and entry.color
+    and ns.StackColorRGB[entry.color] and (entry.display == "bar" or entry.display == "segments")
+  check("preset " .. tostring(entry.key) .. " is complete", ok)
+end
+
+local heat = ns.ClassResourceStack(ns.ClassResource("heat"))
+check("a continuous resource asks for the bar display", heat.display == "bar")
+check("a continuous resource carries its ceiling", heat.maxStacks == 100)
+check("a preset resolves its colour", heat.color[1] == ns.StackColorRGB.orange[1])
+check("a preset keeps the colour name so the dropdown agrees", heat.colorName == "orange")
+check("a preset tracks the aura by name", heat.spellID == "Heat")
+check("a plain resource has no filling aura", heat.subSpellID == nil)
+
+-- Static has no fixed ceiling, so it learns one: maxStacks 0 is what the Auto
+-- max checkbox stores.
+check("a ceiling-less resource is set to auto max",
+  ns.ClassResourceStack(ns.ClassResource("static")).maxStacks == 0)
+
+local souls = ns.ClassResourceStack(ns.ClassResource("souls"))
+check("the Reaper preset carries its filling aura", souls.subSpellID == "Soul Fragment")
+check("the filling aura fills three per segment", souls.subMax == 3)
+check("the filling aura drains as it expires", souls.subDrain == true)
+check("the Reaper preset shades partial segments", souls.gradient == true)
+
+local made = ns.DB:AddClassResource("ember")
+check("adding a preset creates a bar", made ~= nil and made.style == "stacks")
+check("the bar is named after the resource", made and made.name == "Ember")
+check("the bar arrives configured", made and made.stack.spellID == "Ember"
+  and made.stack.maxStacks == 5 and made.stack.display == "segments")
+-- Adding twice must land on the existing bar, not fail and not duplicate it.
+local again = ns.DB:AddClassResource("ember")
+check("adding the same preset twice returns the existing bar", again == made)
+local count = 0
+for _, v in ipairs(ns.DB.profile.viewers) do if v.name == "Ember" then count = count + 1 end end
+check("adding twice leaves one bar", count == 1)
+check("an unknown preset is refused", ns.DB:AddClassResource("nonsense") == nil)
 
 return T
