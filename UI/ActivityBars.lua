@@ -84,9 +84,9 @@ local function CreateBar(parent)
   holder.icon:SetAllPoints()
   ns.CropIcon(holder.icon)
 
+  -- Anchored by LayoutIconColumn, which is the only place that knows whether
+  -- there is an icon column to sit beside.
   holder.bar = CreateFrame("StatusBar", nil, holder)
-  holder.bar:SetPoint("TOPLEFT", holder.iconFrame, "TOPRIGHT", 1, 0)
-  holder.bar:SetPoint("BOTTOMRIGHT")
   holder.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
 
   holder.bg = holder.bar:CreateTexture(nil, "BACKGROUND")
@@ -113,9 +113,31 @@ local function CreateBar(parent)
   return holder
 end
 
+-- Show or hide the icon column.
+--
+-- The bar's TOPLEFT hangs off the icon frame, so a hidden icon cannot simply be
+-- shrunk to nothing: the icon frame is anchored LEFT, which is vertically
+-- CENTRED, so a zero-height frame puts its TOPRIGHT on the holder's centre line
+-- and drags the bar's top edge down with it -- half a bar, with the fill and
+-- the backdrop no longer lining up. With no icon the bar has to anchor to the
+-- holder instead.
+local function LayoutIconColumn(holder, h, showIcon)
+  holder.bar:ClearAllPoints()
+  if showIcon then
+    holder.iconFrame:SetSize(h, h)
+    holder.iconFrame:Show()
+    holder.icon:Show()
+    holder.bar:SetPoint("TOPLEFT", holder.iconFrame, "TOPRIGHT", 1, 0)
+  else
+    holder.icon:Hide()
+    holder.iconFrame:Hide()
+    holder.bar:SetPoint("TOPLEFT")
+  end
+  holder.bar:SetPoint("BOTTOMRIGHT")
+end
+
 local function StyleBar(holder, w, h, cfg)
   holder:SetSize(w, h)
-  holder.iconFrame:SetSize(h, h)
   holder.bar:SetStatusBarTexture(ns.GetTexture())
   local font = ns.GetFont()
   local fontSize = ns.FontSize(cfg.fontSize or 11)
@@ -141,8 +163,6 @@ local function AcquireSwing(frame, index)
   local bar = frame.swingBars[index]
   if not bar then
     bar = CreateBar(frame)
-    bar.icon:Hide() -- swing bars are label-only, no icon column
-    bar.iconFrame:SetSize(0.001, 0.001)
     frame.swingBars[index] = bar
   end
   return bar
@@ -183,7 +203,7 @@ function SwingBar:Update(frame, cfg)
     shown = shown + 1
     local bar = AcquireSwing(frame, shown)
     StyleBar(bar, w, h, cfg)
-    bar.iconFrame:SetSize(0.001, 0.001)
+    LayoutIconColumn(bar, h, false) -- swing bars are label-only
     local color = SWING_COLORS[e.hand] or SWING_COLORS.mh
     bar.bar:SetStatusBarColor(color[1], color[2], color[3])
     bar.bar:SetMinMaxValues(0, e.duration)
@@ -347,13 +367,10 @@ function CastBar:Update(frame, cfg)
   holder:ClearAllPoints()
   holder:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
 
-  if cc.showIcon ~= false then
-    holder.iconFrame:SetSize(h, h)
-    holder.icon:Show()
+  local withIcon = cc.showIcon ~= false
+  LayoutIconColumn(holder, h, withIcon)
+  if withIcon then
     holder.icon:SetTexture(st.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-  else
-    holder.iconFrame:SetSize(0.001, 0.001)
-    holder.icon:Hide()
   end
 
   holder.bar:SetStatusBarColor(ns.CastBarColor(cc, st, PlayerClassColor()))
