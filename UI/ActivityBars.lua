@@ -232,6 +232,66 @@ local COLOR_CHANNEL = { 0.30, 0.70, 0.45 }
 local COLOR_UNINTERRUPTIBLE = { 0.6, 0.6, 0.6 }
 local COLOR_INTERRUPTED = { 0.85, 0.25, 0.25 }
 
+ns.CastColorOptions = {
+  { text = "By cast state", value = "state" },
+  { text = "Class colour", value = "class" },
+  { text = "Custom", value = "custom" },
+}
+ns.CastTimeOptions = {
+  { text = "Time left", value = "remaining" },
+  { text = "Elapsed", value = "elapsed" },
+  { text = "Elapsed / total", value = "both" },
+  { text = "Hidden", value = "none" },
+}
+
+-- The cast bar's colour. Pure.
+--
+-- Two states outrank whatever colour was chosen, because both of them carry
+-- information the colour is the only channel for: an interrupt has to read as a
+-- failure, and an uninterruptible cast has to read as one not worth kicking. A
+-- class-coloured interrupt looks like a cast that went fine.
+function ns.CastBarColor(cc, state, classColor)
+  cc, state = cc or {}, state or {}
+  if state.interrupted then
+    return COLOR_INTERRUPTED[1], COLOR_INTERRUPTED[2], COLOR_INTERRUPTED[3]
+  end
+  if state.notInterruptible then
+    return COLOR_UNINTERRUPTIBLE[1], COLOR_UNINTERRUPTIBLE[2], COLOR_UNINTERRUPTIBLE[3]
+  end
+  local mode = cc.colorMode or "state"
+  if mode == "class" and classColor then
+    return classColor.r, classColor.g, classColor.b
+  elseif mode == "custom" and cc.color then
+    return cc.color[1], cc.color[2], cc.color[3]
+  end
+  local base = state.channeling and COLOR_CHANNEL or COLOR_CAST
+  return base[1], base[2], base[3]
+end
+
+-- The time readout. One decimal throughout: a bar that rounds to whole seconds
+-- cannot show a 0.4s window, which is the reason to watch a cast bar at all.
+function ns.FormatCastTime(elapsed, duration, mode)
+  elapsed = math.max(elapsed or 0, 0)
+  duration = math.max(duration or 0, 0)
+  if mode == "none" then return "" end
+  if mode == "elapsed" then return string.format("%.1f", math.min(elapsed, duration)) end
+  if mode == "both" then
+    return string.format("%.1f / %.1f", math.min(elapsed, duration), duration)
+  end
+  return string.format("%.1f", math.max(duration - elapsed, 0))
+end
+
+-- The player's class colour, or nil when the client cannot say. Ascension is
+-- classless, so this genuinely may not resolve -- the colour mode falls back to
+-- the cast-state colours rather than to something arbitrary.
+local function PlayerClassColor()
+  local _, class = UnitClass("player")
+  local colors = class and (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)
+  local color = colors and colors[class]
+  if color and color.r then return color end
+  return nil
+end
+
 function CastBar:Build(frame, cfg)
   if frame.castBar then frame.castBar:Hide() end
 end
@@ -296,11 +356,7 @@ function CastBar:Update(frame, cfg)
     holder.icon:Hide()
   end
 
-  local color = COLOR_CAST
-  if st.interrupted then color = COLOR_INTERRUPTED
-  elseif st.notInterruptible then color = COLOR_UNINTERRUPTIBLE
-  elseif st.channeling then color = COLOR_CHANNEL end
-  holder.bar:SetStatusBarColor(color[1], color[2], color[3])
+  holder.bar:SetStatusBarColor(ns.CastBarColor(cc, st, PlayerClassColor()))
   holder.bar:SetMinMaxValues(0, st.duration)
 
   if st.channeling then
@@ -312,8 +368,12 @@ function CastBar:Update(frame, cfg)
 
   holder.nameText:SetText(st.name or "")
   holder.nameText:SetTextColor(1, 1, 1)
+  -- showTime is the pre-split boolean: an old profile that turned the readout
+  -- off keeps it off without a migration pass.
+  local timeMode = cc.timeMode or (cc.showTime == false and "none") or "remaining"
   local remaining = math.max(0, (st.endTime or now) - now)
-  holder.timeText:SetText(cc.showTime ~= false and ns.FormatTime(remaining) or "")
+  holder.timeText:SetText(
+    ns.FormatCastTime((st.duration or 0) - remaining, st.duration or 0, timeMode))
 
   -- Channel ticks
   if st.channeling and cc.showTicks ~= false then

@@ -1089,15 +1089,41 @@ function Config:BuildControls()
   c.castH = W.CreateEditBox(parent, 46, 20, function(_, text)
     CastCfg().height = math.max(tonumber(text) or 22, 4); Touch()
   end, "22")
+  c.castFontLabel = W.CreateLabel(parent, "Text size", 12, W.colors.inkDim)
+  c.castFont = W.CreateEditBox(parent, 40, 20, function(_, text)
+    -- The shared viewer field: StyleBar already reads cfg.fontSize, it was
+    -- simply never exposed on this style.
+    SelectedViewer().fontSize = math.max(tonumber(text) or 11, 6); Touch()
+  end, "11")
+  c.castTimeModeLabel = W.CreateLabel(parent, "Cast time", 12, W.colors.inkDim)
+  c.castTimeMode = W.CreateDropdown(parent, 130, function(_, value)
+    CastCfg().timeMode = value
+    CastCfg().showTime = nil -- the boolean it replaces, gone once either is set
+    Touch()
+  end)
+  c.castTimeMode:SetOptions(ns.CastTimeOptions)
+  c.castColorModeLabel = W.CreateLabel(parent, "Colour", 12, W.colors.inkDim)
+  c.castColorMode = W.CreateDropdown(parent, 138, function(_, value)
+    CastCfg().colorMode = value
+    Touch()
+    Config:Render() -- the swatch only exists in Custom
+  end)
+  c.castColorMode:SetOptions(ns.CastColorOptions)
+  c.castColor = W.CreateColorSwatch(parent, function(_, color)
+    CastCfg().color = color
+    Touch()
+  end)
   c.castIconChk = W.CreateCheckbox(parent, "Icon", function(_, ck) CastCfg().showIcon = ck; Touch() end)
-  c.castTimeChk = W.CreateCheckbox(parent, "Time left", function(_, ck) CastCfg().showTime = ck; Touch() end)
   c.castTicksChk = W.CreateCheckbox(parent, "Channel ticks", function(_, ck) CastCfg().showTicks = ck; Config:Render() end)
   c.castTickLabel = W.CreateLabel(parent, "Tick every (s)", 12, W.colors.inkDim)
   c.castTick = W.CreateEditBox(parent, 46, 20, function(_, text)
     CastCfg().tickSeconds = math.max(tonumber(text) or 1.0, 0.1); Touch()
   end, "1.0")
   c.castHint = W.CreateLabel(parent,
-    "Your own casts and channels. Channel ticks are drawn one every N seconds\n(no per-spell tick API on this client - tune it to the channel).", 10, W.colors.inkDim)
+    "Your own casts and channels. Channel ticks are drawn one every N seconds\n"
+    .. "(no per-spell tick API on this client - tune it to the channel).\n"
+    .. "Interrupts stay red and uninterruptible casts stay grey whatever colour you pick:\n"
+    .. "that is the only place the bar can tell you either one.", 10, W.colors.inkDim)
 
   -- GCD history options
   local function HistCfg()
@@ -3242,6 +3268,8 @@ function Config:Render()
       cells[#cells + 1] = { label = c.castWLabel, control = c.castW, width = 64 }
     end
     cells[#cells + 1] = { label = c.castHLabel, control = c.castH, width = 64 }
+    c.castFont:SetText(tostring(viewer.fontSize or 11))
+    cells[#cells + 1] = { label = c.castFontLabel, control = c.castFont, width = 74 }
     -- The tick interval only means something while ticks are drawn
     if ca.showTicks ~= false then
       c.castTick:SetText(tostring(ca.tickSeconds or 1.0))
@@ -3249,12 +3277,27 @@ function Config:Render()
     end
     y = ns.FormCells(y, cells, paneW)
 
+    local colorCells = {}
+    c.castColorMode:SetValue(ca.colorMode or "state")
+    colorCells[#colorCells + 1] =
+      { label = c.castColorModeLabel, control = c.castColorMode, width = 146 }
+    -- showTime is the boolean the dropdown replaced; an old profile that turned
+    -- the readout off still reads as Hidden.
+    c.castTimeMode:SetValue(ca.timeMode or (ca.showTime == false and "none") or "remaining")
+    colorCells[#colorCells + 1] =
+      { label = c.castTimeModeLabel, control = c.castTimeMode, width = 138 }
+    y = ns.FormCells(y, colorCells, paneW)
+
+    if (ca.colorMode or "state") == "custom" then
+      c.castColor:ClearAllPoints(); c.castColor:SetPoint("TOPLEFT", 0, y)
+      c.castColor:SetColor(ca.color or { 0.25, 0.55, 0.85 }); c.castColor:Show()
+      y = y - 28
+    end
+
     c.castIconChk:SetChecked(ca.showIcon ~= false)
-    c.castTimeChk:SetChecked(ca.showTime ~= false)
     c.castTicksChk:SetChecked(ca.showTicks ~= false)
     y = ns.FormCells(y, {
       { control = c.castIconChk,  width = 78 },
-      { control = c.castTimeChk,  width = 104 },
       { control = c.castTicksChk, width = 92 },
     }, paneW)
 

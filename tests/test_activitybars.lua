@@ -180,6 +180,42 @@ check("a zero row height cannot divide by zero", ns.DropIndex(500, 0, 5, 400) ==
 -- the channel keeps running. Clearing on it blanked the bar mid-channel (Dark
 -- Veil). The client is the authority -- if it still reports something in
 -- progress, the bar stays.
+-- Cast time readout. One decimal: a cast bar that rounds to whole seconds
+-- cannot show you a 0.4s window.
+local FT = ns.FormatCastTime
+check("the default readout is time left", FT(0.6, 3.0) == "2.4")
+check("remaining counts down", FT(0.6, 3.0, "remaining") == "2.4")
+check("elapsed counts up", FT(0.6, 3.0, "elapsed") == "0.6")
+check("both shows the pair", FT(0.6, 3.0, "both") == "0.6 / 3.0")
+check("none shows nothing", FT(0.6, 3.0, "none") == "")
+check("a finished cast does not go negative", FT(4.0, 3.0) == "0.0")
+check("a cast with no duration does not error", FT(1.0, 0, "both") == "0.0 / 0.0")
+check("elapsed never overshoots the total", FT(4.0, 3.0, "both") == "3.0 / 3.0")
+
+-- Colour. Interrupted stays red in every mode: it is the one state that says
+-- something went wrong, and a class-coloured failure reads as a success.
+local CLASS = { r = 0.77, g = 0.12, b = 0.23 }
+local function colour(cc, state)
+  local r, g, b = ns.CastBarColor(cc, state, CLASS)
+  return string.format("%.2f/%.2f/%.2f", r, g, b)
+end
+local stateBlue = colour({}, {})
+check("a plain cast is not the channel colour", stateBlue ~= colour({}, { channeling = true }))
+check("an uninterruptible cast greys out", colour({}, { notInterruptible = true }) == "0.60/0.60/0.60")
+check("an interrupt is red", colour({}, { interrupted = true }) == "0.85/0.25/0.25")
+check("class mode takes the class colour",
+  colour({ colorMode = "class" }, {}) == "0.77/0.12/0.23")
+check("class mode still greys an uninterruptible cast",
+  colour({ colorMode = "class" }, { notInterruptible = true }) == "0.60/0.60/0.60")
+check("class mode still reddens an interrupt",
+  colour({ colorMode = "class" }, { interrupted = true }) == "0.85/0.25/0.25")
+check("a missing class colour falls back to the state colour",
+  select(1, ns.CastBarColor({ colorMode = "class" }, {}, nil)) == select(1, ns.CastBarColor({}, {})))
+check("custom mode takes the swatch",
+  colour({ colorMode = "custom", color = { 0.1, 0.2, 0.3 } }, {}) == "0.10/0.20/0.30")
+check("custom mode with no swatch falls back",
+  colour({ colorMode = "custom" }, {}) == stateBlue)
+
 local Verdict = ns.CastBar.StopVerdict
 check("a finished cast clears", Verdict(true, false, false) == "clear")
 check("a real interrupt flashes red", Verdict(true, true, false) == "flash")
