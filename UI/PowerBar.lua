@@ -84,12 +84,34 @@ function ns.PowerBarHeights(p)
   return { p.height or 26, sub, p.height3 or sub }
 end
 
+-- Ticks, combo points and the resource name, per bar. They were one setting for
+-- the whole viewer, which is wrong the moment two resources want different
+-- treatment -- Mana wants its name, Energy wants its ticks. The old whole-bar
+-- value is the fallback, so a profile saved before the split keeps its look.
+--
+-- Combo points are the exception: they hung under the LAST bar, so that is
+-- where the legacy setting lands. Anywhere else and an upgrade would visibly
+-- move them.
+function ns.PowerBarOptions(p, index, lastVisible)
+  local function toggle(key, default)
+    local value = p[key .. index]
+    if value == nil then value = p[key] end
+    if value == nil then return default end
+    return value and true or false
+  end
+  local combo = p["showCombo" .. index]
+  if combo == nil then combo = p.showCombo and index == lastVisible end
+  return toggle("showTicks", false), combo and true or false, toggle("showLabel", true)
+end
+
 function PowerBar:Build(frame, cfg)
   if not frame.bar1 then
     frame.bar1 = CreateResourceBar(frame)
     frame.bar2 = CreateResourceBar(frame)
     frame.bar3 = CreateResourceBar(frame)
-    frame.combo = CreateComboRow(frame)
+    frame.combo1 = CreateComboRow(frame)
+    frame.combo2 = CreateComboRow(frame)
+    frame.combo3 = CreateComboRow(frame)
   end
   local p = cfg.power
   local width = ns.ResolveWidth(cfg, p.width or 340)
@@ -106,7 +128,7 @@ function PowerBar:Build(frame, cfg)
     holder.bar:SetStatusBarTexture(texture)
     holder.text:SetFont(font, ns.FontSize(i == 1 and base or math.max(base - 1, 8)), "OUTLINE")
   end
-  frame.combo:ClearAllPoints()
+  for i = 1, 3 do frame["combo" .. i]:ClearAllPoints() end
 end
 
 local function UpdateResourceBar(holder, data, showTicks, colorOverride, showLabel, textMode)
@@ -128,16 +150,21 @@ function PowerBar:Update(frame, cfg)
   -- truncate any ipairs walk over the results.
   local types = {}
   types[1], types[2], types[3] = ns.Power:GetTypes()
-  local showLabel = p.showLabel ~= false
   local heights = ns.PowerBarHeights(p)
   local colors = { p.color1, p.color2, p.color3 }
   local texts = { p.text1, p.text2, p.text3 }
   local height, lastBar = 0, nil
 
+  local lastVisible = 0
+  for i = 1, 3 do if types[i] then lastVisible = i end end
+  local comboPoints = ns.Power:GetComboPoints()
+
   for i, key in ipairs(BARS) do
     local holder = frame[key]
+    local comboRow = frame["combo" .. i]
     local ptype = types[i]
     if ptype then
+      local showTicks, showCombo, showLabel = ns.PowerBarOptions(p, i, lastVisible)
       holder:Show()
       holder:ClearAllPoints()
       if lastBar then
@@ -146,30 +173,32 @@ function PowerBar:Update(frame, cfg)
       else
         holder:SetPoint("TOP", frame, "TOP", 0, 0)
       end
-      UpdateResourceBar(holder, ns.Power:GetBar(ptype), p.showTicks, colors[i], showLabel, texts[i])
+      UpdateResourceBar(holder, ns.Power:GetBar(ptype), showTicks, colors[i], showLabel, texts[i])
       height = height + heights[i]
       lastBar = holder
+
+      -- Combo points belong to a bar now, and sit directly under it: they used
+      -- to be one row pinned to the bottom of the stack whatever it held.
+      if showCombo and comboPoints > 0 then
+        comboRow:Show()
+        comboRow:ClearAllPoints()
+        comboRow:SetPoint("TOP", holder, "BOTTOM", 0, -4)
+        for slot, pt in ipairs(comboRow.points) do
+          if slot <= comboPoints then
+            pt:SetVertexColor(0.98, 0.62, 0.25, 1)
+          else
+            pt:SetVertexColor(0.15, 0.10, 0.05, 0.8)
+          end
+        end
+        height = height + 4 + 12
+        lastBar = comboRow -- the next bar stacks below the points, not over them
+      else
+        comboRow:Hide()
+      end
     else
       holder:Hide()
+      comboRow:Hide()
     end
-  end
-  lastBar = lastBar or frame.bar1
-
-  -- Combo points
-  local combo = p.showCombo and ns.Power:GetComboPoints() or 0
-  if combo > 0 then
-    frame.combo:Show()
-    frame.combo:SetPoint("TOP", lastBar, "BOTTOM", 0, -4)
-    for i, pt in ipairs(frame.combo.points) do
-      if i <= combo then
-        pt:SetVertexColor(0.98, 0.62, 0.25, 1)
-      else
-        pt:SetVertexColor(0.15, 0.10, 0.05, 0.8)
-      end
-    end
-    height = height + 4 + 12
-  else
-    frame.combo:Hide()
   end
 
   frame:SetSize(ns.ResolveWidth(cfg, p.width or 340), height)

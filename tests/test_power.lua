@@ -96,4 +96,37 @@ check("bar 1 keeps falling back to the primary",
   types({ bar1 = "none" }) == "0/3/nil")
 ns.DB = nil
 
+--------------------------------------------------------------------------------
+-- Per-bar toggles
+--------------------------------------------------------------------------------
+-- Ticks, combo points and the resource name used to be one setting for the
+-- whole viewer. They are per bar now, with the old whole-bar value as the
+-- fallback so a profile saved before the split still looks the way it did.
+stub.loadAddonFile("UI/PowerBar.lua", ns)
+
+local function opts(p, index, lastVisible)
+  local ticks, combo, label = ns.PowerBarOptions(p, index, lastVisible or 2)
+  return tostring(ticks) .. "/" .. tostring(combo) .. "/" .. tostring(label)
+end
+
+check("a fresh bar shows the name and nothing else", opts({}, 1) == "false/false/true")
+check("a per-bar tick setting is honoured",
+  opts({ showTicks2 = true }, 2) == "true/false/true")
+check("a per-bar setting does not leak to its neighbours",
+  opts({ showTicks2 = true }, 1) == "false/false/true")
+check("the old whole-bar tick setting still reaches every bar",
+  opts({ showTicks = true }, 3, 3) == "true/false/true")
+check("a per-bar off beats the old whole-bar on",
+  opts({ showTicks = true, showTicks2 = false }, 2) == "false/false/true")
+check("the name can be silenced on one bar only",
+  opts({ showLabel3 = false }, 3, 3) == "false/false/false")
+-- Combo points hung under the LAST bar, so that is where the legacy setting
+-- lands -- anywhere else and an upgrade would visibly move them.
+check("legacy combo points stay under the last visible bar",
+  opts({ showCombo = true }, 2, 2) == "false/true/true")
+check("legacy combo points are not repeated under the bars above",
+  opts({ showCombo = true }, 1, 2) == "false/false/true")
+check("combo points can be pinned to a chosen bar",
+  opts({ showCombo1 = true }, 1, 3) == "false/true/true")
+
 return T

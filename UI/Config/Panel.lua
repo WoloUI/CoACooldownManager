@@ -692,24 +692,26 @@ function Config:BuildControls()
       Touch()
     end)
     c["powerText" .. i]:SetOptions(POWER_TEXT_OPTIONS)
+    -- Per bar, not per viewer: Mana wants its name, Energy wants its ticks,
+    -- and one setting for all three could never say both.
+    c["ticks" .. i] = W.CreateCheckbox(parent, "Energy ticks", function(_, checked)
+      SelectedViewer().power["showTicks" .. i] = checked
+      Touch()
+    end)
+    c["combo" .. i] = W.CreateCheckbox(parent, "Combo points", function(_, checked)
+      SelectedViewer().power["showCombo" .. i] = checked
+      Touch()
+    end)
+    c["powerName" .. i] = W.CreateCheckbox(parent, "Resource name", function(_, checked)
+      SelectedViewer().power["showLabel" .. i] = checked
+      Touch()
+    end)
   end
   c.powerWLabel = W.CreateLabel(parent, "Width", 12, W.colors.inkDim)
   c.powerW = W.CreateEditBox(parent, 46, 20, function(_, text)
     SelectedViewer().power.width = tonumber(text) or 340
     Touch()
   end, "340")
-  c.ticks = W.CreateCheckbox(parent, "Energy ticks", function(_, checked)
-    SelectedViewer().power.showTicks = checked
-    Touch()
-  end)
-  c.combo = W.CreateCheckbox(parent, "Combo points", function(_, checked)
-    SelectedViewer().power.showCombo = checked
-    Touch()
-  end)
-  c.powerName = W.CreateCheckbox(parent, "Show resource name", function(_, checked)
-    SelectedViewer().power.showLabel = checked
-    Touch()
-  end)
   for i = 1, 3 do
     c["color" .. i .. "Label"] = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
     c["color" .. i] = W.CreateColorSwatch(parent, function(_, color)
@@ -3042,6 +3044,8 @@ function Config:Render()
     -- forced or silenced -- but a silenced bar's text, height and colour do
     -- not, since they describe something that is not on screen.
     local heights = ns.PowerBarHeights(viewer.power)
+    local lastVisible = 0
+    for i = 1, 3 do if types[i] then lastVisible = i end end
     for i = 1, 3 do
       local head = c["powerHead" .. i]
       head:SetPoint("TOPLEFT", 0, y - head.LEAD)
@@ -3076,17 +3080,19 @@ function Config:Render()
         swatch:Show()
         reset:ClearAllPoints(); reset:SetPoint("TOPLEFT", 122, y + 2); reset:Show()
         y = y - 30
+
+        local showTicks, showCombo, showLabel =
+          ns.PowerBarOptions(viewer.power, i, lastVisible)
+        c["ticks" .. i]:SetChecked(showTicks)
+        c["combo" .. i]:SetChecked(showCombo)
+        c["powerName" .. i]:SetChecked(showLabel)
+        y = ns.FormCells(y, {
+          { control = c["ticks" .. i],     width = 112 },
+          { control = c["combo" .. i],     width = 118 },
+          { control = c["powerName" .. i], width = 124 },
+        }, paneW)
       end
     end
-
-    c.ticks:SetChecked(viewer.power.showTicks)
-    c.combo:SetChecked(viewer.power.showCombo)
-    c.powerName:SetChecked(viewer.power.showLabel ~= false)
-    y = ns.FormCells(y, {
-      { control = c.ticks,     width = 118 },
-      { control = c.combo,     width = 118 },
-      { control = c.powerName, width = 130 },
-    }, paneW)
   elseif style == "stacks" then
     viewer.stack = viewer.stack or { maxStacks = 3, onlyMine = true }
     local st = viewer.stack
