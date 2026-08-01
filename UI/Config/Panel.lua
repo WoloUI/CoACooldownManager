@@ -538,9 +538,27 @@ function Config:BuildControls()
     end
     Touch()
   end, "ElvUF_Target")
+  c.anchorFramePick = W.CreateButton(parent, "Pick", 44, 20, function()
+    -- The viewer is resolved HERE, not when the picker returns: the panel is
+    -- hidden in between and a pooled callback must not outlive its selection.
+    local viewer = SelectedViewer()
+    if not viewer then return end
+    win:Hide()
+    ns.HudHider:StartPicking(function(name)
+      win:Show()
+      if not name then return end
+      local anchor = ns.CopyTable(ns.DB:GetAnchor(viewer))
+      anchor.parent, anchor.frameName = "FRAME", name
+      ns.DB:SetAnchor(viewer, anchor)
+      ns:Print(viewer.name .. " anchored to " .. name .. ".")
+      Touch()
+      Config:Render()
+    end, { hide = false, label = "Click the frame to anchor to  |  right click to cancel" })
+  end)
   c.anchorFrameHint = W.CreateLabel(parent,
     "A frame belonging to another addon, by its global name: ElvUF_Target, ElvUF_Player,\n"
-    .. "TargetFrame. The bar follows it wherever that addon puts it.", 10, W.colors.inkDim)
+    .. "TargetFrame. Pick points at whatever is under the cursor, so the frame has to be\n"
+    .. "on screen -- target something first to anchor to a target frame.", 10, W.colors.inkDim)
   c.anchorPosLabel = W.CreateLabel(parent, "Side", 12, W.colors.inkDim)
   c.anchorPos = W.CreateDropdown(parent, 130, function(_, value)
     local viewer = SelectedViewer()
@@ -3484,6 +3502,7 @@ function Config:Render()
       c.anchorFrame:SetText(anchor.frameName or "")
       posCells[#posCells + 1] =
         { label = c.anchorFrameLabel, control = c.anchorFrame, width = 178 }
+      posCells[#posCells + 1] = { control = c.anchorFramePick, width = 52 }
     end
     if anchor.parent ~= "FREE" then
       local pos = "above"
@@ -3591,6 +3610,19 @@ function Config:Toggle()
     self:Render()
     win:Show()
   end
+end
+
+-- Open the panel already showing one bar. Right-clicking a bar in edit mode
+-- comes here: having found the thing you want to change, hunting for it again
+-- down a sidebar list is a step nobody needs.
+function Config:OpenAt(name)
+  if not win then BuildWindow() end
+  if not ns.DB:GetViewer(name) then return end
+  state.selected = name
+  state.selectedElement = nil
+  self:Render()
+  win:Show()
+  win:Raise()
 end
 
 ns:On("READY", function()

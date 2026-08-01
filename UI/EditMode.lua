@@ -116,7 +116,16 @@ local function CreateOverlay(viewerFrame, cfg)
     ns.CaptureSpell(self.cfg, id, name, icon)
   end
   overlay:SetScript("OnReceiveDrag", ReceiveSpell)
-  overlay:SetScript("OnMouseUp", ReceiveSpell)
+  -- Right click opens this bar's page in the config. Left click stays the spell
+  -- drop: the cursor may be carrying a spell, and that is the older gesture.
+  overlay:SetScript("OnMouseUp", function(self, button)
+    if button == "RightButton" then
+      EditMode:Select(self.cfg.name)
+      if ns.Config and ns.Config.OpenAt then ns.Config:OpenAt(self.cfg.name) end
+      return
+    end
+    ReceiveSpell(self)
+  end)
 
   return overlay
 end
@@ -278,7 +287,7 @@ function EditMode:Toggle()
   if ns.ExtraActionBar then ns.ExtraActionBar:SetEditing(self.active) end
   if self.active then
     ns:Print("edit mode ON - drag bars to move them; drag the Power bar to move everything. "
-      .. "Click a bar and use the Nudge arrows for 1px steps. "
+      .. "Click a bar and use the Nudge arrows for 1px steps; right click it to open its settings. "
       .. "Drop a spell from your spellbook on a bar to add it. /cdm edit to finish.")
   else
     ns:Print("edit mode off; layout saved.")

@@ -677,10 +677,16 @@ function HudHider:PickAt(candidates)
 end
 
 -- Full-screen picking overlay: hover highlights the frame under the cursor,
--- left click hides it, right click discards the pick. onDone(nameOrNil)
--- always runs so the caller can restore its window.
+-- left click takes it, right click discards the pick. onDone(nameOrNil) always
+-- runs so the caller can restore its window.
+--
+-- `opts.hide` is what separates the two callers: the Class HUD tab picks a
+-- frame IN ORDER to hide it, while anchoring a bar to ElvUF_Target only wants
+-- the name. Same overlay, and hiding the frame you were about to anchor to
+-- would be a memorable bug.
 local picker
-function HudHider:StartPicking(onDone)
+function HudHider:StartPicking(onDone, opts)
+  opts = opts or {}
   if not picker then
     picker = CreateFrame("Button", "CoACDMHudPicker", UIParent)
     picker:SetFrameStrata("TOOLTIP")
@@ -691,7 +697,6 @@ function HudHider:StartPicking(onDone)
     picker.label:SetFont(STANDARD_TEXT_FONT, 15, "OUTLINE")
     picker.label:SetPoint("TOP", 0, -140)
     picker.label:SetTextColor(1, 0.82, 0.35)
-    picker.label:SetText("Click the HUD element to hide it  |  right click to cancel")
 
     picker.box = CreateFrame("Frame", nil, picker)
     picker.box:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
@@ -727,13 +732,18 @@ function HudHider:StartPicking(onDone)
       local picked
       if button == "LeftButton" and frame and frame.GetName and frame:GetName() then
         picked = frame:GetName()
-        HudHider:SetHidden(picked, true)
-        ns:Print("'" .. picked .. "' hidden - restore it from the Class HUD tab.")
+        if self.hideOnPick then
+          HudHider:SetHidden(picked, true)
+          ns:Print("'" .. picked .. "' hidden - restore it from the Class HUD tab.")
+        end
       end
       if self.onDone then self.onDone(picked) end
     end)
     picker:Hide()
   end
+  picker.label:SetText(opts.label
+    or "Click the HUD element to hide it  |  right click to cancel")
+  picker.hideOnPick = opts.hide ~= false
   picker.onDone = onDone
   picker.candidates = self:CollectPickCandidates()
   picker:Show()
