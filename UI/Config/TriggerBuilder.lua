@@ -1,5 +1,23 @@
 -- Dropdown-chained trigger editor for a single element. No user code, ever.
 -- Layout uses an explicit y-cursor so the section never overlaps what follows.
+--
+-- UX ON HOLD, 2026-08-01. Krysio's 1.5 feedback (item 5) asks for this section
+-- to be "more clear and concise about what conditions are being created". The
+-- ENGINE is not the gap -- his own example, glow when the spell is off cooldown
+-- AND usable, has worked since 1.4 via condition groups. What is missing is that
+-- nothing here states, in words, which action fires under which circumstances.
+--
+-- Twelve options were worked up and ranked, mockups included:
+--   https://claude.ai/code/artifact/ddf39cbc-4969-4756-b5a0-4aecd03aa28e
+-- The shortlist is a per-group plain-language summary (a pure
+-- ns.Triggers.Describe), connective words inside each condition row so it reads
+-- as a sentence rather than four adjacent boxes, and a per-condition add button.
+--
+-- Deliberately NOT started yet: every one of those twelve came from reading this
+-- file, not from watching anyone use it, and Krysio also says he "can't always
+-- create a custom trigger" -- which would be a missing CONDITION TYPE, and no
+-- amount of relabelling fixes that. Waiting on a screenshot of a trigger he
+-- built and the combination he could not express. Build the right thing once.
 local ns = _G.CoACDM or {}; _G.CoACDM = ns
 local TriggerBuilder = {}
 ns.TriggerBuilder = TriggerBuilder
