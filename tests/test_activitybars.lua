@@ -225,4 +225,18 @@ check("an event with no cast on the bar clears", Verdict(false, true, false) == 
 check("an event with no cast on the bar clears even mid-cast",
   Verdict(false, false, true) == "clear")
 
+-- A cast bar can watch the player, the target or the focus, so the states are
+-- per unit. The history bar's sweep is a separate contract: it asks for YOUR
+-- in-progress cast and must keep getting it whatever the bars are set to.
+local states = ns.CastBar._states
+check("every watchable unit has a state",
+  states.player ~= nil and states.target ~= nil and states.focus ~= nil)
+check("the states are not shared", states.player ~= states.target)
+states.target.active, states.target.name = true, "Enemy Cast"
+check("Current defaults to the player", ns.CastBar:Current().name ~= "Enemy Cast")
+check("Current can be asked for a unit", ns.CastBar:Current("target").name == "Enemy Cast")
+check("an unwatched unit falls back rather than erroring",
+  ns.CastBar:Current("party3") == states.player)
+states.target.active, states.target.name = false, nil
+
 return T

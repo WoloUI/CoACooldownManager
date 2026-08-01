@@ -237,14 +237,32 @@ local CastBar = {}
 ns.CastBar = CastBar
 
 -- Current cast/channel state, refreshed by UNIT_SPELLCAST_* events.
-local castState = { active = false }
-CastBar._state = castState -- test seam
+-- One state per watched unit. A cast bar can follow the player, the target or
+-- the focus; the events fire for all three, they just used to be filtered down
+-- to the player.
+local WATCHED_UNITS = { "player", "target", "focus" }
+local castStates = {}
+for _, unit in ipairs(WATCHED_UNITS) do castStates[unit] = { active = false } end
+
+local function StateFor(unit)
+  return castStates[unit] or castStates.player
+end
+CastBar._states = castStates    -- test seam
+CastBar._state = castStates.player -- test seam (the player's, as it always was)
+
+ns.CastUnitOptions = {
+  { text = "Player", value = "player" },
+  { text = "Target", value = "target" },
+  { text = "Focus", value = "focus" },
+}
 
 -- Public read of what is being cast right now. `_state` above is a test seam;
 -- this is the supported accessor, used by the history bar to draw a sweep on the
 -- in-progress cast rather than duplicating all the UNIT_SPELLCAST plumbing.
-function CastBar:Current()
-  return castState
+-- Defaults to the player on purpose: the history bar asks this for the sweep on
+-- YOUR in-progress cast, and that stays true however a cast bar is configured.
+function CastBar:Current(unit)
+  return StateFor(unit or "player")
 end
 
 local COLOR_CAST = { 0.25, 0.55, 0.85 }
@@ -347,7 +365,7 @@ function CastBar:Update(frame, cfg)
     frame.castBar = holder
   end
 
-  local st = castState
+  local st = StateFor(cc.unit or "player")
   local now = GetTime()
   if ns.TestMode and ns.TestMode.active then
     local dur = 2.5
@@ -418,8 +436,10 @@ local function RefreshSpeeds()
   SwingTimer:SetSpeeds(mh, oh, ranged)
 end
 
-local function ReadCast()
-  local name, _, _, icon, startMs, endMs, _, _, notInterruptible = UnitCastingInfo("player")
+local function ReadCast(unit)
+  unit = unit or "player"
+  local castState = StateFor(unit)
+  local name, _, _, icon, startMs, endMs, _, _, notInterruptible = UnitCastingInfo(unit)
   if name then
     castState.active = true
     castState.channeling = false
@@ -432,9 +452,9 @@ local function ReadCast()
     castState.notInterruptible = notInterruptible
     return
   end
-  name = select(1, UnitChannelInfo("player"))
+  name = select(1, UnitChannelInfo(unit))
   if name then
-    local _, _, _, icon2, startMs2, endMs2, _, notInt2 = UnitChannelInfo("player")
+    local _, _, _, icon2, startMs2, endMs2, _, notInt2 = UnitChannelInfo(unit)
     castState.active = true
     castState.channeling = true
     castState.interrupted = false
@@ -461,11 +481,13 @@ function CastBar.StopVerdict(active, interrupted, stillCasting)
   return interrupted and "flash" or "clear"
 end
 
-local function ClearCast(interrupted)
-  local stillCasting = (UnitCastingInfo("player") or UnitChannelInfo("player")) and true or false
+local function ClearCast(unit, interrupted)
+  unit = unit or "player"
+  local castState = StateFor(unit)
+  local stillCasting = (UnitCastingInfo(unit) or UnitChannelInfo(unit)) and true or false
   local verdict = CastBar.StopVerdict(castState.active, interrupted, stillCasting)
   if verdict == "keep" then
-    ReadCast()
+    ReadCast(unit)
   elseif verdict == "flash" then
     -- Brief red flash so an interrupt/failure reads clearly
     castState.interrupted = true
@@ -500,14 +522,27 @@ ns:On("READY", function()
   end)
 
   local function castEvent(handler)
-    return function(unit, ...) if unit == "player" then handler(unit, ...) end end
+    return function(unit, ...) if castStates[unit] then handler(unit, ...) end end
   end
   ns:RegisterEvent("UNIT_SPELLCAST_START", castEvent(ReadCast))
   ns:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START", castEvent(ReadCast))
   ns:RegisterEvent("UNIT_SPELLCAST_DELAYED", castEvent(ReadCast))
   ns:RegisterEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", castEvent(ReadCast))
-  ns:RegisterEvent("UNIT_SPELLCAST_STOP", castEvent(function() ClearCast(false) end))
-  ns:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP", castEvent(function() ClearCast(false) end))
-  ns:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED", castEvent(function() ClearCast(true) end))
-  ns:RegisterEvent("UNIT_SPELLCAST_FAILED", castEvent(function() ClearCast(true) end))
+  ns:RegisterEvent("UNIT_SPELLCAST_STOP", castEvent(function(unit) ClearCast(unit, false) end))
+  ns:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP", castEvent(function(unit) ClearCast(unit, false) end))
+  ns:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED", castEvent(function(unit) ClearCast(unit, true) end))
+  ns:RegisterEvent("UNIT_SPELLCAST_FAILED", castEvent(function(unit) ClearCast(unit, true) end))
+
+  -- Switching target mid-cast fires no UNIT_SPELLCAST_START: the cast began
+  -- before that unit was yours to watch. Re-read it, and blank the bar when the
+  -- new target is casting nothing (or when there is no new target at all).
+  local function Resync(unit)
+    if UnitCastingInfo(unit) or UnitChannelInfo(unit) then
+      ReadCast(unit)
+    else
+      StateFor(unit).active = false
+    end
+  end
+  ns:RegisterEvent("PLAYER_TARGET_CHANGED", function() Resync("target") end)
+  ns:RegisterEvent("PLAYER_FOCUS_CHANGED", function() Resync("focus") end)
 end)

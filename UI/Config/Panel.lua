@@ -1089,6 +1089,12 @@ function Config:BuildControls()
   c.castH = W.CreateEditBox(parent, 46, 20, function(_, text)
     CastCfg().height = math.max(tonumber(text) or 22, 4); Touch()
   end, "22")
+  c.castUnitLabel = W.CreateLabel(parent, "Watch", 12, W.colors.inkDim)
+  c.castUnit = W.CreateDropdown(parent, 100, function(_, value)
+    CastCfg().unit = value
+    Touch()
+  end)
+  c.castUnit:SetOptions(ns.CastUnitOptions)
   c.castFontLabel = W.CreateLabel(parent, "Text size", 12, W.colors.inkDim)
   c.castFont = W.CreateEditBox(parent, 40, 20, function(_, text)
     -- The shared viewer field: StyleBar already reads cfg.fontSize, it was
@@ -3260,6 +3266,8 @@ function Config:Render()
     c.castH:SetText(tostring(ca.height or 22))
 
     local cells = {}
+    c.castUnit:SetValue(ca.unit or "player")
+    cells[#cells + 1] = { label = c.castUnitLabel, control = c.castUnit, width = 108 }
     c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
     cells[#cells + 1] = { label = c.widthModeLabel, control = c.widthMode, width = 118 }
     if viewer.widthMode == "match" then
