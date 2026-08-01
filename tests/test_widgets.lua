@@ -67,4 +67,17 @@ check("a header can be relabelled", (function()
   return true
 end)())
 
+--------------------------------------------------------------------------------
+-- Scale clamping, shared by the config window and the global bar scale
+--------------------------------------------------------------------------------
+check("an absent scale is 100%", ns.ClampScale(nil) == 1)
+check("a plain scale passes through", ns.ClampScale(1.25) == 1.25)
+-- A scale of 0 makes every bar vanish with nothing left to grab in edit mode,
+-- and the config window with it -- the floor is not decoration.
+check("zero is clamped to the floor", ns.ClampScale(0) == 0.4)
+check("a negative scale is clamped to the floor", ns.ClampScale(-3) == 0.4)
+check("an absurd scale is clamped to the ceiling", ns.ClampScale(99) == 3)
+check("garbage reads as 100%", ns.ClampScale("wide") == 1)
+check("scale rounds to whole percent", ns.ClampScale(1.23456) == 1.23)
+
 return T

@@ -65,6 +65,12 @@ local function CreateOverlay(viewerFrame, cfg)
   overlay:EnableMouse(true)
   overlay:RegisterForDrag("LeftButton")
 
+  -- Clicking a bar picks it for the nudge buttons. OnMouseDown, so it lands
+  -- before a drag starts as well as on a plain click.
+  overlay:SetScript("OnMouseDown", function(self)
+    EditMode:Select(self.cfg.name)
+  end)
+
   overlay:SetScript("OnDragStart", function(self)
     local frame = self.viewerFrame
     frame:SetMovable(true)
@@ -110,9 +116,111 @@ local function CreateOverlay(viewerFrame, cfg)
   return overlay
 end
 
-local function StyleOverlay(overlay, cfg)
+--------------------------------------------------------------------------------
+-- Nudge panel: 1px positioning without the mouse
+--
+-- Dragging cannot land on an exact pixel, and the 12px magnet actively fights
+-- fine alignment. These are the arrow buttons ElvUI's mover carries, on the bar
+-- you last clicked.
+--------------------------------------------------------------------------------
+local NUDGE_DIRECTIONS = {
+  up = { 0, 1 }, down = { 0, -1 }, left = { -1, 0 }, right = { 1, 0 },
+}
+local NUDGE_BIG = 10
+
+local StyleOverlay -- defined below; Select re-styles every overlay
+
+-- SetPoint offsets run along the SCREEN axes whatever anchor pair a bar uses,
+-- so "up" is +y for a bar hanging below its parent just as much as for a free
+-- one -- no per-anchor sign flipping.
+function ns.NudgeDelta(direction, big)
+  local d = NUDGE_DIRECTIONS[direction]
+  if not d then return 0, 0 end
+  local step = big and NUDGE_BIG or 1
+  return d[1] * step, d[2] * step
+end
+
+local nudgeWin
+
+local function SelectedCfg()
+  return EditMode.selected and ns.DB:GetViewer(EditMode.selected) or nil
+end
+
+function EditMode:Nudge(direction, big)
+  local cfg = SelectedCfg()
+  if not cfg then return end
+  local dx, dy = ns.NudgeDelta(direction, big)
+  if dx == 0 and dy == 0 then return end
+  local anchor = ns.CopyTable(ns.DB:GetAnchor(cfg))
+  anchor.x, anchor.y = (anchor.x or 0) + dx, (anchor.y or 0) + dy
+  ns.DB:SetAnchor(cfg, anchor)
+  ns.Viewer:ApplyAllAnchors()
+  self:RefreshOverlays()
+end
+
+local function BuildNudgeWindow()
+  local W = ns.Widgets
+  nudgeWin = W.CreateWindow("CoACDMNudge", 170, 172, "Nudge")
+  nudgeWin.barLabel = W.CreateLabel(nudgeWin, "", 12, W.colors.gold)
+  nudgeWin.barLabel:SetPoint("TOPLEFT", 12, -36)
+  nudgeWin.coords = W.CreateLabel(nudgeWin, "", 11, W.colors.inkDim)
+  nudgeWin.coords:SetPoint("TOPLEFT", 12, -52)
+
+  local function arrow(text, direction)
+    return W.CreateButton(nudgeWin, text, 26, 20, function()
+      EditMode:Nudge(direction, IsShiftKeyDown())
+    end)
+  end
+  nudgeWin.up = arrow("^", "up")
+  nudgeWin.up:SetPoint("TOP", nudgeWin, "TOP", 0, -74)
+  nudgeWin.left = arrow("<", "left")
+  nudgeWin.left:SetPoint("TOPRIGHT", nudgeWin.up, "TOPLEFT", -8, -24)
+  nudgeWin.right = arrow(">", "right")
+  nudgeWin.right:SetPoint("TOPLEFT", nudgeWin.up, "TOPRIGHT", 8, -24)
+  nudgeWin.down = arrow("v", "down")
+  nudgeWin.down:SetPoint("TOP", nudgeWin.up, "BOTTOM", 0, -48)
+
+  nudgeWin.hint = W.CreateLabel(nudgeWin,
+    "Click a bar to pick it.\nHold Shift for " .. NUDGE_BIG .. "px steps.", 10, W.colors.inkDim)
+  nudgeWin.hint:SetPoint("BOTTOMLEFT", 12, 10)
+  return nudgeWin
+end
+
+function EditMode:RefreshNudge()
+  if not self.active then
+    if nudgeWin then nudgeWin:Hide() end
+    return
+  end
+  if not nudgeWin then BuildNudgeWindow() end
+  local cfg = SelectedCfg()
+  if cfg then
+    local anchor = ns.DB:GetAnchor(cfg)
+    nudgeWin.barLabel:SetText(cfg.name)
+    nudgeWin.coords:SetText(("x %d   y %d"):format(
+      math.floor((anchor.x or 0) + 0.5), math.floor((anchor.y or 0) + 0.5)))
+  else
+    nudgeWin.barLabel:SetText("no bar picked")
+    nudgeWin.coords:SetText("")
+  end
+  nudgeWin:Show()
+end
+
+function EditMode:Select(name)
+  self.selected = name
+  self:RefreshNudge()
+  for viewerName, overlay in pairs(overlays) do
+    if overlay.cfg then StyleOverlay(overlay, overlay.cfg, viewerName == name) end
+  end
+end
+
+function StyleOverlay(overlay, cfg, selected)
+  if selected == nil then selected = (EditMode.selected == cfg.name) end
   local isRoot = cfg.name == "Power"
-  if isRoot then
+  if selected then
+    overlay:SetBackdropColor(0.85, 0.64, 0.29, 0.16)
+    overlay:SetBackdropBorderColor(0.85, 0.64, 0.29, 1)
+    overlay.label:SetTextColor(0.95, 0.78, 0.42)
+  elseif isRoot then
     overlay:SetBackdropColor(0.34, 0.83, 0.65, 0.14)
     overlay:SetBackdropBorderColor(0.34, 0.83, 0.65, 1)
     overlay.label:SetTextColor(0.34, 0.83, 0.65)
@@ -150,6 +258,7 @@ function EditMode:RefreshOverlays()
     if not ns.DB:GetViewer(name) then overlay:Hide() end
   end
   if self.active and ns.ExtraActionBar then ns.ExtraActionBar:LayoutOverlays() end
+  self:RefreshNudge()
 end
 
 function EditMode:Toggle()
@@ -162,6 +271,7 @@ function EditMode:Toggle()
   if ns.ExtraActionBar then ns.ExtraActionBar:SetEditing(self.active) end
   if self.active then
     ns:Print("edit mode ON - drag bars to move them; drag the Power bar to move everything. "
+      .. "Click a bar and use the Nudge arrows for 1px steps. "
       .. "Drop a spell from your spellbook on a bar to add it. /cdm edit to finish.")
   else
     ns:Print("edit mode off; layout saved.")

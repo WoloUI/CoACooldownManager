@@ -244,6 +244,33 @@ function ns.FontSize(base)
   return math.max(math.floor((base or 12) * (Appearance().fontScale or 1) + 0.5), 6)
 end
 
+-- Any user-set scale, for the bars and for the config window alike. The floor
+-- is not decoration: a scale of 0 shrinks a bar to nothing, and there is no way
+-- to grab a bar with no size in edit mode -- nor to reopen a config window that
+-- has none. Rounded to whole percent so a slider drag stores 1.25, not
+-- 1.2499999.
+ns.SCALE_MIN, ns.SCALE_MAX = 0.4, 3
+function ns.ClampScale(value)
+  value = tonumber(value) or 1
+  if value < ns.SCALE_MIN then return ns.SCALE_MIN end
+  if value > ns.SCALE_MAX then return ns.SCALE_MAX end
+  return math.floor(value * 100 + 0.5) / 100
+end
+
+-- Scale applied to every bar frame. Separate from the font scale above: that
+-- one grows the text inside bars that keep their size, this one grows the bars
+-- themselves, artwork and all.
+ns.BarScaleOptions = {
+  { text = "50%", value = 0.5 }, { text = "75%", value = 0.75 },
+  { text = "90%", value = 0.9 }, { text = "100%", value = 1.0 },
+  { text = "110%", value = 1.1 }, { text = "125%", value = 1.25 },
+  { text = "150%", value = 1.5 }, { text = "200%", value = 2.0 },
+}
+
+function ns.GetBarScale()
+  return ns.ClampScale(Appearance().barScale or 1)
+end
+
 
 ns.GlowOptions = {
   { text = "Proc (WeakAuras style)", value = "proc" },

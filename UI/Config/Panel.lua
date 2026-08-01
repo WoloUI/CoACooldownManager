@@ -277,6 +277,9 @@ local function BuildWindow()
   -- 780 would clip the third column. Making that grid fluid is GH#7's job.
   local saved = ns.DB and ns.DB.db and ns.DB.db.global
     and ns.DB.db.global.configWindow or {}
+  -- Before the window exists, so it is born at the right size rather than
+  -- flashing at 100% first.
+  W.SetUIScale(saved.scale)
   win = W.CreateWindow("CoACDMConfig", saved.width or 780, saved.height or 560,
     "CoA Cooldown Manager", {
       minWidth = 780, minHeight = 420,
@@ -290,8 +293,25 @@ local function BuildWindow()
       onReflow = function() Config:Render() end,
     })
 
+  -- Window scale, top right. The game's UI Scale drives this window like every
+  -- other frame, and at the 0.53 a lot of players run it comes out unreadable,
+  -- so it carries its own multiplier on top.
+  win.scaleValue = W.CreateLabel(win.titleBar, "100%", 11, W.colors.inkDim)
+  win.scaleValue:SetPoint("RIGHT", win.close, "LEFT", -8, 0)
+  win.scaleSlider = W.CreateSlider(win.titleBar, 76, ns.SCALE_MIN, ns.SCALE_MAX, 0.05,
+    function(_, value)
+      local scale = W.SetUIScale(value)
+      ns.DB.db.global.configWindow.scale = scale
+      win.scaleValue:SetText(math.floor(scale * 100 + 0.5) .. "%")
+    end)
+  win.scaleSlider:SetPoint("RIGHT", win.scaleValue, "LEFT", -6, 0)
+  win.scaleSlider:SetValueSilently(W.uiScale)
+  win.scaleValue:SetText(math.floor(W.uiScale * 100 + 0.5) .. "%")
+  win.scaleLabel = W.CreateLabel(win.titleBar, "Scale", 11, W.colors.inkDim)
+  win.scaleLabel:SetPoint("RIGHT", win.scaleSlider, "LEFT", -6, 0)
+
   win.profileLabel = W.CreateLabel(win.titleBar, "", 11, W.colors.inkDim)
-  win.profileLabel:SetPoint("RIGHT", win.close, "LEFT", -10, 0)
+  win.profileLabel:SetPoint("RIGHT", win.scaleLabel, "LEFT", -12, 0)
 
   -- Sidebar
   win.sidebar = CreateFrame("Frame", nil, win)
@@ -719,6 +739,14 @@ function Config:BuildControls()
     Touch()
   end)
   c.genScale:SetOptions(ns.FontScaleOptions)
+  c.genBarScaleLabel = W.CreateLabel(parent, "Bar scale", 12, W.colors.inkDim)
+  c.genBarScale = W.CreateDropdown(parent, 100, function(_, value)
+    AppearanceCfg().barScale = ns.ClampScale(value)
+    ns.Viewer:ApplyScale()
+    if ns.EditMode and ns.EditMode.active then ns.EditMode:RefreshOverlays() end
+    Touch()
+  end)
+  c.genBarScale:SetOptions(ns.BarScaleOptions)
   c.genGlowLabel = W.CreateLabel(parent, "Glow style", 12, W.colors.inkDim)
   c.genGlow = W.CreateDropdown(parent, 190, function(_, value)
     AppearanceCfg().glow = value
@@ -1985,7 +2013,9 @@ local function RenderElementList(c, viewer, y, isReminders)
           local top = firstRow and firstRow.GetTop and firstRow:GetTop()
           if not top then return end
           local _, cursorY = GetCursorPosition()
-          cursorY = cursorY / UIParent:GetEffectiveScale()
+          -- Into the ROW's coordinate space, not UIParent's: the config window
+          -- carries its own scale, so those two stopped being the same number.
+          cursorY = cursorY / (firstRow:GetEffectiveScale() or UIParent:GetEffectiveScale())
           to = ns.DropIndex(top, ELEMENT_ROW_H, #current.elements, cursorY)
         end
 
@@ -2247,6 +2277,10 @@ function Config:Render()
     c2.genScale:SetPoint("TOPLEFT", 80, y2)
     c2.genScale:SetValue(appearance.fontScale or 1.0)
     c2.genScale:Show()
+    c2.genBarScaleLabel:SetPoint("TOPLEFT", 200, y2 - 4); c2.genBarScaleLabel:Show()
+    c2.genBarScale:SetPoint("TOPLEFT", 262, y2)
+    c2.genBarScale:SetValue(ns.GetBarScale())
+    c2.genBarScale:Show()
     y2 = y2 - 28
     c2.genGlowLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genGlowLabel:Show()
     c2.genGlow:SetPoint("TOPLEFT", 80, y2)

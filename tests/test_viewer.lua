@@ -6,6 +6,7 @@ local ns = {}
 stub.loadAddonFile("Core/Init.lua", ns)
 stub.loadAddonFile("UI/Viewer.lua", ns)
 stub.loadAddonFile("UI/StatusBars.lua", ns)
+stub.loadAddonFile("UI/EditMode.lua", ns)
 
 local T = {}
 local function check(name, cond)
@@ -475,6 +476,23 @@ check("an anchored bar with nothing stored sits above its parent",
 -- ON TOP of its parent is never what "Attach to" means.
 check("an anchored bar never inherits the free pair",
   points({ point = "CENTER", relPoint = "CENTER" }, true) == "BOTTOM/TOP")
+
+--------------------------------------------------------------------------------
+-- Edit mode nudge steps
+--------------------------------------------------------------------------------
+-- SetPoint offsets are screen axes whatever the anchor pair is, so up is +y for
+-- a bar hanging below its parent just as much as for a free one.
+local function nudge(dir, big)
+  local dx, dy = ns.NudgeDelta(dir, big)
+  return dx .. "," .. dy
+end
+check("up moves one pixel up", nudge("up") == "0,1")
+check("down moves one pixel down", nudge("down") == "0,-1")
+check("left moves one pixel left", nudge("left") == "-1,0")
+check("right moves one pixel right", nudge("right") == "1,0")
+check("shift moves ten at a time", nudge("right", true) == "10,0")
+check("shift down moves ten down", nudge("down", true) == "0,-10")
+check("an unknown direction moves nothing", nudge("sideways") == "0,0")
 
 ns.DB = nil
 

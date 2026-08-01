@@ -64,12 +64,19 @@ end
 
 -- Where a frame's centre sits relative to the screen centre -- the x/y a free
 -- anchor needs to leave a bar exactly where it already is.
+--
+-- SetPoint offsets are measured in the moved frame's OWN scale, so UIParent's
+-- centre has to be converted into that scale before subtracting. With the bar
+-- scale left at 100% the two match and this is a plain subtraction; at any
+-- other setting, skipping the conversion misplaces the bar by the difference.
 function ns.ScreenOffset(frame)
   if not frame or not frame.GetCenter then return nil end
   local cx, cy = frame:GetCenter()
   local px, py = UIParent:GetCenter()
   if not cx or not px then return nil end
-  return cx - px, cy - py
+  local sf = frame:GetEffectiveScale()
+  local ratio = (sf and sf > 0) and (UIParent:GetEffectiveScale() / sf) or 1
+  return cx - px * ratio, cy - py * ratio
 end
 
 local function ApplyAnchor(frame, cfg, resolving)
@@ -97,6 +104,16 @@ function Viewer:ApplyStrata()
   local strata = ns.GetFrameStrata and ns.GetFrameStrata() or "MEDIUM"
   for _, frame in pairs(frames) do
     frame:SetFrameStrata(strata)
+  end
+end
+
+-- One scale for every bar, so a whole layout can be grown or shrunk without
+-- re-entering a size on each bar. Edit-mode overlays are children of the bar
+-- frames and follow along for free.
+function Viewer:ApplyScale()
+  local scale = ns.GetBarScale and ns.GetBarScale() or 1
+  for _, frame in pairs(frames) do
+    frame:SetScale(scale)
   end
 end
 
@@ -249,6 +266,7 @@ function Viewer:BuildAll()
       frame.cfg = nil
     end
   end
+  self:ApplyScale()
   self:ApplyAllAnchors()
   self:ApplyStrata()
   self:UpdateVisibility()
