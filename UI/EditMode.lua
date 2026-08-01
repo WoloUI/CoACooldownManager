@@ -160,7 +160,9 @@ end
 
 local function BuildNudgeWindow()
   local W = ns.Widgets
-  nudgeWin = W.CreateWindow("CoACDMNudge", 170, 172, "Nudge")
+  -- Tall enough for the D-pad AND the hint under it: the two used to overlap,
+  -- the down arrow landing on the first line of text.
+  nudgeWin = W.CreateWindow("CoACDMNudge", 176, 204, "Nudge")
   nudgeWin.barLabel = W.CreateLabel(nudgeWin, "", 12, W.colors.gold)
   nudgeWin.barLabel:SetPoint("TOPLEFT", 12, -36)
   nudgeWin.coords = W.CreateLabel(nudgeWin, "", 11, W.colors.inkDim)
@@ -172,17 +174,17 @@ local function BuildNudgeWindow()
     end)
   end
   nudgeWin.up = arrow("^", "up")
-  nudgeWin.up:SetPoint("TOP", nudgeWin, "TOP", 0, -74)
+  nudgeWin.up:SetPoint("TOP", nudgeWin, "TOP", 0, -70)
   nudgeWin.left = arrow("<", "left")
   nudgeWin.left:SetPoint("TOPRIGHT", nudgeWin.up, "TOPLEFT", -8, -24)
   nudgeWin.right = arrow(">", "right")
   nudgeWin.right:SetPoint("TOPLEFT", nudgeWin.up, "TOPRIGHT", 8, -24)
   nudgeWin.down = arrow("v", "down")
-  nudgeWin.down:SetPoint("TOP", nudgeWin.up, "BOTTOM", 0, -48)
+  nudgeWin.down:SetPoint("TOP", nudgeWin.up, "BOTTOM", 0, -28)
 
   nudgeWin.hint = W.CreateLabel(nudgeWin,
     "Click a bar to pick it.\nHold Shift for " .. NUDGE_BIG .. "px steps.", 10, W.colors.inkDim)
-  nudgeWin.hint:SetPoint("BOTTOMLEFT", 12, 10)
+  nudgeWin.hint:SetPoint("BOTTOMLEFT", 12, 12)
   return nudgeWin
 end
 
