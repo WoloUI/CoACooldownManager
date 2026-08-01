@@ -17,6 +17,7 @@ local files = {
   "tests/test_panelrender.lua",
   "tests/test_power.lua",
   "tests/test_castlog.lua",
+  "tests/test_keybinds.lua",
   "tests/test_capture.lua",
   "tests/test_suggestions.lua",
 }

@@ -10,14 +10,48 @@ local byId, byName = {}, {}
 local dirty = true
 local scanTip
 
-local function Abbrev(key)
-  if not key then return nil end
-  key = key:gsub("SHIFT%-", "s"):gsub("CTRL%-", "c"):gsub("ALT%-", "a")
-  key = key:gsub("MOUSEWHEELUP", "wU"):gsub("MOUSEWHEELDOWN", "wD")
-  key = key:gsub("BUTTON", "m"):gsub("NUMPAD", "n")
-  key = key:gsub("SPACE", "Sp")
-  return key
+-- Keybind text, shortened the way ElvUI and Bartender shorten it: S1, not s-1;
+-- M4, not "Mouse Button 4". A key label wider than the icon it sits on is the
+-- whole problem -- it spills over the neighbouring icons.
+--
+-- Two sources feed this and they agree on nothing. GetBindingKey returns raw
+-- tokens ("SHIFT-BUTTON4"). An action button's own HotKey text is already
+-- Blizzard-abbreviated ("s-1") or spelled out in the client's language ("Mouse
+-- Button 4"). Both have to come out the same, so the replacements cover both
+-- spellings and run longest-first -- MOUSEWHEELUP before BUTTON, NUMPADDIVIDE
+-- before NUMPAD -- or a short pattern eats the prefix of a long one.
+local KEY_ABBREVIATIONS = {
+  -- Modifiers, Blizzard's abbreviated form first (it carries the dash)
+  { "S%-", "S" }, { "C%-", "C" }, { "A%-", "A" }, { "M%-", "M" },
+  { "SHIFT%-", "S" }, { "CTRL%-", "C" }, { "ALT%-", "A" }, { "META%-", "M" },
+  -- Mouse
+  { "MOUSE WHEEL UP", "MU" }, { "MOUSE WHEEL DOWN", "MD" },
+  { "MOUSEWHEELUP", "MU" }, { "MOUSEWHEELDOWN", "MD" },
+  { "MIDDLEMOUSE", "M3" }, { "MOUSE BUTTON ", "M" }, { "BUTTON", "M" },
+  -- Numpad
+  { "NUMPADDIVIDE", "N/" }, { "NUMPADMULTIPLY", "N*" }, { "NUMPADMINUS", "N-" },
+  { "NUMPADPLUS", "N+" }, { "NUMPADDECIMAL", "N." }, { "NUMPAD", "N" },
+  -- Named keys, longest first
+  { "BACKSPACE", "BS" }, { "CAPSLOCK", "Cp" }, { "PAGEDOWN", "PD" },
+  { "PAGEUP", "PU" }, { "ESCAPE", "Esc" }, { "INSERT", "Ins" },
+  { "DELETE", "Del" }, { "SPACE", "SpB" }, { "ENTER", "Ent" },
+  { "HOME", "Hm" }, { "END", "End" }, { "TAB", "Tb" },
+}
+
+function ns.AbbrevKey(key)
+  if not key or key == "" then return key end
+  local text = key:upper()
+  for _, pair in ipairs(KEY_ABBREVIATIONS) do
+    text = text:gsub(pair[1], pair[2])
+  end
+  -- Anything unrecognised still has to lose its separators: a leftover dash is
+  -- exactly the "s-1" this exists to remove.
+  text = text:gsub("%s+", ""):gsub("%-+$", "")
+  if text:find("^N[-]") then return text end -- NUMPADMINUS legitimately ends in -
+  return (text:gsub("%-", ""))
 end
+
+local Abbrev = ns.AbbrevKey
 
 -- Spell/macro-spell name on an action slot, via tooltip (ID-scheme agnostic)
 local function ActionName(slot)
@@ -41,14 +75,18 @@ local function ButtonSlot(button, fallback)
   return fallback
 end
 
--- First usable key for a button: its own hotkey label (already abbreviated by
--- the UI), its LibActionButton bind target, the Blizzard command, or a click
--- binding on the button itself.
+-- First usable key for a button: its own hotkey label, its LibActionButton bind
+-- target, the Blizzard command, or a click binding on the button itself.
+--
+-- EVERY path goes through Abbrev, the button's own label included. That label
+-- is where "Mouse Button 4" and "s-1" came from: whatever the action bar chose
+-- to print is the action bar's business, but it is not what fits under a 32px
+-- icon here.
 local function ButtonKey(button, name, command)
   local hotkey = button.HotKey or _G[name .. "HotKey"]
   local text = hotkey and hotkey:GetText()
   if text and text ~= "" and text ~= RANGE_INDICATOR and text ~= "●" then
-    return text
+    return Abbrev(text)
   end
   if button.keyBoundTarget then
     local key = GetBindingKey(button.keyBoundTarget)
