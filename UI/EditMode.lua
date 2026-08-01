@@ -46,6 +46,11 @@ local function AnchorLabel(cfg)
   if anchor.parent == "FREE" or not anchor.parent then
     return cfg.name .. "  |cff9aa3b5(free)|r"
   end
+  -- "-> FRAME" tells nobody anything; the name is the useful half
+  local frameName = ns.FrameAnchorName(anchor)
+  if anchor.parent == "FRAME" then
+    return cfg.name .. "  |cff9aa3b5-> " .. (frameName or "frame?") .. "|r"
+  end
   return cfg.name .. "  |cff9aa3b5-> " .. anchor.parent .. "|r"
 end
 

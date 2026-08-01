@@ -478,6 +478,26 @@ check("an anchored bar never inherits the free pair",
   points({ point = "CENTER", relPoint = "CENTER" }, true) == "BOTTOM/TOP")
 
 --------------------------------------------------------------------------------
+-- Anchoring to a frame owned by another addon
+--------------------------------------------------------------------------------
+-- Typing a frame name is how a bar is pinned to ElvUF_Target without dragging
+-- it there by eye. Whitespace is what a pasted name arrives with.
+check("a frame anchor yields its name",
+  ns.FrameAnchorName({ parent = "FRAME", frameName = "ElvUF_Target" }) == "ElvUF_Target")
+check("surrounding whitespace is trimmed",
+  ns.FrameAnchorName({ parent = "FRAME", frameName = "  ElvUF_Target " }) == "ElvUF_Target")
+check("an empty name is no anchor",
+  ns.FrameAnchorName({ parent = "FRAME", frameName = "   " }) == nil)
+check("a missing name is no anchor", ns.FrameAnchorName({ parent = "FRAME" }) == nil)
+check("a viewer parent is not a frame anchor",
+  ns.FrameAnchorName({ parent = "Power" }) == nil)
+check("a free bar is not a frame anchor", ns.FrameAnchorName({ parent = "FREE" }) == nil)
+check("junk is tolerated", ns.FrameAnchorName(nil) == nil)
+-- A frame anchor is a parent like any other, so the Side pair applies to it
+check("a frame-anchored bar keeps its stored pair",
+  points({ parent = "FRAME", point = "TOP", relPoint = "BOTTOM" }, true) == "TOP/BOTTOM")
+
+--------------------------------------------------------------------------------
 -- Edit mode nudge steps
 --------------------------------------------------------------------------------
 -- SetPoint offsets are screen axes whatever the anchor pair is, so up is +y for

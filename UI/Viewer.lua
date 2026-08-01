@@ -79,6 +79,23 @@ function ns.ScreenOffset(frame)
   return cx - px * ratio, cy - py * ratio
 end
 
+-- The global frame a bar is pinned to, or nil. Typing a name is how a bar lands
+-- on ElvUF_Target exactly rather than by dragging it there by eye; a pasted name
+-- arrives with whitespace round it often enough to be worth trimming here.
+function ns.FrameAnchorName(anchor)
+  if not anchor or anchor.parent ~= "FRAME" then return nil end
+  local name = anchor.frameName
+  if type(name) ~= "string" then return nil end
+  name = name:gsub("^%s+", ""):gsub("%s+$", "")
+  if name == "" then return nil end
+  return name
+end
+
+-- Set when a bar wants a frame that does not exist yet, so the anchors get
+-- another go. ElvUI builds its unit frames on login, which can land after our
+-- first pass, and a bar stranded in the middle of the screen looks like a bug.
+Viewer.pendingFrameAnchor = false
+
 local function ApplyAnchor(frame, cfg, resolving)
   local anchor = ns.DB:GetAnchor(cfg)
   frame:ClearAllPoints()
@@ -87,6 +104,20 @@ local function ApplyAnchor(frame, cfg, resolving)
     frame:SetPoint(point, UIParent, relPoint, anchor.x or 0, anchor.y or 0)
     return
   end
+
+  local frameName = ns.FrameAnchorName(anchor)
+  if frameName then
+    local target = _G[frameName]
+    if type(target) == "table" and target.GetObjectType then
+      local point, relPoint = ns.ResolveAnchorPoints(anchor, true)
+      frame:SetPoint(point, target, relPoint, anchor.x or 0, anchor.y or 0)
+      return
+    end
+    Viewer.pendingFrameAnchor = true
+    frame:SetPoint("CENTER", UIParent, "CENTER", anchor.x or 0, anchor.y or 0)
+    return
+  end
+
   local parentCfg = ns.DB:GetViewer(anchor.parent)
   local parentFrame = parentCfg and frames[anchor.parent]
   if not parentFrame or resolving[anchor.parent] then
@@ -118,6 +149,7 @@ function Viewer:ApplyScale()
 end
 
 function Viewer:ApplyAllAnchors()
+  self.pendingFrameAnchor = false
   local resolving = {}
   for _, cfg in ipairs(ns.profile.viewers) do
     local frame = frames[cfg.name]
@@ -292,5 +324,20 @@ ns:On("READY", function()
   ns:RegisterEvent("PLAYER_REGEN_DISABLED", function() Viewer:UpdateVisibility() end)
   ns:RegisterEvent("PLAYER_TARGET_CHANGED", function() Viewer:UpdateVisibility() end)
   ns:OnTick(function() Viewer:UpdateAll() end)
+
+  -- Retry the frame anchors while any of them is still waiting for its frame.
+  -- Throttled, and it stops the moment every name resolves: another addon's
+  -- frames can appear well after our first pass, but polling forever for a
+  -- misspelled name is not a plan.
+  local retryAt = 0
+  ns:OnTick(function()
+    if not Viewer.pendingFrameAnchor then return end
+    local now = GetTime()
+    if now < retryAt then return end
+    retryAt = now + 2
+    Viewer:ApplyAllAnchors()
+  end)
+  ns:RegisterEvent("PLAYER_ENTERING_WORLD", function() Viewer:ApplyAllAnchors() end)
+
   Viewer:BuildAll()
 end)

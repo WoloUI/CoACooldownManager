@@ -521,6 +521,26 @@ function Config:BuildControls()
     Touch()
     Config:Render()
   end)
+  c.anchorFrameLabel = W.CreateLabel(parent, "Frame name", 12, W.colors.inkDim)
+  c.anchorFrame = W.CreateEditBox(parent, 170, 20, function(_, text)
+    local viewer = SelectedViewer()
+    local anchor = ns.CopyTable(ns.DB:GetAnchor(viewer))
+    anchor.frameName = text
+    ns.DB:SetAnchor(viewer, anchor)
+    -- Say whether the name resolves NOW: a typo is otherwise indistinguishable
+    -- from a frame that has not been created yet.
+    local resolved = ns.FrameAnchorName(anchor)
+    if resolved and type(_G[resolved]) == "table" and _G[resolved].GetObjectType then
+      ns:Print(viewer.name .. " anchored to " .. resolved .. ".")
+    elseif resolved then
+      ns:Print("no frame called '" .. resolved .. "' exists yet - "
+        .. viewer.name .. " sits on the screen centre until one does.")
+    end
+    Touch()
+  end, "ElvUF_Target")
+  c.anchorFrameHint = W.CreateLabel(parent,
+    "A frame belonging to another addon, by its global name: ElvUF_Target, ElvUF_Player,\n"
+    .. "TargetFrame. The bar follows it wherever that addon puts it.", 10, W.colors.inkDim)
   c.anchorPosLabel = W.CreateLabel(parent, "Side", 12, W.colors.inkDim)
   c.anchorPos = W.CreateDropdown(parent, 130, function(_, value)
     local viewer = SelectedViewer()
@@ -3446,7 +3466,10 @@ function Config:Render()
 
   local posCells = {}
   if viewer.name ~= "Power" then
-    local parentOptions = { { text = "Screen (free)", value = "FREE" } }
+    local parentOptions = {
+      { text = "Screen (free)", value = "FREE" },
+      { text = "Frame by name", value = "FRAME" },
+    }
     for _, other in ipairs(ns.profile.viewers) do
       if other.name ~= viewer.name and not ns.DB:WouldCycle(viewer.name, other.name) then
         parentOptions[#parentOptions + 1] = { text = other.name, value = other.name }
@@ -3457,6 +3480,11 @@ function Config:Render()
     c.anchorParent:SetValue(anchor.parent or "FREE")
     posCells[#posCells + 1] =
       { label = c.anchorParentLabel, control = c.anchorParent, width = 158 }
+    if anchor.parent == "FRAME" then
+      c.anchorFrame:SetText(anchor.frameName or "")
+      posCells[#posCells + 1] =
+        { label = c.anchorFrameLabel, control = c.anchorFrame, width = 178 }
+    end
     if anchor.parent ~= "FREE" then
       local pos = "above"
       if anchor.relPoint == "BOTTOM" then pos = "below"
@@ -3478,6 +3506,9 @@ function Config:Render()
   posCells[#posCells + 1] = { label = c.anchorXLabel, control = c.anchorX, width = 64 }
   posCells[#posCells + 1] = { label = c.anchorYLabel, control = c.anchorY, width = 64 }
   y = ns.FormCells(y, posCells, posPaneW)
+  if anchor.parent == "FRAME" then
+    y = PlaceHint(c.anchorFrameHint, y, posPaneW)
+  end
 
   win.content:SetHeight(math.max(-y + 40, 400))
 end
