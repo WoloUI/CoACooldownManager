@@ -31,8 +31,10 @@ preview grid. Test mode shows fake indicators so you can position them without a
 Ascension breaks most 3.3.5 addons in three specific ways, and CoACDM is designed around
 all three:
 
-- **Spell IDs change between patches.** CoACDM stores spell **names**, not IDs, everywhere.
+- **Spell IDs change between patches.** CoACDM stores spell **names**, not IDs, by default.
   A name also follows the learned rank automatically, so nothing silently stops tracking.
+  Type an **ID** instead and that exact ID is what gets tracked — which is the only handle
+  that works for the custom auras this client cannot even name.
 - **There are no classes.** Nothing in the addon assumes a class, a spec, or a fixed
   resource. Bars auto-detect what you actually have.
 - **The API is a custom backport.** CoACDM uses Ascension's own APIs where they exist
@@ -72,8 +74,24 @@ Each bar tracks five kinds of element: **spells**, **items** (consumables),
   scan suggestion. All four build the element the same way, and the bar's style decides
   what it becomes — the same spell is a cooldown on an icon row and a draining debuff on
   a duration bar.
-- Power bars: per-bar text mode — current/max, current only, percent, or hidden.
+- Power bars: per-bar text mode — current/max, current only, percent, or hidden. A resource
+  counted in whole points (Souls, Ember, Felfury, Advantage) is drawn **as points**, with a
+  divider per point instead of one flat fill.
 - Per-bar `Timer` toggle, so target debuffs can show just their stack count.
+- **Rows or columns, with a wrap.** An icon bar's `Layout` is Row or Column, `Growth` runs
+  left/right (or up/down for a column), and `Per line` wraps the extras onto another line —
+  `Overflow` says which way those lines stack. `Width mode: Match bar` measures the real
+  shape, so a bar following a column is one icon wide.
+- **Item families.** Comma-separate a consumable's tiers, best first
+  (`Runic Healing Potion, Super Healing Potion, Greater Healing Potion`): the best one you
+  actually carry leads, and the slot falls to the next as you run out. `Show` →
+  **Only while carried** hides the slot entirely while you have none.
+- **Apply look to all bars** copies one bar's sizes, spacing, font, growth and toggles onto
+  every other bar of the same style — 20 bars no longer means setting the same three numbers
+  20 times.
+- **[Masque](https://github.com/bkader/Masque-WoTLK) support**, one skin group per bar, so
+  Essentials and Utility can look different. Install it and the groups appear on their own;
+  without it nothing changes.
 
 ### Triggers — conditional logic, no scripting
 
@@ -82,6 +100,19 @@ A base trigger plus chained conditions, all from dropdowns. Conditions can be
 above N", "only when that other spell is off cooldown", "only while my pet is out".
 Actions include **glow** and **play sound**, edge-triggered so a sound fires once on
 false→true and re-arms cleanly. Pet buffs are trackable as first-class units.
+
+**Time left (%)** is the refresh window every DoT class asks for: glow under 30% left and
+one condition covers a 12-second DoT and a 30-second one. A permanent aura has no
+percentage, so it never glows forever. (A stack threshold is *Stacks* with `>=`.)
+
+**Add sound alert** writes the trigger for the three everyone wants — on aura gained, on
+aura lost, on cooldown ready — and then you just pick the sound in the group it creates.
+
+**Glow my action button** mirrors an element's glow onto the real action-bar button holding
+that spell (Blizzard bars, ElvUI or Bartender4, whichever one is actually on screen). It
+mirrors a glow, so the element needs a Glow condition — and because it is a *condition*, the
+"warn me when it falls off" case is just *This element's aura up → Missing*. `/cdm
+actionglow` says which button it resolved and why nothing is lighting up.
 
 *This spell usable* / *Other spell usable* read `IsUsableSpell`, which is a different
 question from *ready*: a spell gated by a proc or a state (CoA's Desecrate) is off
@@ -264,6 +295,11 @@ Optional but recommended: ElvUI (unit-frame tracking + skinning) and LibSharedMe
 | `/cdm usable <spell>` | Print `IsUsableSpell` / `IsUsableAction` for a spell (proc-gate triage) |
 | `/cdm totems` | Dump every totem slot's raw contents |
 | `/cdm trinket` | Trinket diagnostic |
+| `/cdm actionglow` | Why an action-bar glow is or is not firing (which button it resolved) |
+| `/cdm aura <name>` | Why an aura is or is not matching, per unit |
+| `/cdm power` | Every power index the client answers for (is this resource an aura?) |
+| `/cdm spellbook` | Which resolver answers for spellbook drag/shift+click |
+| `/cdm scale <n>` | Config-window scale, the way back from one too small to use |
 | `/cdm minimap` | Toggle the minimap button |
 | `/cdm reset` | Reset positions |
 | `/cdm resetextra` | Reset the ExtraActionBar position |
