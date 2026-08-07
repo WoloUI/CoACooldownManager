@@ -344,4 +344,23 @@ check("the Reaper entry names its filling aura",
 check("the Reaper entry tracks its aura by ID",
   ns.ClassResource("souls").aura == 500363)
 
+--------------------------------------------------------------------------------
+-- Apply one bar's look to the others
+local src = { name = "A", style = "icons", iconSize = 40, spacing = 2, growth = "LEFT" }
+local mate = { name = "B", style = "icons", iconSize = 24, spacing = 8,
+  growth = "CENTER", orientation = "VERTICAL" }
+local other = { name = "C", style = "bars", barHeight = 30, growth = "UP" }
+local list = { src, mate, other }
+
+check("one bar of the same style is updated", ns.CopyBarLook(src, list) == 1)
+check("the size is copied", mate.iconSize == 40)
+check("the growth is copied", mate.growth == "LEFT")
+-- Nil on the source clears the target: "apply to all" that left one bar a column
+-- would not have applied anything
+check("a key the source does not set is cleared", mate.orientation == nil)
+check("another style is left alone", other.barHeight == 30 and other.growth == "UP")
+check("the source is never its own target", src.iconSize == 40)
+check("a second pass reports nothing to do", ns.CopyBarLook(src, list) == 0)
+check("no source is a no-op", ns.CopyBarLook(nil, list) == 0)
+
 return T

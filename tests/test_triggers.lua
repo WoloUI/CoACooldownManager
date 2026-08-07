@@ -703,6 +703,32 @@ check("exactID beats the name",
 check("exactID with no ID still answers the name",
   ns.ElementSpellRef({ name = "Reap", exactID = true }) == "Reap")
 
+--------------------------------------------------------------------------------
+-- Time left (%): the refresh window ("pandemic"), so one condition covers a 12s
+-- DoT and a 30s one. 8 of 12 seconds left = 66%.
+local pandemicEl = { kind = "buff", spellID = 2, unit = "player", showWhen = "always",
+  conditions = { { ctype = "remainingpct", op = "<", value = 30, action = "glow" } } }
+local fullAura = { name = "Rejuv", count = 1, duration = 12, expirationTime = NOW + 8 }
+local lateAura = { name = "Rejuv", count = 1, duration = 12, expirationTime = NOW + 3 }
+local permAura = { name = "Oath", count = 1, duration = 0, expirationTime = 0 }
+d = ns.Triggers:Evaluate(pandemicEl, Ctx({ aura = function() return fullAura end }))
+check("no refresh glow at 66% left", not d.glow)
+d = ns.Triggers:Evaluate(pandemicEl, Ctx({ aura = function() return lateAura end }))
+check("refresh glow at 25% left", d.glow)
+d = ns.Triggers:Evaluate(pandemicEl, Ctx({ aura = function() return permAura end }))
+check("a permanent aura never enters the refresh window", not d.glow)
+
+-- This aura up / missing: what a gain/loss sound hangs off
+local upEl = { kind = "buff", spellID = 2, unit = "player", showWhen = "always",
+  conditions = { { ctype = "auraup", value = true, action = "glow" } } }
+d = ns.Triggers:Evaluate(upEl, Ctx({ aura = function() return fullAura end }))
+check("aura up matches while the aura is there", d.glow)
+d = ns.Triggers:Evaluate(upEl, Ctx())
+check("aura up does not match while it is gone", not d.glow)
+upEl.conditions[1].value = false
+d = ns.Triggers:Evaluate(upEl, Ctx())
+check("aura missing matches while it is gone", d.glow)
+
 -- ...and the aura lookup is told to be strict for those, so a same-named aura
 -- with a different id cannot answer instead
 local sawStrict

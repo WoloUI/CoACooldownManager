@@ -521,6 +521,44 @@ function DB:DeleteViewer(name)
 end
 
 --------------------------------------------------------------------------------
+-- Apply one bar's look to the others
+--------------------------------------------------------------------------------
+-- Twenty bars set up one at a time is the real pain, so this copies the LOOK of
+-- one bar onto every other bar of the SAME STYLE.
+--
+-- Same style only, and it is not caution: `growth` means CENTER/LEFT/RIGHT on an
+-- icon row and UP/DOWN on a duration bar, so copying across styles would leave a
+-- bars viewer with growth = "CENTER", which reads as "grow down".
+--
+-- A nil on the source CLEARS the key on the target: the point is that the bars
+-- match afterwards, and "apply" that left the odd column behind would not.
+ns.BarLookKeys = {
+  "iconSize", "spacing", "fontSize", "growth", "orientation", "perRow",
+  "overflow", "barHeight", "showTimer", "showStacks", "showKeybind",
+  "reverseSweep", "showGCD", "showIcon",
+}
+
+-- Pure: takes the source and the list, returns how many bars changed.
+function ns.CopyBarLook(source, viewers, keys)
+  if not source then return 0 end
+  keys = keys or ns.BarLookKeys
+  local changed = 0
+  for _, viewer in ipairs(viewers or {}) do
+    if viewer ~= source and viewer.style == source.style then
+      local touched = false
+      for _, key in ipairs(keys) do
+        if viewer[key] ~= source[key] then
+          viewer[key] = source[key]
+          touched = true
+        end
+      end
+      if touched then changed = changed + 1 end
+    end
+  end
+  return changed
+end
+
+--------------------------------------------------------------------------------
 -- Layout (positions/anchors, per CHARACTER, shared across its specs/profiles)
 --------------------------------------------------------------------------------
 function DB:GetLayout()

@@ -58,6 +58,7 @@ local CONDITION_TYPES = {
   { text = "This spell ready", value = "ready" },
   { text = "This spell usable", value = "usable" },
   { text = "Time left (sec)", value = "remaining" },
+  { text = "Time left (%)", value = "remainingpct" },
   { text = "Stacks", value = "stacks" },
   { text = "Power (value)", value = "power" },
   { text = "Power (%)", value = "powerpct" },
@@ -70,6 +71,7 @@ local CONDITION_TYPES = {
   { text = "Other spell ready", value = "othercd" },
   { text = "Other spell usable", value = "otherusable" },
   { text = "Pet active", value = "petactive" },
+  { text = "This aura up", value = "auraup" },
   { text = "This totem up", value = "totemup" },
   { text = "This totem is", value = "totemname" },
 }
@@ -122,8 +124,8 @@ local POWER_OPTIONS = {
 }
 
 -- Which extra widgets each condition type needs
-local NUMERIC = { remaining = true, stacks = true, power = true, powerpct = true,
-  targethp = true, otherstacks = true, otherremaining = true }
+local NUMERIC = { remaining = true, remainingpct = true, stacks = true, power = true,
+  powerpct = true, targethp = true, otherstacks = true, otherremaining = true }
 local NEEDS_POWER = { power = true, powerpct = true }
 local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true,
   otherusable = true }
@@ -149,6 +151,7 @@ local BOOL_OPTIONS = {
   combat = { { text = "In combat", value = true }, { text = "Out of combat", value = false } },
   hastarget = { { text = "Has target", value = true }, { text = "No target", value = false } },
   petactive = { { text = "Active", value = true }, { text = "Missing", value = false } },
+  auraup = { { text = "Active", value = true }, { text = "Missing", value = false } },
   totemup = { { text = "Standing", value = true }, { text = "Down", value = false } },
   totemname = { { text = "Standing", value = true }, { text = "Not standing", value = false } },
 }
@@ -460,6 +463,42 @@ function TriggerBuilder:Create(parent)
     builder.element.onlyMine = checked
   end)
 
+  -- Sound on the three things people actually want a sound for, without building
+  -- a trigger by hand. It writes the SAME condition the builder would (the
+  -- groups are already edge-triggered, so "aura up" fires once on gain and "aura
+  -- down" once on loss) and the group header that appears is where the sound
+  -- itself is picked -- one list of sounds, not two.
+  builder.alertLabel = W.CreateLabel(builder, "Add sound alert", 12, W.colors.inkDim)
+  builder.alert = W.CreateDropdown(builder, 160, function(self, value)
+    local element = builder.element
+    if not element or value == "" then return end
+    local presets = {
+      gain = { ctype = "auraup", value = true, action = "sound" },
+      loss = { ctype = "auraup", value = false, action = "sound" },
+      ready = { ctype = "ready", value = true, action = "sound" },
+    }
+    local wanted = presets[value]
+    if not wanted then return end
+    element.conditions = element.conditions or {}
+    for _, cond in ipairs(element.conditions) do
+      if cond.action == "sound" and cond.ctype == wanted.ctype
+        and cond.value == wanted.value then
+        ns:Print("that sound alert is already on this element -- pick the sound in"
+          .. " the 'Play sound when' group below.")
+        return
+      end
+    end
+    table.insert(element.conditions, wanted)
+    ns:Print("added the alert. Pick the sound in the 'Play sound when' group below.")
+    Rebuild()
+  end)
+  builder.alert:SetOptions({
+    { text = "None", value = "" },
+    { text = "On aura gained", value = "gain" },
+    { text = "On aura lost", value = "loss" },
+    { text = "On cooldown ready", value = "ready" },
+  })
+
   -- No "(and...)" suffix any more: each group header states its own join
   builder.condHeader = W.CreateSectionHeader(builder, "CONDITIONS")
   builder.condRows = {}
@@ -538,6 +577,10 @@ function TriggerBuilder:Load(element, onChange)
     builder.slot:Hide()
   end
   cells[#cells + 1] = { label = builder.showLabel, control = builder.show, width = 188 }
+  -- Always reads "None": it is an ADD button shaped like a dropdown, not a stored
+  -- setting -- what it wrote lives in the condition groups below.
+  builder.alert:SetValue("")
+  cells[#cells + 1] = { label = builder.alertLabel, control = builder.alert, width = 168 }
 
   -- Trinket: proc buff override + internal cooldown. Totem: the planting spell.
   if isTrinket then

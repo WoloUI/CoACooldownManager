@@ -653,6 +653,20 @@ function Config:BuildControls()
     SelectedViewer().overflow = value
     Touch()
   end)
+  -- 20 bars styled one at a time is the actual pain point. This copies the look
+  -- (sizes, spacing, font, growth, toggles) onto every other bar of the same
+  -- style; sizes that describe a RELATIONSHIP (width mode, follow, min) stay put.
+  c.applyLook = W.CreateButton(parent, "Apply look to all bars", 150, 20, function()
+    local viewer = SelectedViewer()
+    if not viewer then return end
+    local changed = ns.CopyBarLook(viewer, ns.profile.viewers)
+    Touch()
+    Config:Render()
+    ns:Print(changed > 0
+      and ("copied %s's look onto %d other %s bar(s)."):format(viewer.name, changed, viewer.style)
+      or ("every other %s bar already matches %s."):format(viewer.style, viewer.name))
+  end)
+
   c.perRowHint = W.CreateLabel(parent,
     "Per line 0 keeps everything on one line. Above 0 the extras wrap onto another"
     .. " line (another column, for a column bar).", 10, W.colors.inkDim)
@@ -3556,6 +3570,7 @@ function Config:Render()
       toggles[#toggles + 1] = { control = c.showBarIcon, width = 78 }
     end
     y = ns.FormCells(y, toggles, paneW)
+    y = ns.FormCells(y, { { control = c.applyLook, width = 158 } }, paneW)
   else
     -- reminders. Its own label rather than rewriting the icon row's, so that
     -- widget now carries exactly one meaning per style.

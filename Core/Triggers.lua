@@ -27,19 +27,33 @@ function ns.ElementSpellRef(element)
 end
 local ElementSpellRef = ns.ElementSpellRef
 
+local function RemainingSeconds(element, display, ctx)
+  if element.kind == "cooldown" then
+    return ctx.cooldownRemaining(element.spellID)
+  end
+  -- The TOTEM's own time left, 0 while it is down. Never the re-plant
+  -- cooldown, which display.expirationTime carries in that state.
+  if element.kind == "totem" then return display.totemRemaining or 0 end
+  if display.expirationTime and display.expirationTime > 0 then
+    return math.max(0, display.expirationTime - ctx.now())
+  end
+  return nil
+end
+
 local function ConditionValue(cond, element, display, ctx)
   local ctype = cond.ctype
   if ctype == "remaining" then
-    if element.kind == "cooldown" then
-      return ctx.cooldownRemaining(element.spellID)
-    end
-    -- The TOTEM's own time left, 0 while it is down. Never the re-plant
-    -- cooldown, which display.expirationTime carries in that state.
-    if element.kind == "totem" then return display.totemRemaining or 0 end
-    if display.expirationTime and display.expirationTime > 0 then
-      return math.max(0, display.expirationTime - ctx.now())
-    end
-    return nil
+    return RemainingSeconds(element, display, ctx)
+  elseif ctype == "remainingpct" then
+    -- The refresh window ("pandemic"): time left as a percentage of the aura's
+    -- OWN full duration, so one condition covers a 12s DoT and a 30s one.
+    -- A permanent aura reports no duration and therefore no percentage -- nil,
+    -- which never compares true, rather than a 100 that would glow forever.
+    local duration = display.duration or 0
+    if duration <= 0 then return nil end
+    local remaining = RemainingSeconds(element, display, ctx)
+    if not remaining then return nil end
+    return remaining / duration * 100
   elseif ctype == "stacks" then
     return display.stacks or 0
   elseif ctype == "power" then
@@ -92,10 +106,14 @@ local function ConditionMatches(cond, element, display, ctx)
         and Triggers.SummonKey(standing) == Triggers.SummonKey(cond.totemName)
     end
     return matches == (cond.value ~= false)
-  elseif ctype == "totemup" then
+  elseif ctype == "totemup" or ctype == "auraup" then
     -- THIS element's totem is standing (value=true) or down (value=false).
     -- Glow while it works, which "This spell ready" cannot say: that one means
     -- "can plant now", true only while the totem is down AND off cooldown.
+    --
+    -- `auraup` is the same question for an aura element, and exists because a
+    -- SOUND has to hang off something: with the group machinery being
+    -- edge-triggered, "aura up" fires once on gain and "aura down" once on loss.
     return (display.missing ~= true) == (cond.value ~= false)
   elseif ctype == "otheraura" then
     -- A DIFFERENT aura is active (value=true) or missing (value=false)
