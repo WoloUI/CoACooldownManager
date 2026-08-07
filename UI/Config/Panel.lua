@@ -3167,6 +3167,13 @@ function Config:Render()
         .. "Show = 'Only while carried' hides the slot when you have none."
     elseif style == "shield" then
       addHint = "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
+    elseif style == "bars" then
+      -- The most-asked support question: a duration bar sits there empty with
+      -- dashes because the element's Show mode is "Always (gray when missing)",
+      -- which is the DoT-refresh default. Say where the switch is.
+      addHint = "Type a name or spell ID, or drag a spell from your spellbook.\n"
+        .. "A bar you only want while the aura is on: select it below and set\n"
+        .. "Show = 'Aura found (only while active)'. 'Always' is the gray placeholder."
     else
       addHint = "Type a name or spell ID, or drag a spell from your spellbook."
     end
