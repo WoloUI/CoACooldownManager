@@ -49,6 +49,13 @@ local SHOW_COOLDOWN = {
   { text = "Only when ready", value = "ready" },
   { text = "Only on cooldown", value = "cooldown" },
 }
+-- Items add one mode the others cannot have: a bag can be empty
+local SHOW_ITEM = {
+  { text = "Always (gray on CD)", value = "always" },
+  { text = "Only while carried", value = "have" },
+  { text = "Only when ready", value = "ready" },
+  { text = "Only on cooldown", value = "cooldown" },
+}
 local SHOW_AURA = {
   { text = "Aura found (only while active)", value = "present" },
   { text = "Always (gray when missing)", value = "always" },
@@ -463,6 +470,13 @@ function TriggerBuilder:Create(parent)
     builder.element.onlyMine = checked
   end)
 
+  -- Mirror this element's glow onto the action-bar button that holds the same
+  -- spell. Every condition already built applies, "aura missing" included -- so
+  -- "glow when it falls off" is a trigger, not a second setting.
+  builder.actionGlow = W.CreateCheckbox(builder, "Glow my action button", function(_, checked)
+    builder.element.actionGlow = checked or nil
+  end)
+
   -- Sound on the three things people actually want a sound for, without building
   -- a trigger by hand. It writes the SAME condition the builder would (the
   -- groups are already edge-triggered, so "aura up" fires once on gain and "aura
@@ -558,7 +572,13 @@ function TriggerBuilder:Load(element, onChange)
   -- "Only my aura" at PAD+235, which the audit named as one of the hand-tuned
   -- numbers that a resizable window makes wrong.
   builder.kind:SetValue(kind)
-  builder.show:SetOptions(presenceShow and SHOW_AURA or SHOW_COOLDOWN)
+  local showOptions = SHOW_COOLDOWN
+  if presenceShow then
+    showOptions = SHOW_AURA
+  elseif kind == "item" then
+    showOptions = SHOW_ITEM
+  end
+  builder.show:SetOptions(showOptions)
   builder.show:SetValue(element.showWhen or "always")
 
   local cells = { { label = builder.kindLabel, control = builder.kind, width = 128 } }
@@ -607,12 +627,16 @@ function TriggerBuilder:Load(element, onChange)
   end
   y = ns.FormCells(y, cells, paneW, PAD)
 
+  builder.actionGlow:SetChecked(element.actionGlow == true)
+  local toggles = {}
   if isAura then
     builder.mine:SetChecked(element.onlyMine)
-    y = ns.FormCells(y, { { control = builder.mine, width = 120 } }, paneW, PAD)
+    toggles[#toggles + 1] = { control = builder.mine, width = 120 }
   else
     builder.mine:Hide()
   end
+  toggles[#toggles + 1] = { control = builder.actionGlow, width = 168 }
+  y = ns.FormCells(y, toggles, paneW, PAD)
 
   -- CONDITIONS header
   builder.condHeader:ClearAllPoints()

@@ -7,6 +7,9 @@ local Keybinds = {}
 ns.Keybinds = Keybinds
 
 local byId, byName = {}, {}
+-- The BUTTON per spell, for the optional glow on the real action bar. Same scan,
+-- same tooltip resolution -- a second walk would only find the same buttons.
+local frameById, frameByName = {}, {}
 local dirty = true
 local scanTip
 
@@ -104,9 +107,15 @@ local function ButtonKey(button, name, command)
   if key then return Abbrev(key) end
 end
 
-local function Remember(id, name, key)
-  if id and not byId[id] then byId[id] = key end
-  if name and not byName[name] then byName[name] = key end
+local function Remember(id, name, key, button)
+  if id then
+    if key and not byId[id] then byId[id] = key end
+    if button and not frameById[id] then frameById[id] = button end
+  end
+  if name then
+    if key and not byName[name] then byName[name] = key end
+    if button and not frameByName[name] then frameByName[name] = button end
+  end
 end
 
 local function ScanButton(name, command, fallbackSlot)
@@ -114,14 +123,15 @@ local function ScanButton(name, command, fallbackSlot)
   if not button then return false end
   local slot = ButtonSlot(button, fallbackSlot)
   if not slot or not HasAction(slot) then return true end
+  -- No early exit on a missing key any more: an unbound button is still THE
+  -- button that holds the spell, which is what the action-bar glow needs.
   local key = ButtonKey(button, name, command)
-  if not key then return true end
 
   local actionType, id = GetActionInfo(slot)
   if actionType == "spell" and id and id > 0 then
-    Remember(id, GetSpellInfo(id), key)
+    Remember(id, GetSpellInfo(id), key, button)
   end
-  Remember(nil, ActionName(slot), key) -- name from tooltip always wins a match
+  Remember(nil, ActionName(slot), key, button) -- tooltip name always wins a match
   return true
 end
 
@@ -136,6 +146,7 @@ local BLIZZARD_BARS = {
 
 local function Rebuild()
   byId, byName = {}, {}
+  frameById, frameByName = {}, {}
   for _, bar in ipairs(BLIZZARD_BARS) do
     for i = 1, 12 do
       ScanButton(bar[1] .. i, bar[2] .. i)
@@ -162,6 +173,18 @@ function Keybinds:GetKey(spellID, spellName)
     if name and byName[name] then return byName[name] end
   end
   return spellName and byName[spellName] or nil
+end
+
+-- The action button holding a spell, for the optional glow on the real bar.
+function Keybinds:GetButton(spellID, spellName)
+  if dirty then Rebuild() end
+  if spellID then
+    local button = frameById[spellID]
+    if button then return button end
+    local name = GetSpellInfo(spellID)
+    if name and frameByName[name] then return frameByName[name] end
+  end
+  return spellName and frameByName[spellName] or nil
 end
 
 ns:On("READY", function()

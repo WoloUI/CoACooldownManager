@@ -249,3 +249,48 @@ function Glow:Set(btn, enabled, size)
   w.active = true
   btn._glowStyle = style
 end
+
+--------------------------------------------------------------------------------
+-- Glow on the REAL action button
+--------------------------------------------------------------------------------
+-- Per element: when its glow fires, light the action-bar button that holds the
+-- same spell. Every trigger already built applies -- including "aura missing", so
+-- the MISSING mode people ask for is a condition, not a second feature.
+--
+-- The button comes from Core/Keybinds.lua, which already walks the Blizzard,
+-- ElvUI and Bartender bars and resolves each slot's spell BY TOOLTIP (this
+-- client's GetActionInfo hands back Ascension-internal IDs).
+local litButtons = {} -- [button] = last time something asked it to glow
+local STALE = 0.5     -- a bar that stops updating (hidden, out of combat) clears
+
+local function ClearButton(btn)
+  Glow:Set(btn, false)
+  litButtons[btn] = nil
+end
+
+function ns.ActionGlow(element, display)
+  if not (element and element.actionGlow and ns.Keybinds) then return false end
+  local btn = ns.Keybinds:GetButton(display.spellID or element.spellID,
+    display.name or element.name)
+  if not btn then return false end
+  if display.glow then
+    litButtons[btn] = GetTime()
+    Glow:Set(btn, true, btn.GetWidth and btn:GetWidth() or 36)
+    return true
+  end
+  if litButtons[btn] then ClearButton(btn) end
+  return false
+end
+
+-- Anything still lit that nobody refreshed is stale: the bar it came from was
+-- hidden mid-glow, and a glow nothing can turn off is worse than no glow.
+function ns.SweepActionGlow(now)
+  now = now or GetTime()
+  for btn, at in pairs(litButtons) do
+    if now - at > STALE then ClearButton(btn) end
+  end
+end
+
+ns:On("READY", function()
+  ns:OnTick(function() ns.SweepActionGlow() end)
+end)

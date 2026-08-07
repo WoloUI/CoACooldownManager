@@ -6,6 +6,7 @@ local ns = {}
 stub.loadAddonFile("Core/Init.lua", ns)
 stub.loadAddonFile("UI/Viewer.lua", ns)
 stub.loadAddonFile("UI/IconRow.lua", ns) -- ns.IconGrid: ConfiguredWidth uses it
+stub.loadAddonFile("UI/Glow.lua", ns)    -- ns.ActionGlow
 stub.loadAddonFile("UI/StatusBars.lua", ns)
 stub.loadAddonFile("UI/EditMode.lua", ns)
 
@@ -562,6 +563,34 @@ check("perRow 0 means never wrap", (grid(3, { iconSize = 10, spacing = 2, perRow
   == "0,0 12,0 24,0")
 local _, ew, eh = grid(0, ROW)
 check("an empty row still reserves one icon", ew == 10 and eh == 10)
+
+--------------------------------------------------------------------------------
+-- Action-bar glow: opt-in per element, mirrors the element's own glow onto the
+-- real button, and never leaves one lit.
+local setCalls = {}
+ns.Glow.Set = function(_, btn, enabled) setCalls[#setCalls + 1] = { btn = btn, on = enabled } end
+local actionButton = { GetWidth = function() return 40 end }
+ns.Keybinds = { GetButton = function() return actionButton end }
+
+check("it is opt-in per element",
+  ns.ActionGlow({ name = "Reap" }, { glow = true }) == false)
+local glowEl = { name = "Reap", actionGlow = true }
+check("a glowing element lights its action button",
+  ns.ActionGlow(glowEl, { glow = true }) == true)
+check("the real button is what gets lit",
+  setCalls[#setCalls].btn == actionButton and setCalls[#setCalls].on == true)
+ns.ActionGlow(glowEl, { glow = false })
+check("it goes out when the glow stops", setCalls[#setCalls].on == false)
+check("a second off is not re-sent", #setCalls == 2
+  and ns.ActionGlow(glowEl, { glow = false }) == false and #setCalls == 2)
+
+-- A bar hidden mid-glow stops updating, so nothing would ever turn it off
+ns.ActionGlow(glowEl, { glow = true })
+ns.SweepActionGlow(GetTime() + 10)
+check("a bar that stopped updating has its glow swept", setCalls[#setCalls].on == false)
+
+ns.Keybinds = nil
+check("no keybind map is a no-op", ns.ActionGlow(glowEl, { glow = true }) == false)
 
 --------------------------------------------------------------------------------
 -- Masque: one group per bar, our border yields to the skin, and no Masque at all

@@ -1350,9 +1350,22 @@ function Config:BuildControls()
     -- Item (consumable): resolve against items, not spells; the count and
     -- cooldown resolve live so an uncached name still works once seen
     if kind == "item" then
-      local itemId, itemName, itemIcon = ns.ResolveItem(input)
+      -- Comma-separated = a FAMILY in priority order (potion tiers): the first one
+      -- you carry leads and it falls to the next as you run out. One item is a
+      -- family of one, so nothing changes for the common case.
+      local items, first = {}, nil
+      for part in (input .. ","):gmatch("([^,]*),") do
+        local text = part:gsub("^%s+", ""):gsub("%s+$", "")
+        if text ~= "" then
+          local id, itemName, itemIcon = ns.ResolveItem(text)
+          items[#items + 1] = id or text
+          first = first or { id = id, name = itemName or text, icon = itemIcon }
+        end
+      end
+      if not first then return end
       table.insert(viewer.elements, {
-        kind = "item", itemID = itemId, name = itemName or input, icon = itemIcon,
+        kind = "item", itemID = first.id, name = first.name, icon = first.icon,
+        items = #items > 1 and items or nil,
         conditions = {}, showWhen = "always",
       })
       c.addInput:SetText("")
@@ -3149,7 +3162,9 @@ function Config:Render()
     elseif isTrinket then
       addHint = "Pick a trinket slot. It shows the item's use cooldown and auto-glows on its proc."
     elseif c.addKind.value == "item" then
-      addHint = "Type a consumable's name or item ID. Shows its cooldown and the count you carry."
+      addHint = "Type a consumable's name or item ID. Shows its cooldown and the count you carry.\n"
+        .. "Comma-separate tiers (best first) to have it fall back as you run out;\n"
+        .. "Show = 'Only while carried' hides the slot when you have none."
     elseif style == "shield" then
       addHint = "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
     else

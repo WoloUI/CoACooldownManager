@@ -156,6 +156,7 @@ function StatusBars:Update(frame, cfg)
   else
     for _, element in ipairs(cfg.elements) do
       local display = ns.Triggers:Evaluate(element)
+      if ns.ActionGlow then ns.ActionGlow(element, display) end
       if display.shown then
         shown = shown + 1
         local bar = AcquireBar(frame, shown)

@@ -334,6 +334,32 @@ d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potNone end }))
 check("item glows when low on stock", d.glow)
 itemEl.conditions = nil
 
+-- "Hide if missing": the slot disappears while the bag is empty
+itemEl.showWhen = "have"
+d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potNone end }))
+check("carried-only hidden with no stock", not d.shown)
+d = ns.Triggers:Evaluate(itemEl, Ctx({ item = function() return potReady end }))
+check("carried-only shown with stock", d.shown)
+itemEl.showWhen = "always"
+
+-- A FAMILY of items in priority order: the first one carried leads
+local stock = {
+  [1] = { name = "Runic", icon = "r", count = 0 },
+  [2] = { name = "Super", icon = "s", count = 4 },
+  [3] = { name = "Greater", icon = "g", count = 9 },
+}
+local familyCtx = Ctx({ item = function(ref) return stock[ref] end })
+local family = { kind = "item", items = { 1, 2, 3 }, showWhen = "always" }
+d = ns.Triggers:Evaluate(family, familyCtx)
+check("the family falls to the best tier carried", d.name == "Super" and d.stacks == 4)
+stock[1].count = 2
+d = ns.Triggers:Evaluate(family, familyCtx)
+check("a restocked top tier leads again", d.name == "Runic" and d.stacks == 2)
+stock[1].count, stock[2].count, stock[3].count = 0, 0, 0
+d = ns.Triggers:Evaluate(family, familyCtx)
+check("carrying none of them shows the first, at zero",
+  d.name == "Runic" and d.stacks == 0 and d.desaturate)
+
 -- Summon timers: casting starts a manual countdown (no aura to read)
 ns.profile = { viewers = { { elements = {
   { kind = "summon", name = "Storm Banner", duration = 30, showWhen = "present" },

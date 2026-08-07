@@ -589,7 +589,24 @@ function Triggers:Evaluate(element, ctx)
   elseif element.kind == "item" then
     -- A consumable/inventory item tracked by id or name: item-use cooldown
     -- sweep and the carried count shown as stacks. Grays at zero count.
-    local info = ctx.item(element.itemID or element.name)
+    --
+    -- `element.items` makes it a FAMILY in priority order (potion tiers): the
+    -- first one you actually carry leads, and the bar falls to the next as you
+    -- run out. Carrying none of them shows the first, so the slot does not vanish
+    -- from a bar that is set to stay visible.
+    local info
+    if type(element.items) == "table" and #element.items > 0 then
+      for _, candidate in ipairs(element.items) do
+        local probe = ctx.item(candidate)
+        if probe and (probe.count or 0) > 0 then
+          info = probe
+          break
+        end
+      end
+      info = info or ctx.item(element.items[1])
+    else
+      info = ctx.item(element.itemID or element.name)
+    end
     if info and info.icon then display.icon = info.icon end
     if info and info.name then display.name = info.name end
     local count = info and info.count or 0
@@ -602,6 +619,9 @@ function Triggers:Evaluate(element, ctx)
       display.shown = not hasCd
     elseif showWhen == "cooldown" then
       display.shown = hasCd
+    elseif showWhen == "have" then
+      -- "Hide if missing": an empty slot on the bar is one you cannot use anyway
+      display.shown = count > 0
     end
     display.stacks = count
     display.forceStacks = true -- always show the count, even 0/1

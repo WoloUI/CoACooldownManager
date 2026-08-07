@@ -273,6 +273,9 @@ function IconRow:Update(frame, cfg)
   else
     for _, element in ipairs(cfg.elements) do
       local display = ns.Triggers:Evaluate(element)
+      -- Outside the `shown` check on purpose: an element can glow the real action
+      -- button while its own icon is hidden by a show filter.
+      if ns.ActionGlow then ns.ActionGlow(element, display) end
       if display.shown then
         shown = shown + 1
         local btn = AcquireButton(frame, shown)
