@@ -56,4 +56,20 @@ check("no dash survives", not A("CTRL-ALT-BUTTON5"):find("%-"))
 check("nil in, nil out", A(nil) == nil)
 check("an empty string stays empty", A("") == "")
 
+--------------------------------------------------------------------------------
+-- Which of a spell's buttons gets the glow. ElvUI hides the Blizzard bars but
+-- leaves their actions in place, so the same spell answers on both -- and the
+-- Blizzard one, scanned first, had the glow drawn on an invisible frame.
+local function Btn(name, visible)
+  return { GetName = function() return name end, IsVisible = function() return visible end }
+end
+local hidden, shown = Btn("MultiBarLeftButton1", false), Btn("ElvUI_Bar4Button1", true)
+check("the visible button wins, whatever the scan order",
+  ns.VisibleButton({ hidden, shown }) == shown)
+check("order does not matter", ns.VisibleButton({ shown, hidden }) == shown)
+check("one button is that button", ns.VisibleButton({ hidden }) == hidden)
+check("nothing visible still answers", ns.VisibleButton({ hidden, hidden }) == hidden)
+check("an empty list answers nothing", ns.VisibleButton({}) == nil)
+check("no list answers nothing", ns.VisibleButton(nil) == nil)
+
 return T

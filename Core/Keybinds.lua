@@ -7,8 +7,15 @@ local Keybinds = {}
 ns.Keybinds = Keybinds
 
 local byId, byName = {}, {}
--- The BUTTON per spell, for the optional glow on the real action bar. Same scan,
+-- The BUTTONS per spell, for the optional glow on the real action bar. Same scan,
 -- same tooltip resolution -- a second walk would only find the same buttons.
+--
+-- A LIST, not one button, and the visible one is picked at glow time. ElvUI hides
+-- the Blizzard bars but leaves their actions in place, so the same spell answers
+-- on MultiBarLeftButton1 AND ElvUI_Bar4Button1 -- and the Blizzard one, scanned
+-- first, won and got the glow drawn on an invisible frame (reported 2026-08-06).
+-- Deciding at glow time rather than at scan time also survives bars that come and
+-- go (paging, stances) without a rescan.
 local frameById, frameByName = {}, {}
 local dirty = true
 local scanTip
@@ -107,14 +114,38 @@ local function ButtonKey(button, name, command)
   if key then return Abbrev(key) end
 end
 
+local function AddFrame(map, key, button)
+  local list = map[key]
+  if not list then
+    list = {}
+    map[key] = list
+  end
+  for _, known in ipairs(list) do
+    if known == button then return end
+  end
+  list[#list + 1] = button
+end
+
+-- IsShown() is not the question: ElvUI hides the CONTAINER, so a hidden bar's
+-- buttons still report shown. IsVisible() walks the parent chain.
+function ns.VisibleButton(list)
+  if type(list) ~= "table" then return nil end
+  for _, button in ipairs(list) do
+    if button.IsVisible and button:IsVisible() then return button end
+  end
+  -- Nothing visible: the first is still the right answer for the diagnostics,
+  -- and no worse than what a single-button map did.
+  return list[1]
+end
+
 local function Remember(id, name, key, button)
   if id then
     if key and not byId[id] then byId[id] = key end
-    if button and not frameById[id] then frameById[id] = button end
+    if button then AddFrame(frameById, id, button) end
   end
   if name then
     if key and not byName[name] then byName[name] = key end
-    if button and not frameByName[name] then frameByName[name] = button end
+    if button then AddFrame(frameByName, name, button) end
   end
 end
 
@@ -192,15 +223,16 @@ function Keybinds:GetKey(spellID, spellName)
 end
 
 -- The action button holding a spell, for the optional glow on the real bar.
+-- The VISIBLE one when a spell sits on more than one bar's version of the slot.
 function Keybinds:GetButton(spellID, spellName)
   if dirty then Rebuild() end
   if spellID then
-    local button = frameById[spellID]
-    if button then return button end
+    local list = frameById[spellID]
+    if list then return ns.VisibleButton(list) end
     local name = GetSpellInfo(spellID)
-    if name and frameByName[name] then return frameByName[name] end
+    if name and frameByName[name] then return ns.VisibleButton(frameByName[name]) end
   end
-  return spellName and frameByName[spellName] or nil
+  return spellName and ns.VisibleButton(frameByName[spellName]) or nil
 end
 
 -- /cdm actionglow: why an action-bar glow is or is not firing. Three causes look
@@ -232,12 +264,29 @@ function Keybinds:DiagnoseActionGlow()
           if (cond.action or "glow") == "glow" then hasGlow = true end
         end
         local display = ns.Triggers and ns.Triggers:Evaluate(el)
+        -- Which button was picked AND every candidate: a spell on a hidden
+        -- Blizzard bar and on ElvUI's copy of it answers twice, and picking the
+        -- wrong one draws the glow where nobody can see it.
+        local candidates = {}
+        for _, map in ipairs({ frameById[el.spellID or 0] or {},
+          frameByName[el.name or ""] or {} }) do
+          for _, btn in ipairs(map) do
+            candidates[#candidates + 1] = ("%s(%s)"):format(
+              btn.GetName and btn:GetName() or "unnamed",
+              (btn.IsVisible and btn:IsVisible()) and "visible" or "hidden")
+          end
+        end
         ns:Print(('  "%s" on %s: button=%s  glow condition=%s  glowing now=%s'):format(
           tostring(el.name or el.spellID), viewer.name,
-          button and (button.GetName and button:GetName() or "unnamed frame")
+          button and ("%s (%s)"):format(button.GetName and button:GetName() or "unnamed frame",
+            (button.IsVisible and button:IsVisible()) and "visible"
+              or "|cffff5555hidden -- the glow lands where you cannot see it|r")
             or "|cffff5555not on any action bar|r",
           hasGlow and "yes" or "|cffff5555none -- nothing to mirror|r",
           display and tostring(display.glow) or "?"))
+        if #candidates > 0 then
+          ns:Print("      candidates: " .. table.concat(candidates, ", "))
+        end
       end
     end
   end
