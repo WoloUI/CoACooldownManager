@@ -991,7 +991,7 @@ function Config:BuildControls()
 
   -- Stack bar options
   c.stackIdLabel = W.CreateLabel(parent, "Aura (name/ID)", 12, W.colors.inkDim)
-  c.stackId = W.CreateEditBox(parent, 80, 20, function(_, text)
+  c.stackId = W.CreateEditBox(parent, 130, 20, function(_, text)
     local viewer = SelectedViewer()
     -- A typed ID stays a NUMBER, resolvable or not: it is matched against the
     -- aura's own spellId, which is the only thing that works for an Ascension
@@ -1052,7 +1052,7 @@ function Config:BuildControls()
   -- Second aura filling the segment in progress (Reaper: Reaped Soul fills whole
   -- segments, Soul Fragment fills the next one a third at a time)
   c.stackSubLabel = W.CreateLabel(parent, "Filling aura", 12, W.colors.inkDim)
-  c.stackSub = W.CreateEditBox(parent, 90, 20, function(_, text)
+  c.stackSub = W.CreateEditBox(parent, 130, 20, function(_, text)
     local stack = SelectedViewer().stack
     if not text or text == "" then
       stack.subSpellID = nil
@@ -3293,7 +3293,7 @@ function Config:Render()
     c.stackUnit:SetValue(st.unit or "player")
     c.stackColor:SetValue(st.colorName or "gold")
 
-    local cells = { { label = c.stackIdLabel, control = c.stackId, width = 118 } }
+    local cells = { { label = c.stackIdLabel, control = c.stackId, width = 158 } }
     -- The Max box gives up its cell to "Auto max" rather than sitting there
     -- inert while the maximum is being learned from the aura.
     if not autoMax then
@@ -3318,7 +3318,7 @@ function Config:Render()
 
     -- The filling aura, and the controls that only exist once there is one
     c.stackSub:SetText(st.subSpellID and tostring(st.subSpellID) or "")
-    local subCells = { { label = c.stackSubLabel, control = c.stackSub, width = 118 } }
+    local subCells = { { label = c.stackSubLabel, control = c.stackSub, width = 158 } }
     if st.subSpellID then
       c.stackSubMax:SetText(tostring(st.subMax or 3))
       subCells[#subCells + 1] =

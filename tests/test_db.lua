@@ -338,7 +338,7 @@ check("a percentage resource carries its ceiling", ns.ClassResource("static").ma
 -- The Reaper's second aura is recorded even though a power row cannot draw it:
 -- it is what the resource IS, and losing it means asking for it again.
 check("the Reaper entry names its filling aura",
-  ns.ClassResource("souls").sub == "Fragment")
+  ns.ClassResource("souls").sub == "Soul Fragment")
 -- Its main aura is an ID: the client cannot name 500363, so a NAME matched
 -- nothing and the row stayed at zero
 check("the Reaper entry tracks its aura by ID",
