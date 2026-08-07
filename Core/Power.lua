@@ -132,6 +132,10 @@ function Power:GetResourceBar(key)
     type = RESOURCE_PREFIX .. key,
     cur = cur,
     fill = fill,
+    -- The preset says whether the resource is counted in whole points. The row
+    -- draws divider lines for those, so 2 of 3 Souls reads as two full cells and
+    -- a third filling with fragments instead of "66% of a bar".
+    segments = entry.display == "segments" and math.max(max, 1) or nil,
     max = math.max(max, 1),
     label = entry.label,
     color = ns.StackColorRGB[entry.color] or { 0.6, 0.6, 0.6 },

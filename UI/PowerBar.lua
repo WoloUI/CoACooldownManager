@@ -32,28 +32,46 @@ local function CreateResourceBar(parent)
   holder.text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
 
   holder.ticks = {}
-  for i = 1, TICK_COUNT - 1 do
-    local tick = holder.bar:CreateTexture(nil, "OVERLAY")
-    tick:SetTexture("Interface\\Buttons\\WHITE8X8")
-    tick:SetVertexColor(0, 0, 0, 0.5)
-    tick:SetWidth(1)
-    holder.ticks[i] = tick
-  end
   return holder
 end
 
-local function LayoutTicks(holder, show)
+-- Divider lines splitting a row into `cells` equal parts. Two callers, one
+-- mechanism: the energy ticks (10, opt-in per bar) and the SEGMENTED class
+-- resources, whose preset says the resource is counted in whole points (Souls,
+-- Ember, Felfury). A power row is a continuous fill, so this is what makes it
+-- read as combo points -- and the fill running past a divider is exactly the
+-- Reaper's soul in progress filling up with fragments.
+local MAX_CELLS = 20 -- past this the lines are thicker than the cells
+
+local function LayoutCells(holder, cells)
+  cells = math.min(math.floor(cells or 0), MAX_CELLS)
   local width = holder:GetWidth()
-  for i, tick in ipairs(holder.ticks) do
-    if show then
-      tick:ClearAllPoints()
-      tick:SetPoint("TOP", holder.bar, "TOPLEFT", width / TICK_COUNT * i, 0)
-      tick:SetPoint("BOTTOM", holder.bar, "BOTTOMLEFT", width / TICK_COUNT * i, 0)
-      tick:Show()
-    else
-      tick:Hide()
+  for i = 1, cells - 1 do
+    local tick = holder.ticks[i]
+    if not tick then
+      tick = holder.bar:CreateTexture(nil, "OVERLAY")
+      tick:SetTexture("Interface\\Buttons\\WHITE8X8")
+      tick:SetVertexColor(0, 0, 0, 0.5)
+      tick:SetWidth(1)
+      holder.ticks[i] = tick
     end
+    tick:ClearAllPoints()
+    tick:SetPoint("TOP", holder.bar, "TOPLEFT", width / cells * i, 0)
+    tick:SetPoint("BOTTOM", holder.bar, "BOTTOMLEFT", width / cells * i, 0)
+    tick:Show()
   end
+  for i = math.max(cells - 1, 0) + 1, #holder.ticks do
+    holder.ticks[i]:Hide()
+  end
+end
+
+-- How many cells a row draws: the resource's own point count wins over the
+-- energy ticks (a 3-soul row split into 10 would be nonsense).
+function ns.PowerCellCount(data, showTicks)
+  if not data then return 0 end
+  if data.segments and data.segments > 1 then return data.segments end
+  if showTicks and data.ticks then return TICK_COUNT end
+  return 0
 end
 
 local function CreateComboRow(parent)
@@ -143,7 +161,7 @@ local function UpdateResourceBar(holder, data, showTicks, colorOverride, showLab
     text = text ~= "" and (text .. "  " .. data.label) or data.label
   end
   holder.text:SetText(text)
-  LayoutTicks(holder, showTicks and data.ticks)
+  LayoutCells(holder, ns.PowerCellCount(data, showTicks))
 end
 
 function PowerBar:Update(frame, cfg)

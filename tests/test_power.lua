@@ -183,6 +183,37 @@ check("a resource can be picked for any row",
 check("the same resource twice is dropped like a repeated power type",
   types({ bar2 = "res:heat", bar3 = "res:heat" }) == "0/res:heat/nil")
 ns.DB = nil
+
+--------------------------------------------------------------------------------
+-- Segmented resources: a power ROW is a continuous fill, so the whole points are
+-- drawn as divider lines and the sub-resource fills the segment in progress.
+stub.loadAddonFile("UI/StackBar.lua", ns)  -- ns.SubSegmentFill
+stub.loadAddonFile("UI/PowerBar.lua", ns)  -- ns.PowerCellCount
+
+-- The Reaper: 2 whole Souls plus 2 of 3 Soul Fragments toward the third
+auras[500363] = { count = 2, duration = 0, expirationTime = 0 }
+auras["Soul Fragment"] = { count = 2, duration = 0, expirationTime = 0 }
+local souls = ns.Power:GetBar("res:souls")
+check("souls reads its whole points", souls.cur == 2)
+check("souls asks for one cell per point", souls.segments == 3)
+check("the fragments fill the point in progress",
+  souls.fill > 2.6 and souls.fill < 2.7)
+check("the text stays on whole points", souls.cur == 2)
+
+auras["Soul Fragment"] = nil
+check("no fragments means no fractional fill", ns.Power:GetBar("res:souls").fill == nil)
+
+-- A bar-style resource is never split into cells
+check("a continuous resource has no segments", ns.Power:GetBar("res:heat").segments == nil)
+
+-- The point count wins over the energy ticks: a 3-soul row split into 10 is noise
+check("segments beat the energy ticks",
+  ns.PowerCellCount({ segments = 3, ticks = true }, true) == 3)
+check("energy still ticks in ten", ns.PowerCellCount({ ticks = true }, true) == 10)
+check("ticks off means no cells", ns.PowerCellCount({ ticks = true }, false) == 0)
+check("a plain resource draws no cells", ns.PowerCellCount({}, true) == 0)
+check("no data draws no cells", ns.PowerCellCount(nil, true) == 0)
+
 ns.Auras = nil
 
 return T
