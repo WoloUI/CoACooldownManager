@@ -67,6 +67,27 @@ check("a zero gap packs tighter",
   P(231, { 110, 110 }, 0)[2].row == 1 and P(231, { 110, 110 }, 12)[2].row == 2)
 check("a row that fits exactly does not wrap", P(232, { 110, 110 }, 12)[2].row == 1)
 
+-- A cell narrower than the control it holds does not clip: it parks the NEXT
+-- cell on top of it. The Display dropdown was 150px wide in a 118px cell and ran
+-- into "On unit", so FormCells clamps the width up to the real control.
+local function FakeControl(width)
+  local x
+  return {
+    GetWidth = function() return width end,
+    ClearAllPoints = function() end,
+    SetPoint = function(_, _, px) x = px end,
+    Show = function() end,
+    X = function() return x end,
+  }
+end
+local wide, next_ = FakeControl(150), FakeControl(90)
+ns.FormCells(0, {
+  { control = wide, width = 118 },
+  { control = next_, width = 108 },
+}, 528)
+check("an oversized control pushes the next cell clear of it",
+  next_.X() >= 150 + 12)
+
 -- Degenerate input
 check("no widths returns an empty table", #P(528, {}, 12) == 0)
 check("no widths returns a table, not nil", type(P(528, {}, 12)) == "table")

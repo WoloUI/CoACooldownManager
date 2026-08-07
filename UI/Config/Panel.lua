@@ -260,7 +260,14 @@ local CELL_ROW_H = CELL_LABEL_H + CELL_H + 8
 function ns.FormCells(y, cells, contentWidth, x0)
   x0 = x0 or 0
   local widths = {}
-  for i, cell in ipairs(cells) do widths[i] = cell.width or 110 end
+  for i, cell in ipairs(cells) do
+    -- Never narrower than the control it holds. A cell width smaller than its
+    -- control does not clip anything -- it just parks the NEXT cell on top of it
+    -- (the Display dropdown, 150px wide in a 118px cell, ran into "On unit").
+    local declared = cell.width or 110
+    local real = cell.control and cell.control.GetWidth and cell.control:GetWidth() or 0
+    widths[i] = math.max(declared, real or 0)
+  end
   local packed = ns.PackCells(contentWidth, widths, 12)
 
   local maxRow = 0
@@ -3300,7 +3307,7 @@ function Config:Render()
       c.stackMax:SetText(tostring(st.maxStacks or 3))
       cells[#cells + 1] = { label = c.stackMaxLabel, control = c.stackMax, width = 88 }
     end
-    cells[#cells + 1] = { label = c.stackDisplayLabel, control = c.stackDisplay, width = 118 }
+    cells[#cells + 1] = { label = c.stackDisplayLabel, control = c.stackDisplay, width = 160 }
     cells[#cells + 1] = { label = c.stackUnitLabel,    control = c.stackUnit,    width = 108 }
     cells[#cells + 1] = { label = c.stackColorLabel,   control = c.stackColor,   width = 108 }
     y = ns.FormCells(y, cells, paneW)
