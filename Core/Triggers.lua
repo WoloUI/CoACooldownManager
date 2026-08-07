@@ -17,6 +17,16 @@ local function Compare(op, a, b)
   return false
 end
 
+-- The reference an element's spell is looked up by. Names win by default: they
+-- survive Ascension ID changes and follow the learned rank. An element the user
+-- added BY ID is the exception -- `exactID` says "this id, not whatever shares
+-- its name" -- which is the whole point of typing an id in the first place.
+function ns.ElementSpellRef(element)
+  if element.exactID and element.spellID then return element.spellID end
+  return element.name or element.spellID
+end
+local ElementSpellRef = ns.ElementSpellRef
+
 local function ConditionValue(cond, element, display, ctx)
   local ctype = cond.ctype
   if ctype == "remaining" then
@@ -101,7 +111,7 @@ local function ConditionMatches(cond, element, display, ctx)
       return (display.totemCanPlant == true) == (cond.value ~= false)
     end
     -- THIS element's spell is ready (value=true) or on cooldown (value=false)
-    local state = ctx.cooldown(element.name or element.spellID)
+    local state = ctx.cooldown(ElementSpellRef(element))
     local ready = (state and state.known and not state.onCooldown) and true or false
     return ready == (cond.value ~= false)
   elseif ctype == "othercd" then
@@ -118,7 +128,7 @@ local function ConditionMatches(cond, element, display, ctx)
     -- the spell also has a real cooldown.
     local ref
     if ctype == "usable" then
-      ref = element.name or element.spellID
+      ref = ElementSpellRef(element)
     else
       ref = cond.spellID
       if not ref then return false end
@@ -345,7 +355,7 @@ function Triggers:OnCastSucceeded(spellName, now)
   for _, viewer in ipairs(ns.profile.viewers) do
     for _, element in ipairs(viewer.elements or {}) do
       if element.kind == "summon"
-        and Triggers.SummonKey(element.name or element.spellID) == castKey then
+        and Triggers.SummonKey(ElementSpellRef(element)) == castKey then
         local duration = element.duration or 60
         summonTimers[castKey] = { duration = duration, expirationTime = now + duration }
         matched = true
@@ -384,7 +394,7 @@ function Triggers:Evaluate(element, ctx)
   if element.kind == "cooldown" then
     -- Prefer the NAME: it survives Ascension spell-ID changes and always
     -- points at the player's learned version; the stored ID is the fallback.
-    local state = ctx.cooldown(element.name or element.spellID)
+    local state = ctx.cooldown(ElementSpellRef(element))
     if not state or not state.known then return display end
     onCooldown = state.onCooldown and true or false
     local showWhen = element.showWhen or "always"
@@ -486,7 +496,7 @@ function Triggers:Evaluate(element, ctx)
   elseif element.kind == "summon" then
     -- Manual timer for spells that leave no aura (pets, banners, totems):
     -- casting the spell starts a countdown of element.duration seconds
-    local timer = Triggers.GetSummonTimer(element.name or element.spellID)
+    local timer = Triggers.GetSummonTimer(ElementSpellRef(element))
     local now = ctx.now()
     if timer and now < timer.expirationTime then
       display.shown = true
@@ -585,9 +595,11 @@ function Triggers:Evaluate(element, ctx)
     end
     if count <= 0 then display.desaturate = true end -- none left
   else -- "buff" | "debuff"
-    local aura = ctx.aura(element.unit or "player", element.spellID or element.name, element.onlyMine)
+    local aura = ctx.aura(element.unit or "player", element.spellID or element.name,
+      element.onlyMine, element.exactID)
     local showWhen = element.showWhen or "always"
     if aura then
+      display.name = display.name or aura.name -- added by ID: no name until now
       display.stacks = aura.count or 0
       display.duration = aura.duration or 0
       display.expirationTime = aura.expirationTime or 0
@@ -600,10 +612,18 @@ function Triggers:Evaluate(element, ctx)
         -- aura so show mode "always" draws the real icon while the aura is
         -- missing, instead of the question-mark fallback. `element` is the
         -- SavedVariables table itself, so this persists on logout.
-        if not element.spellID and element.icon ~= aura.icon
+        -- Same hole for an aura added by ID that the client cannot name: it has
+        -- a spellID but no icon, and GetSpellInfo answers nothing for it.
+        if (not element.spellID or element.exactID) and element.icon ~= aura.icon
           and not (ns.TestMode and ns.TestMode.active) then
           element.icon = aura.icon
         end
+      end
+      -- An element added by an ID the client cannot resolve has no name either,
+      -- so the bar had nothing to label the row with. Learn it the same way.
+      if not element.name and aura.name
+        and not (ns.TestMode and ns.TestMode.active) then
+        element.name = aura.name
       end
       display.shown = showWhen == "always" or showWhen == "present"
     else
@@ -745,7 +765,9 @@ function Triggers:LiveContext()
       end
       return nil
     end,
-    aura = function(unit, ref, onlyMine) return ns.Auras:GetAura(unit, ref, onlyMine) end,
+    aura = function(unit, ref, onlyMine, strict)
+      return ns.Auras:GetAura(unit, ref, onlyMine, strict)
+    end,
     power = function(ptype)
       ptype = ptype or UnitPowerType("player")
       -- Health rides the same selector as the real resources under a negative

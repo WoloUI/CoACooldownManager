@@ -102,7 +102,13 @@ function Power:GetResourceBar(key)
     return { type = RESOURCE_PREFIX .. key, cur = 0, max = 1,
       label = key, color = { 0.6, 0.6, 0.6 } }
   end
-  local aura = ns.Auras and ns.Auras:GetAura("player", entry.aura, false)
+  -- A numeric `aura` is an exact spell ID (the client cannot name some of these,
+  -- so the ID is the only handle) -- never homologated by name
+  local function Read(ref)
+    if not (ref and ns.Auras) then return nil end
+    return ns.Auras:GetAura("player", ref, false, type(ref) == "number")
+  end
+  local aura = Read(entry.aura)
   -- An aura that is up with no stack count is one stack, matching the stack bar
   local cur = aura and math.max(aura.count or 0, 1) or 0
   local max = entry.max or 0
@@ -110,9 +116,22 @@ function Power:GetResourceBar(key)
     observedMax[key] = math.max(observedMax[key] or 1, cur)
     max = observedMax[key]
   end
+  -- Sub-resource: the Reaper's whole Souls come from one aura and the soul in
+  -- progress from Soul Fragments. A power row is a continuous fill, so the
+  -- fragments ride as the fraction between two whole points -- without this the
+  -- row jumped 0 -> 1 -> 2 and the fragments were invisible.
+  local fill
+  local sub = entry.sub and Read(entry.sub)
+  if sub and ns.SubSegmentFill then
+    local remaining = (sub.expirationTime or 0) > 0
+      and (sub.expirationTime - GetTime()) or 0
+    fill = cur + ns.SubSegmentFill(math.max(sub.count or 0, 1), entry.subMax,
+      remaining, sub.duration or 0, entry.subDrain)
+  end
   return {
     type = RESOURCE_PREFIX .. key,
     cur = cur,
+    fill = fill,
     max = math.max(max, 1),
     label = entry.label,
     color = ns.StackColorRGB[entry.color] or { 0.6, 0.6, 0.6 },

@@ -136,6 +136,29 @@ check("diagnose survives a nil query", diagnoseOk(nil))
 _G.__units.focus = true
 check("diagnose reports an uncached unit without erroring", diagnoseOk("Deadly Poison"))
 
+--------------------------------------------------------------------------------
+-- An aura added BY ID is matched by that ID and nothing else. Two auras can
+-- share a name on this server (and the client cannot name a custom one at all),
+-- so falling back to the name matched the wrong aura -- reported 2026-08-06 on
+-- Reaped Soul, whose real handle is the id 500363.
+_G.__auras.player = {
+  { name = "Reaped Soul", spellId = 500363, count = 2, filter = "HELPFUL",
+    duration = 0, expirationTime = 0 },
+  { name = "Fragment", spellId = 500364, count = 2, filter = "HELPFUL",
+    duration = 6, expirationTime = 6 },
+}
+ns.Auras:ForceScan("player")
+
+check("an exact ID matches", ns.Auras:GetAura("player", 500363, false, true) ~= nil)
+_G.__spells = { [777] = { name = "Reaped Soul" } }
+check("a foreign ID sharing the name matches when loose",
+  ns.Auras:GetAura("player", 777, false, false) ~= nil)
+check("a foreign ID sharing the name does NOT match when strict",
+  ns.Auras:GetAura("player", 777, false, true) == nil)
+check("strict does not affect name lookups",
+  ns.Auras:GetAura("player", "Fragment", false, true) ~= nil)
+_G.__spells = nil
+
 ns.profile = nil
 _G.__auras = nil
 _G.__units = nil

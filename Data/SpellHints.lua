@@ -84,11 +84,15 @@ ns.ClassResources = {
     display = "bar", max = 100, color = "grey" },
   { key = "solarpower", label = "Solar Power", spec = "Sun Cleric", aura = "Solar Power",
     display = "bar", max = 20, color = "gold" },
-  -- The Reaper needs two auras: Reaped Soul fills whole segments, Soul Fragment
-  -- fills the one in progress three at a time and drains as it expires.
-  { key = "souls", label = "Souls", spec = "Reaper", aura = "Reaped Soul",
+  -- The Reaper needs two auras: Reaped Soul fills whole segments, its fragments
+  -- fill the one in progress three at a time and drain as they expire.
+  -- The ID and the filling aura's name come from a working player config
+  -- (2026-08-06): the client cannot name 500363, so "Reaped Soul" as a NAME
+  -- matched nothing and the row stayed empty, and the fragments are called
+  -- "Fragment" here, not "Soul Fragment".
+  { key = "souls", label = "Souls", spec = "Reaper", aura = 500363,
     display = "segments", max = 3, color = "purple",
-    sub = "Soul Fragment", subMax = 3, subDrain = true, gradient = true },
+    sub = "Fragment", subMax = 3, subDrain = true, gradient = true },
   { key = "static", label = "Static", spec = "Stormbringer", aura = "Static",
     display = "bar", max = 100, color = "electric" },
   { key = "felfury", label = "Felfury", spec = "Felsworn", aura = "Felfury",

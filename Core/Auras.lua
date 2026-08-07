@@ -70,13 +70,19 @@ function Auras:WatchGroup(enable)
 end
 
 -- Returns the aura table or nil. spellRef may be a spell ID or a name.
-function Auras:GetAura(unit, spellRef, onlyMine)
+--
+-- `strict` turns OFF the id -> name fallback below: when the user typed an ID
+-- they meant THAT aura, and homologating it by name matches a different aura
+-- that happens to share the name (reported 2026-08-06 on Reaped Soul). Anything
+-- that resolved its id from a name keeps the fallback -- that is what makes a
+-- stored rank-1 id still match the rank-5 aura the player actually has.
+function Auras:GetAura(unit, spellRef, onlyMine, strict)
   local store = cache[unit]
   if not store then return nil end
   local aura
   if type(spellRef) == "number" then
     aura = store.byId[spellRef]
-    if not aura then
+    if not aura and not strict then
       -- Different rank of the same spell: fall back to name matching
       local name = GetSpellInfo(spellRef)
       aura = name and store.byName[name]

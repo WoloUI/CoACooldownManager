@@ -691,4 +691,27 @@ check("no condGroups table is created", clean.condGroups == nil)
 
 ns.Print = realPrint
 
+--------------------------------------------------------------------------------
+-- Spell refs: names win (they survive Ascension ID changes and follow the
+-- learned rank) UNLESS the user typed an ID, which means that ID exactly.
+check("a named element resolves by name",
+  ns.ElementSpellRef({ name = "Reap", spellID = 123 }) == "Reap")
+check("an ID-only element resolves by ID",
+  ns.ElementSpellRef({ spellID = 123 }) == 123)
+check("exactID beats the name",
+  ns.ElementSpellRef({ name = "Reap", spellID = 123, exactID = true }) == 123)
+check("exactID with no ID still answers the name",
+  ns.ElementSpellRef({ name = "Reap", exactID = true }) == "Reap")
+
+-- ...and the aura lookup is told to be strict for those, so a same-named aura
+-- with a different id cannot answer instead
+local sawStrict
+local byIdEl = { kind = "buff", spellID = 500363, exactID = true, conditions = {} }
+ns.Triggers:Evaluate(byIdEl, Ctx({ aura = function(_, _, _, strict)
+  sawStrict = strict
+  return { count = 3, duration = 0, expirationTime = 0, name = "Reaped Soul" }
+end }))
+check("an exactID element asks for a strict aura match", sawStrict == true)
+check("its name is learned off the live aura", byIdEl.name == "Reaped Soul")
+
 return T

@@ -148,7 +148,10 @@ local function CurrentStacks(stack, maxStacks)
     return math.min(2, math.max(maxStacks, 1))
   end
   if not stack.spellID then return 0 end
-  local aura = ns.Auras:GetAura(stack.unit or "player", stack.spellID, stack.onlyMine ~= false)
+  -- A numeric ref in a stack bar was TYPED as an ID (the config box stores the
+  -- name whenever it resolves one), so it is matched strictly by ID
+  local aura = ns.Auras:GetAura(stack.unit or "player", stack.spellID,
+    stack.onlyMine ~= false, type(stack.spellID) == "number")
   return aura and math.max(aura.count, 1) or 0
 end
 
@@ -158,7 +161,8 @@ local function CurrentSubFill(stack)
     return stack.subSpellID and 0.66 or 0 -- something to position in edit mode
   end
   if not stack.subSpellID then return 0 end
-  local aura = ns.Auras:GetAura(stack.unit or "player", stack.subSpellID, stack.onlyMine ~= false)
+  local aura = ns.Auras:GetAura(stack.unit or "player", stack.subSpellID,
+    stack.onlyMine ~= false, type(stack.subSpellID) == "number")
   if not aura then return 0 end
   local remaining, duration = 0, aura.duration or 0
   if aura.expirationTime and aura.expirationTime > 0 then

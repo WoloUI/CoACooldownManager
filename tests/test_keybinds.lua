@@ -33,6 +33,12 @@ check("stacked modifiers keep their order", A("CTRL-SHIFT-3") == "CS3")
 -- side of a 32px icon.
 check("a spelled-out mouse button shortens", A("Mouse Button 4") == "M4")
 check("a raw mouse button shortens", A("BUTTON4") == "M4")
+-- Middle click arrives BOTH ways: BUTTON3 from a binding, "Middle Mouse" (with a
+-- space) from an action button's own label. The label form matched nothing and
+-- printed the whole word across the icon.
+check("a raw middle button shortens", A("BUTTON3") == "M3")
+check("a spelled-out middle button shortens", A("Middle Mouse") == "M3")
+check("a modified middle button keeps both parts", A("SHIFT-BUTTON3") == "SM3")
 check("the wheel shortens", A("MOUSEWHEELUP") == "MU")
 check("the wheel down shortens", A("MOUSEWHEELDOWN") == "MD")
 check("a modified mouse button keeps both parts", A("SHIFT-BUTTON4") == "SM4")

@@ -668,9 +668,9 @@ function Config:BuildControls()
   end)
   c.widthMinLabel = W.CreateLabel(parent, "Min", 12, W.colors.inkDim)
   c.widthMin = W.CreateEditBox(parent, 44, 20, function(_, text)
-    SelectedViewer().widthMin = math.max(tonumber(text) or 200, 1)
+    SelectedViewer().widthMin = math.max(tonumber(text) or 1, 1)
     Touch()
-  end, "200")
+  end, "1")
 
   c.showKeybind = W.CreateCheckbox(parent, "Keybinds", function(_, checked)
     SelectedViewer().showKeybind = checked
@@ -931,8 +931,17 @@ function Config:BuildControls()
   c.stackIdLabel = W.CreateLabel(parent, "Aura (name/ID)", 12, W.colors.inkDim)
   c.stackId = W.CreateEditBox(parent, 80, 20, function(_, text)
     local viewer = SelectedViewer()
+    -- A typed ID stays a NUMBER, resolvable or not: it is matched against the
+    -- aura's own spellId, which is the only thing that works for an Ascension
+    -- resource aura the client cannot name (Reaped Soul = 500363). Storing it as
+    -- the string "500363" matched an aura NAMED that, i.e. nothing.
+    local typedID = tonumber(text)
     local id, name = ns.ResolveSpell(text)
-    if id or name then
+    if typedID then
+      viewer.stack.spellID = typedID
+      ns:Print("stack bar now tracks aura ID " .. typedID
+        .. (name and (" (" .. name .. ")") or " (name unknown to the client)") .. ".")
+    elseif id or name then
       -- Name is kept when resolvable: it survives spell-ID changes
       viewer.stack.spellID = name or id
       ns:Print("stack bar now tracks " .. (name or id) .. ".")
@@ -987,7 +996,8 @@ function Config:BuildControls()
       stack.subSpellID = nil
     else
       local id, name = ns.ResolveSpell(text)
-      stack.subSpellID = id or name or text
+      -- Typed ID wins over the name here too (see the Aura box above)
+      stack.subSpellID = tonumber(text) or id or name or text
     end
     Touch()
   end, "aura name / id")
@@ -1290,6 +1300,31 @@ function Config:BuildControls()
     end
 
     local id, name, icon = ns.ResolveSpell(input)
+    -- An ID the user TYPED is kept as an id, resolvable or not: UnitAura reports
+    -- a spellId for every aura, so an Ascension buff the client cannot name
+    -- (Reaped Soul, 500363) still matches exactly by id. It used to fall through
+    -- to the branch below and be stored as the NAME "500363", which matches
+    -- nothing, ever (reported 2026-08-06).
+    local typedID = tonumber(input)
+    if typedID and kind ~= "cooldown" then
+      local isDots = viewer.name == "Target DoTs"
+      table.insert(viewer.elements, {
+        spellID = typedID, exactID = true, name = name, icon = icon,
+        kind = kind,
+        unit = isDots and "target" or "player",
+        onlyMine = true, conditions = {},
+        duration = kind == "summon" and 60 or nil,
+        showWhen = (kind ~= "cooldown" and not isDots) and "present" or "always",
+      })
+      if not name then
+        ns:Print(("added spell ID %d -- matched by ID only, so the name and icon"
+          .. " fill in the first time the aura is seen."):format(typedID))
+      end
+      c.addInput:SetText("")
+      Touch()
+      Config:Render()
+      return
+    end
     if not id and not name then
       if kind == "cooldown" then
         ns:Print("spell not found: " .. input .. " (cooldowns need a spell you know; try the ID)")
@@ -1326,7 +1361,8 @@ function Config:BuildControls()
     end
     local isDots = viewer.name == "Target DoTs"
     table.insert(viewer.elements, {
-      spellID = id, name = name or input, icon = icon,
+      -- Typed as an ID: track that ID, not everything sharing its name
+      spellID = id, exactID = typedID and true or nil, name = name or input, icon = icon,
       kind = kind,
       unit = isDots and "target" or "player",
       onlyMine = true, conditions = {},
@@ -1795,7 +1831,7 @@ local function RenderWidthMode(c, viewer, y, cols)
   c.widthSource:Show()
   c.widthMinLabel:SetPoint("TOPLEFT", cols.L3, y - 4); c.widthMinLabel:Show()
   c.widthMin:SetPoint("TOPLEFT", cols.C3, y)
-  c.widthMin:SetText(tostring(viewer.widthMin or 200))
+  c.widthMin:SetText(tostring(viewer.widthMin or 1))
   c.widthMin:Show()
   return y - 26
 end
@@ -1807,7 +1843,7 @@ local function AppendWidthSourceCells(c, viewer, cells)
   local options = WidthSourceOptions(viewer)
   c.widthSource:SetOptions(options)
   c.widthSource:SetValue(viewer.widthSource or options[1].value)
-  c.widthMin:SetText(tostring(viewer.widthMin or 200))
+  c.widthMin:SetText(tostring(viewer.widthMin or 1))
   cells[#cells + 1] = { label = c.widthSourceLabel, control = c.widthSource, width = 118 }
   cells[#cells + 1] = { label = c.widthMinLabel, control = c.widthMin, width = 56 }
 end

@@ -174,7 +174,11 @@ end
 -- shrink and grow as trigger conditions hide and show icons. Configured width
 -- only changes when the bar is edited, and every edit already fires
 -- VIEWERS_CHANGED -> BuildAll, so this costs nothing per tick.
-local DEFAULT_WIDTH_MIN = 200
+-- No floor by default. It used to be 200, which silently made every followed
+-- width WIDER than its source below 200px: a 5-icon Essentials row is 180px, so
+-- a Power bar matching it came out 200 and overhung the icons on both sides
+-- (reported 2026-08-06). The Min box is still there for anyone who wants one.
+local DEFAULT_WIDTH_MIN = 1
 
 -- The width a bar would have with every element shown. nil for styles whose
 -- width is not a single number: stacks and shield derive it from segment counts,

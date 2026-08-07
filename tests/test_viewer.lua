@@ -406,13 +406,14 @@ local follower = { name = "P", style = "power", power = { width = 340 },
 Viewers({ row6, follower })
 check("match mode follows the source width", ns.ResolveWidth(follower, 340) == 217)
 
--- The minimum defaults to 200 and is editable per bar
+-- There is NO minimum by default (it used to be 200, which made every followed
+-- width below 200 come out WIDER than its source), and it is editable per bar
 local row3 = { name = "Rotation", style = "icons", iconSize = 32, spacing = 5,
   elements = { {}, {}, {} } }
 Viewers({ row3, follower })
 check("a 3-icon source measures 106", ns.ConfiguredWidth(row3) == 106)
-check("the default floor of 200 wins over a short source",
-  ns.ResolveWidth(follower, 340) == 200)
+check("a short source is followed exactly, no floor",
+  ns.ResolveWidth(follower, 340) == 106)
 
 follower.widthMin = 100
 check("a lowered floor lets the follower track the source", ns.ResolveWidth(follower, 340) == 106)

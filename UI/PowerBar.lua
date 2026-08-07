@@ -134,7 +134,9 @@ end
 local function UpdateResourceBar(holder, data, showTicks, colorOverride, showLabel, textMode)
   local color = colorOverride or data.color
   holder.bar:SetMinMaxValues(0, data.max)
-  ns.SetBarValueSmooth(holder.bar, data.cur) -- eased, ElvUI-style
+  -- `fill` is the fractional value when a resource has a sub-resource filling the
+  -- next point (the Reaper's Soul Fragments); `cur` stays whole for the text.
+  ns.SetBarValueSmooth(holder.bar, data.fill or data.cur) -- eased, ElvUI-style
   holder.bar:SetStatusBarColor(color[1], color[2], color[3])
   local text = ns.FormatPowerText(data.cur, data.max, textMode)
   if showLabel then

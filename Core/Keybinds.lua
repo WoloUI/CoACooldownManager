@@ -27,7 +27,11 @@ local KEY_ABBREVIATIONS = {
   -- Mouse
   { "MOUSE WHEEL UP", "MU" }, { "MOUSE WHEEL DOWN", "MD" },
   { "MOUSEWHEELUP", "MU" }, { "MOUSEWHEELDOWN", "MD" },
-  { "MIDDLEMOUSE", "M3" }, { "MOUSE BUTTON ", "M" }, { "BUTTON", "M" },
+  -- Middle click: the binding token is BUTTON3, but an action button's own label
+  -- is the client's KEY_BUTTON3 string, "Middle Mouse" -- with a SPACE, which no
+  -- pattern here matched, so it came out as the full "MIDDLEMOUSE".
+  { "MIDDLE MOUSE", "M3" }, { "MIDDLEMOUSE", "M3" },
+  { "MOUSE BUTTON ", "M" }, { "BUTTON", "M" },
   -- Numpad
   { "NUMPADDIVIDE", "N/" }, { "NUMPADMULTIPLY", "N*" }, { "NUMPADMINUS", "N-" },
   { "NUMPADPLUS", "N+" }, { "NUMPADDECIMAL", "N." }, { "NUMPAD", "N" },
