@@ -1574,6 +1574,12 @@ SlashCmdList["COACDM"] = function(input)
     else
       ns:Print("totem tracking is not loaded (restart the client after updating).")
     end
+  elseif msg == "actionglow" then
+    if ns.Keybinds and ns.Keybinds.DiagnoseActionGlow then
+      ns.Keybinds:DiagnoseActionGlow()
+    else
+      ns:Print("action-bar glow is not loaded (/reload after updating).")
+    end
   elseif msg == "spellbook" then
     if ns.SpellCapture then
       ns.SpellCapture:Diagnose()

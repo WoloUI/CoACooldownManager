@@ -131,8 +131,12 @@ local function ScanButton(name, command, fallbackSlot)
   if actionType == "spell" and id and id > 0 then
     Remember(id, GetSpellInfo(id), key, button)
   end
-  Remember(nil, ActionName(slot), key, button) -- tooltip name always wins a match
-  return true
+  local tipName = ActionName(slot) -- tooltip name always wins a match
+  Remember(nil, tipName, key, button)
+  -- Second return: this slot actually contributed a spell, which is what the
+  -- action-bar glow needs. "No buttons found" and "buttons found, spell not on
+  -- any of them" are the same blank screen otherwise.
+  return true, (tipName ~= nil or (actionType == "spell" and id and id > 0)) and true or false
 end
 
 local BLIZZARD_BARS = {
@@ -144,21 +148,33 @@ local BLIZZARD_BARS = {
   { "MultiBarLeftButton", "MULTIACTIONBAR4BUTTON" },
 }
 
+-- Per-family hit counts from the last scan, for /cdm actionglow: "we found no
+-- buttons at all" and "we found them but not YOUR spell" look identical on screen.
+local scanStats = {}
+
+local function Count(family, existed, remembered)
+  local stat = scanStats[family]
+  if not stat then stat = { found = 0, spells = 0 }; scanStats[family] = stat end
+  if existed then stat.found = stat.found + 1 end
+  if remembered then stat.spells = stat.spells + 1 end
+end
+
 local function Rebuild()
   byId, byName = {}, {}
   frameById, frameByName = {}, {}
+  scanStats = {}
   for _, bar in ipairs(BLIZZARD_BARS) do
     for i = 1, 12 do
-      ScanButton(bar[1] .. i, bar[2] .. i)
+      Count("Blizzard", ScanButton(bar[1] .. i, bar[2] .. i))
     end
   end
   for barIndex = 1, 10 do -- ElvUI
     for i = 1, 12 do
-      ScanButton("ElvUI_Bar" .. barIndex .. "Button" .. i)
+      Count("ElvUI", ScanButton("ElvUI_Bar" .. barIndex .. "Button" .. i))
     end
   end
   for i = 1, 120 do -- Bartender4
-    ScanButton("BT4Button" .. i, nil, i)
+    Count("Bartender4", ScanButton("BT4Button" .. i, nil, i))
   end
   dirty = false
 end
@@ -185,6 +201,50 @@ function Keybinds:GetButton(spellID, spellName)
     if name and frameByName[name] then return frameByName[name] end
   end
   return spellName and frameByName[spellName] or nil
+end
+
+-- /cdm actionglow: why an action-bar glow is or is not firing. Three causes look
+-- identical in game (nothing glows), so all three are printed: no action bar was
+-- recognised at all, the spell is not on any recognised button, or the element
+-- has no Glow condition to mirror in the first place.
+function Keybinds:DiagnoseActionGlow()
+  Rebuild() -- always fresh: the point is what the bars hold right now
+  local total = 0
+  for family, stat in pairs(scanStats) do
+    total = total + stat.spells
+    ns:Print(("  %s bars: %d button(s) exist, %d hold a spell"):format(
+      family, stat.found, stat.spells))
+  end
+  if total == 0 then
+    ns:Print("|cffff5555No action button was recognised.|r The glow needs one of the"
+      .. " Blizzard bars, ElvUI (ElvUI_BarNButtonN) or Bartender4 (BT4ButtonN)."
+      .. " Say which action bar addon you use and it can be added.")
+  end
+
+  local watched = 0
+  for _, viewer in ipairs(ns.profile and ns.profile.viewers or {}) do
+    for _, el in ipairs(viewer.elements or {}) do
+      if el.actionGlow then
+        watched = watched + 1
+        local button = self:GetButton(el.spellID, el.name)
+        local hasGlow = false
+        for _, cond in ipairs(el.conditions or {}) do
+          if (cond.action or "glow") == "glow" then hasGlow = true end
+        end
+        local display = ns.Triggers and ns.Triggers:Evaluate(el)
+        ns:Print(('  "%s" on %s: button=%s  glow condition=%s  glowing now=%s'):format(
+          tostring(el.name or el.spellID), viewer.name,
+          button and (button.GetName and button:GetName() or "unnamed frame")
+            or "|cffff5555not on any action bar|r",
+          hasGlow and "yes" or "|cffff5555none -- nothing to mirror|r",
+          display and tostring(display.glow) or "?"))
+      end
+    end
+  end
+  if watched == 0 then
+    ns:Print("No element has \"Glow my action button\" ticked. Select one in the"
+      .. " config, tick it, and give it a Glow condition.")
+  end
 end
 
 ns:On("READY", function()

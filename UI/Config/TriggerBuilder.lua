@@ -78,7 +78,9 @@ local CONDITION_TYPES = {
   { text = "Other spell ready", value = "othercd" },
   { text = "Other spell usable", value = "otherusable" },
   { text = "Pet active", value = "petactive" },
-  { text = "This aura up", value = "auraup" },
+  -- "This" = THIS element's own aura, no spell box: for a DIFFERENT aura it is
+  -- "Other aura active", which does take a name/ID.
+  { text = "This element's aura up", value = "auraup" },
   { text = "This totem up", value = "totemup" },
   { text = "This totem is", value = "totemname" },
 }
@@ -473,7 +475,7 @@ function TriggerBuilder:Create(parent)
   -- Mirror this element's glow onto the action-bar button that holds the same
   -- spell. Every condition already built applies, "aura missing" included -- so
   -- "glow when it falls off" is a trigger, not a second setting.
-  builder.actionGlow = W.CreateCheckbox(builder, "Glow my action button", function(_, checked)
+  builder.actionGlow = W.CreateCheckbox(builder, "Glow my action button (needs a Glow condition)", function(_, checked)
     builder.element.actionGlow = checked or nil
   end)
 
@@ -635,7 +637,7 @@ function TriggerBuilder:Load(element, onChange)
   else
     builder.mine:Hide()
   end
-  toggles[#toggles + 1] = { control = builder.actionGlow, width = 168 }
+  toggles[#toggles + 1] = { control = builder.actionGlow, width = 280 }
   y = ns.FormCells(y, toggles, paneW, PAD)
 
   -- CONDITIONS header
