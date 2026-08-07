@@ -5,6 +5,7 @@ stub.install(_G)
 local ns = {}
 stub.loadAddonFile("Core/Init.lua", ns)
 stub.loadAddonFile("UI/Viewer.lua", ns)
+stub.loadAddonFile("UI/IconRow.lua", ns) -- ns.IconGrid: ConfiguredWidth uses it
 stub.loadAddonFile("UI/StatusBars.lua", ns)
 stub.loadAddonFile("UI/EditMode.lua", ns)
 
@@ -516,5 +517,99 @@ check("shift down moves ten down", nudge("down", true) == "0,-10")
 check("an unknown direction moves nothing", nudge("sideways") == "0,0")
 
 ns.DB = nil
+
+--------------------------------------------------------------------------------
+-- Icon grid: a row, a column, and the wrap. Offsets are measured from TOPLEFT,
+-- y downward as a negative.
+local function grid(count, cfg)
+  local offsets, w, h = ns.IconGrid(count, cfg)
+  local parts = {}
+  for i, o in ipairs(offsets) do parts[i] = o.x .. "," .. o.y end
+  return table.concat(parts, " "), w, h
+end
+
+local ROW = { iconSize = 10, spacing = 2 }
+local at, w, h = grid(3, ROW)
+check("a row runs left to right", at == "0,0 12,0 24,0")
+check("a row is as wide as its icons", w == 34)
+check("a row is one icon tall", h == 10)
+
+at = grid(3, { iconSize = 10, spacing = 2, growth = "LEFT" })
+check("grow left fills from the right edge", at == "24,0 12,0 0,0")
+
+at, w, h = grid(3, { iconSize = 10, spacing = 2, orientation = "VERTICAL" })
+check("a column runs downward", at == "0,0 0,-12 0,-24")
+check("a column is one icon wide", w == 10)
+check("a column is as tall as its icons", h == 34)
+
+at = grid(3, { iconSize = 10, spacing = 2, orientation = "VERTICAL", growth = "UP" })
+check("grow up fills from the bottom", at == "0,-24 0,-12 0,0")
+
+-- Wrap: 5 icons, 2 per row, extra rows downward by default
+at, w, h = grid(5, { iconSize = 10, spacing = 2, perRow = 2 })
+check("a wrapped row starts a new line", at == "0,0 12,0 0,-12 12,-12 0,-24")
+check("a wrapped row is only as wide as its longest line", w == 22)
+check("a wrapped row is as tall as its lines", h == 34)
+
+at = grid(3, { iconSize = 10, spacing = 2, perRow = 2, overflow = "UP" })
+check("overflow up stacks the first line at the bottom", at == "0,-12 12,-12 0,0")
+
+at = grid(3, { iconSize = 10, spacing = 2, orientation = "VERTICAL", perRow = 2 })
+check("a wrapped column starts a new column to the right",
+  at == "0,0 0,-12 12,0")
+
+check("perRow 0 means never wrap", (grid(3, { iconSize = 10, spacing = 2, perRow = 0 }))
+  == "0,0 12,0 24,0")
+local _, ew, eh = grid(0, ROW)
+check("an empty row still reserves one icon", ew == 10 and eh == 10)
+
+--------------------------------------------------------------------------------
+-- Masque: one group per bar, our border yields to the skin, and no Masque at all
+-- is a silent no-op (it is an optional dependency).
+local realLibStub = _G.LibStub
+local added = {}
+_G.LibStub = function(name)
+  if name ~= "Masque" then return nil end
+  return { Group = function(_, addon, groupName)
+    return {
+      AddButton = function(_, button, regions, btype)
+        added[#added + 1] = { addon = addon, group = groupName,
+          regions = regions, btype = btype, button = button }
+      end,
+      ReSkin = function() end,
+    }
+  end }
+end
+
+local borderShown = true
+local skinBtn = { icon = "ICON", cooldown = "CD", stacksText = "N", keyText = "K",
+  border = { Hide = function() borderShown = false end } }
+local skinFrame = { cfg = { name = "MasqueBar" } }
+check("a button is registered with Masque",
+  ns.MasqueSkin(skinFrame, skinBtn, { Icon = skinBtn.icon }, false) == true)
+check("the group is named after the bar", added[1] and added[1].group == "MasqueBar")
+check("it registers under one addon title",
+  added[1] and added[1].addon == "CoA Cooldown Manager")
+check("our own border yields to the skin", borderShown == false)
+check("a button is never registered twice",
+  ns.MasqueSkin(skinFrame, skinBtn, { Icon = skinBtn.icon }, false) == false)
+
+borderShown = true
+local keepBtn = { border = { Hide = function() borderShown = false end } }
+ns.MasqueSkin({ cfg = { name = "MasqueBar" } }, keepBtn, {}, true)
+check("keepBorder leaves an informative border alone", borderShown == true)
+
+_G.LibStub = nil
+check("no Masque installed is a no-op",
+  ns.MasqueSkin({ cfg = { name = "NoMasqueBar" } }, { border = nil }, {}) == false)
+_G.LibStub = realLibStub
+
+-- Match width follows the real geometry, columns included
+check("a column source measures one icon wide",
+  ns.ConfiguredWidth({ style = "icons", iconSize = 32, spacing = 5,
+    orientation = "VERTICAL", elements = { {}, {}, {} } }) == 32)
+check("a wrapped row source measures its longest line",
+  ns.ConfiguredWidth({ style = "icons", iconSize = 32, spacing = 5,
+    perRow = 2, elements = { {}, {}, {} } }) == 69)
 
 return T

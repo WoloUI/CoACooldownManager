@@ -47,12 +47,69 @@ local function CreateButton(parent)
   return btn
 end
 
+--------------------------------------------------------------------------------
+-- Masque
+--------------------------------------------------------------------------------
+-- Optional skin support (Masque-WoTLK). ONE GROUP PER BAR, so Essentials can be
+-- skinned differently from Utility, and every call is guarded: Masque may not be
+-- installed, and a skin erroring must not take the icon row down with it.
+--
+-- Our buttons are Frames, not Buttons, which Masque handles by forcing Strict
+-- mode: it skins exactly the regions handed to it and never probes for the
+-- action-button ones we do not have (GetNormalTexture and friends). It still
+-- creates its own Normal/backdrop textures, which is what draws the skin.
+local MASQUE_TITLE = "CoA Cooldown Manager"
+local masqueGroups = {}
+
+local function MasqueGroup(barName)
+  if not (barName and _G.LibStub) then return nil end
+  local group = masqueGroups[barName]
+  if group ~= nil then return group or nil end
+  local lib = LibStub("Masque", true)
+  if not lib then
+    masqueGroups[barName] = false -- remember the absence: LibStub is a table walk
+    return nil
+  end
+  local ok, made = pcall(lib.Group, lib, MASQUE_TITLE, barName)
+  masqueGroups[barName] = ok and made or false
+  return ok and made or nil
+end
+
+-- `keepBorder` is for the bars whose own border carries information (the history
+-- bar reddens it for a failed cast); everywhere else the skin owns the border.
+function ns.MasqueSkin(frame, btn, regions, keepBorder)
+  local group = MasqueGroup(frame.cfg and frame.cfg.name)
+  if not group or btn._masque then return false end
+  btn._masque = true
+  if btn.border and not keepBorder then btn.border:Hide() end
+  pcall(group.AddButton, group, btn, regions, "Action")
+  return true
+end
+
+-- A skin sizes its textures when it is applied, so a changed icon size needs a
+-- re-skin. Icon size only changes through the config, which rebuilds.
+function ns.MasqueReSkin(frame)
+  local group = MasqueGroup(frame.cfg and frame.cfg.name)
+  if group and group.ReSkin then pcall(group.ReSkin, group) end
+end
+
+local function MasqueSkin(frame, btn)
+  ns.MasqueSkin(frame, btn, {
+    Icon = btn.icon,
+    Cooldown = btn.cooldown,
+    Count = btn.stacksText,
+    HotKey = btn.keyText,
+  })
+end
+local MasqueReSkin = ns.MasqueReSkin
+
 local function AcquireButton(frame, index)
   frame.buttons = frame.buttons or {}
   local btn = frame.buttons[index]
   if not btn then
     btn = CreateButton(frame)
     frame.buttons[index] = btn
+    MasqueSkin(frame, btn)
   end
   return btn
 end
@@ -63,6 +120,8 @@ end
 function IconRow:Build(frame, cfg)
   frame.buttons = frame.buttons or {}
   for _, btn in ipairs(frame.buttons) do btn:Hide() end
+  -- Buttons that already exist were skinned at the old icon size
+  MasqueReSkin(frame)
 end
 
 local function SetButtonDisplay(btn, display, cfg, now)
@@ -141,24 +200,68 @@ local function SetButtonDisplay(btn, display, cfg, now)
   end
 end
 
-local function LayoutRow(frame, cfg, count)
+--------------------------------------------------------------------------------
+-- Grid geometry
+--------------------------------------------------------------------------------
+-- Where `count` icons sit, as offsets from the frame's TOPLEFT, plus the size the
+-- frame needs. Pure: geometry only, so the wrap and the direction flips are
+-- testable offline.
+--
+-- Three knobs, all optional and all defaulting to the single left-to-right row
+-- this used to be:
+--   orientation "VERTICAL" -- a column instead of a row
+--   perRow n               -- wrap after n icons (0/nil = never)
+--   overflow               -- which way the extra lines stack
+--
+-- CENTER growth needs no special case: the frame itself is centred on its
+-- anchor, so the icons just fill forward inside it.
+function ns.IconGrid(count, cfg)
+  cfg = cfg or {}
   local size = cfg.iconSize or 32
-  local spacing = cfg.spacing or 5
-  local total = count > 0 and (count * size + (count - 1) * spacing) or size
-  frame:SetSize(total, size)
+  local step = size + (cfg.spacing or 5)
+  local vertical = cfg.orientation == "VERTICAL"
+  local growth = cfg.growth or (vertical and "DOWN" or "CENTER")
 
-  local growth = cfg.growth or "CENTER"
+  local perLine = math.max(math.floor(tonumber(cfg.perRow) or 0), 0)
+  if perLine == 0 then perLine = math.max(count, 1) end
+  local lines = math.max(math.ceil(math.max(count, 1) / perLine), 1)
+  local along = math.min(math.max(count, 1), perLine) -- icons on the longest line
+
+  local alongPx = along * step - (cfg.spacing or 5)
+  local acrossPx = lines * step - (cfg.spacing or 5)
+  local width = vertical and acrossPx or alongPx
+  local height = vertical and alongPx or acrossPx
+
+  -- Reversed directions measure from the far edge, so a partial last line stays
+  -- flush with the edge the bar grows from
+  local backAlong = (vertical and growth == "UP") or (not vertical and growth == "LEFT")
+  local overflow = cfg.overflow or (vertical and "RIGHT" or "DOWN")
+  local backAcross = (vertical and overflow == "LEFT") or (not vertical and overflow == "UP")
+
+  local offsets = {}
+  for i = 1, count do
+    local line = math.floor((i - 1) / perLine)
+    local pos = (i - 1) % perLine
+    local a = backAlong and ((vertical and height or width) - size - pos * step)
+      or pos * step
+    local c = backAcross and ((vertical and width or height) - size - line * step)
+      or line * step
+    -- y grows DOWNWARD as a negative offset from TOPLEFT (never -0, which is a
+    -- real value in Lua and reads as a bug in anything that prints it)
+    local down = vertical and a or c
+    down = down ~= 0 and -down or 0
+    offsets[i] = { x = vertical and c or a, y = down }
+  end
+  return offsets, width, height
+end
+
+local function LayoutRow(frame, cfg, count)
+  local offsets, width, height = ns.IconGrid(count, cfg)
+  frame:SetSize(width, height)
   for i = 1, count do
     local btn = frame.buttons[i]
     btn:ClearAllPoints()
-    local offset = (i - 1) * (size + spacing)
-    if growth == "RIGHT" then
-      btn:SetPoint("LEFT", frame, "LEFT", offset, 0)
-    elseif growth == "LEFT" then
-      btn:SetPoint("RIGHT", frame, "RIGHT", -offset, 0)
-    else -- CENTER
-      btn:SetPoint("LEFT", frame, "LEFT", offset, 0) -- frame itself is centered on its anchor
-    end
+    btn:SetPoint("TOPLEFT", frame, "TOPLEFT", offsets[i].x, offsets[i].y)
   end
 end
 

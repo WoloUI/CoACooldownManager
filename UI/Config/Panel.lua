@@ -45,6 +45,25 @@ local GROWTH_BARS = {
   { text = "Grow up", value = "UP" },
   { text = "Grow down", value = "DOWN" },
 }
+-- An icon bar can be a COLUMN, which needs the vertical growth options and turns
+-- the wrap sideways ("Per line" then counts icons down each column)
+local ORIENTATION_OPTIONS = {
+  { text = "Row", value = "HORIZONTAL" },
+  { text = "Column", value = "VERTICAL" },
+}
+local GROWTH_COLUMN = {
+  { text = "Center", value = "CENTER" },
+  { text = "Grow down", value = "DOWN" },
+  { text = "Grow up", value = "UP" },
+}
+local OVERFLOW_ROWS = {
+  { text = "New line below", value = "DOWN" },
+  { text = "New line above", value = "UP" },
+}
+local OVERFLOW_COLUMNS = {
+  { text = "New line right", value = "RIGHT" },
+  { text = "New line left", value = "LEFT" },
+}
 local KIND_OPTIONS = {
   { text = "Spell cooldown", value = "cooldown" },
   { text = "Buff", value = "buff" },
@@ -608,6 +627,35 @@ function Config:BuildControls()
     SelectedViewer().growth = value
     Touch()
   end)
+
+  -- Icon bars only: row vs column, and the wrap
+  c.orientLabel = W.CreateLabel(parent, "Layout", 12, W.colors.inkDim)
+  c.orient = W.CreateDropdown(parent, 100, function(_, value)
+    local viewer = SelectedViewer()
+    local vertical = value == "VERTICAL"
+    viewer.orientation = vertical and "VERTICAL" or nil
+    -- Growth is per axis: "Grow left" on a column means nothing, and leaving it
+    -- there would read as the setting doing nothing
+    viewer.growth = "CENTER"
+    Touch()
+    Config:Render()
+  end)
+  c.orient:SetOptions(ORIENTATION_OPTIONS)
+  c.perRowLabel = W.CreateLabel(parent, "Per line", 12, W.colors.inkDim)
+  c.perRow = W.CreateEditBox(parent, 40, 20, function(_, text)
+    local n = math.max(math.floor(tonumber(text) or 0), 0)
+    SelectedViewer().perRow = n > 0 and n or nil
+    Touch()
+    Config:Render() -- the overflow direction only matters once it wraps
+  end, "0")
+  c.overflowLabel = W.CreateLabel(parent, "Overflow", 12, W.colors.inkDim)
+  c.overflow = W.CreateDropdown(parent, 130, function(_, value)
+    SelectedViewer().overflow = value
+    Touch()
+  end)
+  c.perRowHint = W.CreateLabel(parent,
+    "Per line 0 keeps everything on one line. Above 0 the extras wrap onto another"
+    .. " line (another column, for a column bar).", 10, W.colors.inkDim)
 
   local function NumBox(field, fallback)
     return W.CreateEditBox(parent, 44, 20, function(_, text)
@@ -3424,7 +3472,14 @@ function Config:Render()
     -- icons and bars. Every control is set first, then packed: the cells decide
     -- where things land, so nothing here carries a hand-tuned offset.
     c.style:SetValue(style)
-    c.growth:SetOptions(style == "bars" and GROWTH_BARS or GROWTH_ICONS)
+    local vertical = style == "icons" and viewer.orientation == "VERTICAL"
+    local growthOptions = GROWTH_ICONS
+    if style == "bars" then
+      growthOptions = GROWTH_BARS
+    elseif vertical then
+      growthOptions = GROWTH_COLUMN
+    end
+    c.growth:SetOptions(growthOptions)
     c.growth:SetValue(viewer.growth or (style == "bars" and "UP" or "CENTER"))
     c.spacing:SetText(tostring(viewer.spacing or 5))
     c.fontSize:SetText(tostring(viewer.fontSize or 11))
@@ -3434,6 +3489,15 @@ function Config:Render()
       { label = c.growthLabel, control = c.growth, width = 118 },
     }
     if style == "icons" then
+      c.orient:SetValue(vertical and "VERTICAL" or "HORIZONTAL")
+      c.perRow:SetText(tostring(viewer.perRow or 0))
+      cells[#cells + 1] = { label = c.orientLabel, control = c.orient,  width = 108 }
+      cells[#cells + 1] = { label = c.perRowLabel, control = c.perRow,  width = 56 }
+      if (viewer.perRow or 0) > 0 then
+        c.overflow:SetOptions(vertical and OVERFLOW_COLUMNS or OVERFLOW_ROWS)
+        c.overflow:SetValue(viewer.overflow or (vertical and "RIGHT" or "DOWN"))
+        cells[#cells + 1] = { label = c.overflowLabel, control = c.overflow, width = 138 }
+      end
       -- Each style labels its OWN cells: c.iconSize used to be re-labelled from
       -- "Size" to "Width" mid-render depending on style, which is how a value
       -- lands in the wrong box.
@@ -3461,6 +3525,11 @@ function Config:Render()
       cells[#cells + 1] = { label = c.fontLabel,    control = c.fontSize, width = 56 }
     end
     y = ns.FormCells(y, cells, paneW)
+    if style == "icons" then
+      c.perRowHint:ClearAllPoints()
+      c.perRowHint:SetPoint("TOPLEFT", 0, y); c.perRowHint:Show()
+      y = y - 26
+    end
 
     -- The toggles. A checkbox carries its own text, so these have no label cell.
     c.showStacks:SetChecked(viewer.showStacks ~= false)

@@ -187,11 +187,11 @@ function ns.ConfiguredWidth(cfg)
   if not cfg then return nil end
   local style = cfg.style
   if style == "icons" then
-    -- Mirrors LayoutRow: an empty row still reserves one icon
+    -- Same geometry the row itself lays out with, so a column or a wrapped row
+    -- is followed at its real width. An empty row still reserves one icon.
     local count = math.max(#(cfg.elements or {}), 1)
-    local size = cfg.iconSize or 32
-    local spacing = cfg.spacing or 5
-    return count * size + (count - 1) * spacing
+    local _, width = ns.IconGrid(count, cfg)
+    return width
   elseif style == "bars" then
     return cfg.barWidth or 250
   elseif style == "power" then

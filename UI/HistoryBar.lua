@@ -44,6 +44,12 @@ local function AcquireIcon(frame, index)
   if not btn then
     btn = CreateIcon(frame)
     frame.historyIcons[index] = btn
+    -- Masque, keeping OUR border: it turns red for a failed cast, which is the
+    -- whole point of this bar
+    if ns.MasqueSkin then
+      ns.MasqueSkin(frame, btn,
+        { Icon = btn.icon, Cooldown = btn.cooldown, Count = btn.countText }, true)
+    end
   end
   return btn
 end
@@ -51,6 +57,7 @@ end
 function HistoryBar:Build(frame, cfg)
   frame.historyIcons = frame.historyIcons or {}
   for _, btn in ipairs(frame.historyIcons) do btn:Hide() end
+  if ns.MasqueReSkin then ns.MasqueReSkin(frame) end
 end
 
 -- The blacklist is stored as typed text; Entries wants an array of names.
