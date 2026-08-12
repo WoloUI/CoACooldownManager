@@ -45,6 +45,26 @@ local GROWTH_BARS = {
   { text = "Grow up", value = "UP" },
   { text = "Grow down", value = "DOWN" },
 }
+-- A COLUMN of duration bars stacks sideways, so its growth is the other axis
+local GROWTH_BARS_VERTICAL = {
+  { text = "Grow right", value = "RIGHT" },
+  { text = "Grow left", value = "LEFT" },
+}
+-- Duration bars take the same Layout selector as icons, worded for a bar: a
+-- vertical bar drains along its long axis and the bars sit side by side.
+local ORIENTATION_BARS = {
+  { text = "Horizontal", value = "HORIZONTAL" },
+  { text = "Vertical", value = "VERTICAL" },
+}
+-- Which end of a duration bar its icon sits on, per axis
+local ICON_SIDE_VERTICAL = {
+  { text = "Top", value = "TOP" },
+  { text = "Bottom", value = "BOTTOM" },
+}
+local ICON_SIDE_HORIZONTAL = {
+  { text = "Left", value = "LEFT" },
+  { text = "Right", value = "RIGHT" },
+}
 -- An icon bar can be a COLUMN, which needs the vertical growth options and turns
 -- the wrap sideways ("Per line" then counts icons down each column)
 local ORIENTATION_OPTIONS = {
@@ -117,6 +137,9 @@ local REMINDER_TYPE_OPTIONS = {
 local SLOT_OPTIONS = {
   { text = "Main hand", value = "mainhand" },
   { text = "Off hand", value = "offhand" },
+  -- The RANGED/thrown slot: only a thrown weapon can carry an imbue, so on a bow
+  -- or a gun the reminder stays quiet (Core/Reminders.lua)
+  { text = "Ranged", value = "ranged" },
 }
 -- Where the MISSING BUFFS overlay may appear (ns.MissingBuffs.Context)
 local CONTEXT_OPTIONS = {
@@ -635,7 +658,7 @@ function Config:BuildControls()
     Touch()
   end)
 
-  -- Icon bars only: row vs column, and the wrap
+  -- Row vs column (icons: also the wrap; duration bars: which way they drain)
   c.orientLabel = W.CreateLabel(parent, "Layout", 12, W.colors.inkDim)
   c.orient = W.CreateDropdown(parent, 100, function(_, value)
     local viewer = SelectedViewer()
@@ -643,7 +666,12 @@ function Config:BuildControls()
     viewer.orientation = vertical and "VERTICAL" or nil
     -- Growth is per axis: "Grow left" on a column means nothing, and leaving it
     -- there would read as the setting doing nothing
-    viewer.growth = "CENTER"
+    if viewer.style == "bars" then
+      viewer.growth = vertical and "RIGHT" or "UP"
+      viewer.iconSide = nil -- "Top" means nothing on a row; back to the axis default
+    else
+      viewer.growth = "CENTER"
+    end
     Touch()
     Config:Render()
   end)
@@ -655,6 +683,13 @@ function Config:BuildControls()
     Touch()
     Config:Render() -- the overflow direction only matters once it wraps
   end, "0")
+  -- Duration bars only: which end the icon sits on
+  c.iconSideLabel = W.CreateLabel(parent, "Icon at", 12, W.colors.inkDim)
+  c.iconSide = W.CreateDropdown(parent, 90, function(_, value)
+    SelectedViewer().iconSide = value
+    Touch()
+  end)
+
   c.overflowLabel = W.CreateLabel(parent, "Overflow", 12, W.colors.inkDim)
   c.overflow = W.CreateDropdown(parent, 130, function(_, value)
     SelectedViewer().overflow = value
@@ -677,6 +712,13 @@ function Config:BuildControls()
   c.perRowHint = W.CreateLabel(parent,
     "Per line 0 keeps everything on one line. Above 0 the extras wrap onto another"
     .. " line (another column, for a column bar).", 10, W.colors.inkDim)
+
+  -- Width/Height keep their names on a vertical bar (they are shared labels), so
+  -- the swap is stated instead: the bar drains along its Width either way.
+  c.barVertHint = W.CreateLabel(parent,
+    "Vertical: the bar drains from top to bottom. Width is how LONG it is, Height"
+    .. " how thick, and the bars sit side by side. The aura name is not drawn"
+    .. " (a column has no room for it).", 10, W.colors.inkDim)
 
   local function NumBox(field, fallback)
     return W.CreateEditBox(parent, 44, 20, function(_, text)
@@ -756,7 +798,31 @@ function Config:BuildControls()
   c.showBarIcon = W.CreateCheckbox(parent, "Icon", function(_, checked)
     SelectedViewer().showIcon = checked
     Touch()
+    Config:Render() -- "Icon at" only matters while there is an icon
   end)
+  -- The bar exists only to glow real action buttons, so it draws nothing at all.
+  -- Ticking it also ticks "Glow my action button" on every element it holds:
+  -- without that flag the bar would go silently dark, which is the same bug
+  -- report arriving a second time.
+  c.glowOnly = W.CreateCheckbox(parent, "Action-glow only (draws nothing)", function(_, checked)
+    local viewer = SelectedViewer()
+    viewer.glowOnly = checked or nil
+    if checked then
+      local touched = 0
+      for _, el in ipairs(viewer.elements or {}) do
+        if not el.actionGlow then
+          el.actionGlow = true
+          touched = touched + 1
+        end
+      end
+      ns:Print(("%s draws nothing now and only glows your action buttons%s."):format(
+        viewer.name,
+        touched > 0 and (", action glow ticked on %d element(s)"):format(touched) or ""))
+    end
+    Touch() -- VIEWERS_CHANGED rebuilds, which is what hides the frame
+    Config:Render()
+  end)
+
   c.reverseSweep = W.CreateCheckbox(parent, "Reverse sweep", function(_, checked)
     SelectedViewer().reverseSweep = checked
     Touch()
@@ -3515,15 +3581,17 @@ function Config:Render()
     -- icons and bars. Every control is set first, then packed: the cells decide
     -- where things land, so nothing here carries a hand-tuned offset.
     c.style:SetValue(style)
-    local vertical = style == "icons" and viewer.orientation == "VERTICAL"
+    local vertical = viewer.orientation == "VERTICAL"
     local growthOptions = GROWTH_ICONS
     if style == "bars" then
-      growthOptions = GROWTH_BARS
+      growthOptions = vertical and GROWTH_BARS_VERTICAL or GROWTH_BARS
     elseif vertical then
       growthOptions = GROWTH_COLUMN
     end
     c.growth:SetOptions(growthOptions)
-    c.growth:SetValue(viewer.growth or (style == "bars" and "UP" or "CENTER"))
+    local growthDefault = "CENTER"
+    if style == "bars" then growthDefault = vertical and "RIGHT" or "UP" end
+    c.growth:SetValue(viewer.growth or growthDefault)
     c.spacing:SetText(tostring(viewer.spacing or 5))
     c.fontSize:SetText(tostring(viewer.fontSize or 11))
 
@@ -3532,6 +3600,7 @@ function Config:Render()
       { label = c.growthLabel, control = c.growth, width = 118 },
     }
     if style == "icons" then
+      c.orient:SetOptions(ORIENTATION_OPTIONS)
       c.orient:SetValue(vertical and "VERTICAL" or "HORIZONTAL")
       c.perRow:SetText(tostring(viewer.perRow or 0))
       cells[#cells + 1] = { label = c.orientLabel, control = c.orient,  width = 108 }
@@ -3550,6 +3619,15 @@ function Config:Render()
       cells[#cells + 1] = { label = c.spacingLabel, control = c.spacing,  width = 56 }
       cells[#cells + 1] = { label = c.fontLabel,    control = c.fontSize, width = 56 }
     else -- bars
+      c.orient:SetOptions(ORIENTATION_BARS)
+      c.orient:SetValue(vertical and "VERTICAL" or "HORIZONTAL")
+      cells[#cells + 1] = { label = c.orientLabel, control = c.orient, width = 108 }
+      -- Only worth asking while there IS an icon to place
+      if viewer.showIcon ~= false then
+        c.iconSide:SetOptions(vertical and ICON_SIDE_VERTICAL or ICON_SIDE_HORIZONTAL)
+        c.iconSide:SetValue(viewer.iconSide or (vertical and "TOP" or "LEFT"))
+        cells[#cells + 1] = { label = c.iconSideLabel, control = c.iconSide, width = 98 }
+      end
       -- Only duration bars can follow another bar; an icon row sizes itself from
       -- its icons, so it is a source only.
       c.widthMode:SetValue(viewer.widthMode == "match" and "match" or "fixed")
@@ -3572,6 +3650,8 @@ function Config:Render()
       c.perRowHint:ClearAllPoints()
       c.perRowHint:SetPoint("TOPLEFT", 0, y); c.perRowHint:Show()
       y = y - 26
+    elseif vertical then -- bars: HideAllControls already hid both hints
+      y = PlaceHint(c.barVertHint, y, paneW)
     end
 
     -- The toggles. A checkbox carries its own text, so these have no label cell.
@@ -3617,9 +3697,16 @@ function Config:Render()
   c.visHeader:Show()
   y = y - c.visHeader.COST
   c.visibility:SetValue(viewer.visibility or "always")
+  local visPaneW = ns.ContentWidth(win:GetWidth())
   y = ns.FormCells(y, {
     { label = c.visLabel, control = c.visibility, width = 118 },
-  }, ns.ContentWidth(win:GetWidth()))
+  }, visPaneW)
+  -- Glow-only belongs here rather than under LOOK: it is not a look, it is "this
+  -- bar is never shown". Offered on the styles that hold spell elements.
+  if style == "icons" or style == "bars" then
+    c.glowOnly:SetChecked(viewer.glowOnly == true)
+    y = ns.FormCells(y, { { control = c.glowOnly, width = 240 } }, visPaneW)
+  end
 
   -- Position (Power too: it can be re-anchored FREE only, so show but lock parent)
   c.anchorHeader:SetPoint("TOPLEFT", 0, y - c.anchorHeader.LEAD)

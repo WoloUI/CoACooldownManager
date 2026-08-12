@@ -766,4 +766,78 @@ end }))
 check("an exactID element asks for a strict aura match", sawStrict == true)
 check("its name is learned off the live aura", byIdEl.name == "Reaped Soul")
 
+--------------------------------------------------------------------------------
+-- Range: 0 out of range, 1 in range, nil = the client cannot tell
+--------------------------------------------------------------------------------
+local rangeEl = { kind = "cooldown", name = "Rend", showWhen = "always",
+  conditions = { { ctype = "inrange", value = false, action = "color" } } }
+local function RangeCtx(result, unitSeen)
+  return Ctx({
+    cooldown = function() return readyState end,
+    spellInRange = function(ref, unit)
+      if unitSeen then unitSeen.ref, unitSeen.unit = ref, unit end
+      return result
+    end,
+  })
+end
+d = ns.Triggers:Evaluate(rangeEl, RangeCtx(0))
+check("out of range colours the icon", d.color ~= nil)
+d = ns.Triggers:Evaluate(rangeEl, RangeCtx(1))
+check("in range leaves it alone", d.color == nil)
+d = ns.Triggers:Evaluate(rangeEl, RangeCtx(nil))
+check("a spell the client cannot range-check never reads out of range", d.color == nil)
+
+local seen = {}
+ns.Triggers:Evaluate(rangeEl, RangeCtx(0, seen))
+check("the probe uses the element's spell", seen.ref == "Rend")
+check("and defaults to the target", seen.unit == "target")
+
+rangeEl.conditions[1].value = true
+d = ns.Triggers:Evaluate(rangeEl, RangeCtx(1))
+check("\"in range\" matches while in range", d.color ~= nil)
+d = ns.Triggers:Evaluate(rangeEl, RangeCtx(0))
+check("...and not while out of it", d.color == nil)
+
+-- No probe at all (a client without the API): same rule as a nil answer, the
+-- unknown counts as in range, so an "out of range" alert stays silent
+rangeEl.conditions[1].value = false
+d = ns.Triggers:Evaluate(rangeEl, Ctx({ cooldown = function() return readyState end }))
+check("no range probe never fires an out-of-range alert", d.color == nil)
+
+--------------------------------------------------------------------------------
+-- Colour action: the group names the colour, red until one is picked
+--------------------------------------------------------------------------------
+local colorEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "ready", value = true, action = "color" } } }
+d = ns.Triggers:Evaluate(colorEl, Ctx({ cooldown = function() return readyState end }))
+check("the colour defaults to red", d.color == ns.StackColorRGB.red)
+colorEl.condGroups = { color = { color = "cyan" } }
+d = ns.Triggers:Evaluate(colorEl, Ctx({ cooldown = function() return readyState end }))
+check("the group's colour is used", d.color == ns.StackColorRGB.cyan)
+colorEl.conditions[1].value = false
+d = ns.Triggers:Evaluate(colorEl, Ctx({ cooldown = function() return readyState end }))
+check("an unmatched colour condition leaves no tint", d.color == nil)
+
+--------------------------------------------------------------------------------
+-- Dispel type (Enrage)
+--------------------------------------------------------------------------------
+local enrageEl = { kind = "cooldown", spellID = 1, showWhen = "always",
+  conditions = { { ctype = "dispeltype", value = true, action = "glow" } } }
+local dispelSeen = {}
+d = ns.Triggers:Evaluate(enrageEl, Ctx({
+  cooldown = function() return readyState end,
+  dispelType = function(unit, dtype)
+    dispelSeen.unit, dispelSeen.dtype = unit, dtype
+    return true
+  end,
+}))
+check("an enrage on the unit glows", d.glow)
+check("it asks the target for Enrage by default",
+  dispelSeen.unit == "target" and dispelSeen.dtype == "Enrage")
+d = ns.Triggers:Evaluate(enrageEl, Ctx({
+  cooldown = function() return readyState end,
+  dispelType = function() return false end,
+}))
+check("no enrage, no glow", not d.glow)
+
 return T

@@ -64,14 +64,16 @@ local masqueGroups = {}
 local function MasqueGroup(barName)
   if not (barName and _G.LibStub) then return nil end
   local group = masqueGroups[barName]
-  if group ~= nil then return group or nil end
+  if group then return group end
   local lib = LibStub("Masque", true)
-  if not lib then
-    masqueGroups[barName] = false -- remember the absence: LibStub is a table walk
-    return nil
-  end
+  -- The absence is NOT cached any more. It used to be, to save a LibStub call,
+  -- and that turned "Masque was not ready when we asked" into "no Masque for the
+  -- rest of the session" -- one cause of a bar coming up unskinned after a login
+  -- (reported 2026-08-12). LibStub("Masque", true) is a table lookup; the cost
+  -- of asking again is nothing next to that.
+  if not lib then return nil end
   local ok, made = pcall(lib.Group, lib, MASQUE_TITLE, barName)
-  masqueGroups[barName] = ok and made or false
+  masqueGroups[barName] = ok and made or nil
   return ok and made or nil
 end
 
@@ -92,6 +94,60 @@ function ns.MasqueReSkin(frame)
   local group = MasqueGroup(frame.cfg and frame.cfg.name)
   if group and group.ReSkin then pcall(group.ReSkin, group) end
 end
+
+-- Every group we own, re-skinned.
+--
+-- This exists for the login case: our buttons are created on the first tick after
+-- PLAYER_LOGIN, and Masque does not necessarily have its saved skin applied by
+-- then, so the buttons get added to a group that still says "Blizzard" and come
+-- up unskinned. Opening Masque and re-picking the skin fixed it, which is exactly
+-- what ReSkin does -- so we do it ourselves, a few seconds in and on every zone
+-- load. Idempotent: re-skinning an already-correct group changes nothing.
+function ns.MasqueReSkinAll()
+  local count = 0
+  for _, group in pairs(masqueGroups) do
+    if group and group.ReSkin then
+      pcall(group.ReSkin, group)
+      count = count + 1
+    end
+  end
+  return count
+end
+
+-- /cdm masque: the one path here that cannot be checked outside the game. Says
+-- whether Masque answered at all, which of our bars have a group, and forces the
+-- re-skin, so "it came up unskinned" can be pinned on the library, the group or
+-- the timing.
+function ns.DiagnoseMasque()
+  local lib = _G.LibStub and LibStub("Masque", true)
+  ns:Print(("Masque: %s"):format(lib and "found" or
+    "|cffff5555not installed / not loaded|r"))
+  if not lib then return end
+  local named = 0
+  for name, group in pairs(masqueGroups) do
+    named = named + 1
+    ns:Print(("  group %s: %s"):format(name, group and "created" or "|cffff5555none|r"))
+  end
+  if named == 0 then
+    ns:Print("  no group created yet -- a bar creates its group with its first"
+      .. " icon, so show an icon bar and run this again.")
+  end
+  ns:Print(("re-skinned %d group(s). If that fixed the look, the login pass is"
+    .. " what was missing -- say so and its delay gets raised.")
+    :format(ns.MasqueReSkinAll()))
+end
+
+-- Login/zone re-skin pass (see ns.MasqueReSkinAll). 3s is after Masque's own
+-- initialisation on every client we have seen, and it fires once.
+ns:On("READY", function()
+  local dueAt, done = GetTime() + 3, false
+  ns:OnTick(function()
+    if done or GetTime() < dueAt then return end
+    done = true
+    ns.MasqueReSkinAll()
+  end)
+  ns:RegisterEvent("PLAYER_ENTERING_WORLD", function() ns.MasqueReSkinAll() end)
+end)
 
 local function MasqueSkin(frame, btn)
   ns.MasqueSkin(frame, btn, {
@@ -138,7 +194,13 @@ local function SetButtonDisplay(btn, display, cfg, now)
   end
 
   btn.icon:SetDesaturated(display.desaturate)
-  if display.desaturate then
+  -- A "Colour when" condition beats the desaturated gray: it is the alert the
+  -- user asked for, and a red-on-gray icon still reads red. Desaturation itself
+  -- stays on, so an out-of-range spell on cooldown is still visibly on cooldown.
+  local tint = display.color
+  if tint then
+    btn.icon:SetVertexColor(tint[1], tint[2], tint[3])
+  elseif display.desaturate then
     btn.icon:SetVertexColor(0.75, 0.75, 0.75)
   else
     btn.icon:SetVertexColor(1, 1, 1)

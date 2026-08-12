@@ -138,6 +138,21 @@ local function ConditionMatches(cond, element, display, ctx)
     local state = ctx.cooldown(cond.spellID)
     local ready = (state and state.known and not state.onCooldown) and true or false
     return ready == (cond.value ~= false)
+  elseif ctype == "inrange" then
+    -- THIS element's spell against the unit, via IsSpellInRange. nil means the
+    -- client cannot range-check that spell, and that counts as IN range: an
+    -- unknown must never fire an "out of range" alert (same rule the standalone
+    -- OUT OF RANGE overlay follows, RangeAlert.ShouldShow in Core/Init.lua).
+    local result = ctx.spellInRange
+      and ctx.spellInRange(ElementSpellRef(element), cond.unit or "target")
+    return (result ~= 0) == (cond.value ~= false)
+  elseif ctype == "dispeltype" then
+    -- Any aura on the unit whose dispel type matches -- "Enrage" is the one
+    -- people ask for (WeakAuras calls it "debuff type - enrage"), and it arrives
+    -- as a BUFF on the enemy, so the scan covers both filters.
+    local has = ctx.dispelType
+      and ctx.dispelType(cond.unit or "target", cond.dispel or "Enrage")
+    return (has and true or false) == (cond.value ~= false)
   elseif ctype == "usable" or ctype == "otherusable" then
     -- IsUsableSpell, a DIFFERENT question from "off cooldown". A spell gated by
     -- a proc or a state (CoA's Desecrate) reads unusable until the gate opens
@@ -183,7 +198,9 @@ local DEFAULT_JOIN = { show = "AND" } -- every other action defaults to OR
 -- old order was whatever order the user happened to add them in. Filters first,
 -- then appearance, then alerts -- and hide runs after show so a firing hide wins,
 -- which is how "hide" reads.
-local ACTION_ORDER = { "show", "hide", "desaturate", "glow", "sound" }
+-- `color` sits after desaturate: both tint, and an explicit colour is a louder
+-- statement than "unusable", so it wins the icon.
+local ACTION_ORDER = { "show", "hide", "desaturate", "color", "glow", "sound" }
 Triggers.ACTION_ORDER = ACTION_ORDER -- test seam
 
 function Triggers.GroupJoin(element, action)
@@ -256,7 +273,7 @@ function Triggers.MigrateGroups(element)
   return wrote
 end
 
-local function ApplyCondition(cond, matched, display)
+local function ApplyCondition(cond, matched, display, group)
   local action = cond.action or "glow"
   if action == "show" then
     -- Filter: the element is only visible while the condition holds
@@ -268,6 +285,12 @@ local function ApplyCondition(cond, matched, display)
       display.glow = true
     elseif action == "desaturate" then
       display.desaturate = true
+    elseif action == "color" then
+      -- The colour lives on the GROUP (same reason the sound does), named from
+      -- the shared palette rather than stored as raw RGB so a config stays
+      -- readable. Red by default: "make it red when it cannot be used" is the
+      -- ask this exists for, and it must do something before anything is picked.
+      display.color = ns.StackColorRGB[(group and group.color) or "red"]
     end
     -- action == "sound" changes nothing visually; CheckSound handles it
   end
@@ -715,7 +738,7 @@ function Triggers:Evaluate(element, ctx)
 
         -- ApplyCondition reads only cond.action, so any condition in the bucket
         -- stands in for the group; the first one keeps the order honest.
-        ApplyCondition(bucket[1], combined, display)
+        ApplyCondition(bucket[1], combined, display, group)
         CheckSound(element, action, group, combined)
       end
     end
@@ -815,6 +838,20 @@ function Triggers:LiveContext()
         return UnitHealth("player"), UnitHealthMax("player")
       end
       return UnitPower("player", ptype), UnitPowerMax("player", ptype)
+    end,
+    -- Raw IsSpellInRange: 0 out of range, 1 in range, nil "cannot tell" (a spell
+    -- with no range, a dead or non-attackable unit). Always by NAME, like every
+    -- other spell read here, and pcall'd because a bad ref throws on this client.
+    spellInRange = function(ref, unit)
+      unit = unit or "target"
+      if not (IsSpellInRange and ref) or not UnitExists(unit) then return nil end
+      local name = type(ref) == "number" and GetSpellInfo(ref) or ref
+      if not name then return nil end
+      local ok, result = pcall(IsSpellInRange, name, unit)
+      return ok and result or nil
+    end,
+    dispelType = function(unit, dtype)
+      return ns.Auras:HasDispelType(unit, dtype)
     end,
     inCombat = function() return UnitAffectingCombat("player") and true or false end,
     hasTarget = function() return UnitExists("target") and true or false end,

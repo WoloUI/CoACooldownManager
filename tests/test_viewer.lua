@@ -198,11 +198,15 @@ check("short numbers: millions", ns.FormatShortNumber(1340000) == "1.3M")
 stub.loadAddonFile("UI/IconRow.lua", ns)
 
 local function FakeText()
-  local fs = { text = nil }
+  local fs = { text = nil, shown = true, points = {} }
   fs.SetFont = function() end
   fs.SetText = function(_, value) fs.text = value end
   fs.SetTextColor = function() end
   fs.SetJustifyH = function() end
+  fs.Show = function(self) self.shown = true end
+  fs.Hide = function(self) self.shown = false end
+  fs.ClearAllPoints = function(self) self.points = {} end
+  fs.SetPoint = function(self, point) self.points[point] = true end
   return fs
 end
 
@@ -291,16 +295,20 @@ local function FakeHolder()
   -- are recorded: holder.bar.points is the anchor list SetBarDisplay left behind.
   holder.iconFrame = {
     shown = true,
+    points = {},
     SetSize = function() end,
     Show = function(self) self.shown = true end,
     Hide = function(self) self.shown = false end,
+    ClearAllPoints = function(self) self.points = {} end,
+    SetPoint = function(self, point) self.points[point] = true end,
   }
-  holder.SetSize = function() end
+  holder.SetSize = function(_, w, h) holder.width, holder.height = w, h end
   holder.bar.points = {}
   holder.bar.ClearAllPoints = function(self) self.points = {} end
   holder.bar.SetPoint = function(self, point, relativeTo)
     self.points[point] = relativeTo or "holder"
   end
+  holder.bar.SetOrientation = function(self, value) self.orientation = value end
   holder.bar.SetStatusBarTexture = function() end
   holder.bar.SetStatusBarColor = function() end
   holder.bar.SetMinMaxValues = function() end
@@ -640,5 +648,89 @@ check("a column source measures one icon wide",
 check("a wrapped row source measures its longest line",
   ns.ConfiguredWidth({ style = "icons", iconSize = 32, spacing = 5,
     perRow = 2, elements = { {}, {}, {} } }) == 69)
+
+-- Duration-bar geometry: rows stack up/down, columns stack sideways
+local function bars(count, cfg)
+  local offsets, w, h = ns.BarGrid(count, cfg)
+  local parts = {}
+  for i, o in ipairs(offsets) do parts[i] = o.x .. "," .. o.y end
+  return table.concat(parts, " "), w, h
+end
+
+local BAR = { barWidth = 100, barHeight = 10, spacing = 2 }
+local bat, bw, bh = bars(3, BAR)
+check("grow up puts bar 1 at the bottom", bat == "0,-24 0,-12 0,0")
+check("a row of bars is as wide as the bar", bw == 100)
+check("...and as tall as the stack", bh == 34)
+
+bat = bars(3, { barWidth = 100, barHeight = 10, spacing = 2, growth = "DOWN" })
+check("grow down puts bar 1 at the top", bat == "0,0 0,-12 0,-24")
+
+bat, bw, bh = bars(3, { barWidth = 100, barHeight = 10, spacing = 2,
+  orientation = "VERTICAL" })
+check("a column of bars runs rightward", bat == "0,0 12,0 24,0")
+check("the stack is the frame's width", bw == 34)
+check("the bar length is its height", bh == 100)
+
+bat = bars(3, { barWidth = 100, barHeight = 10, spacing = 2,
+  orientation = "VERTICAL", growth = "LEFT" })
+check("grow left fills from the right edge", bat == "24,0 12,0 0,0")
+
+-- Action-glow-only bar: every element still evaluated, nothing drawn
+local glowed = {}
+local realTriggers, realActionGlow = ns.Triggers, ns.ActionGlow
+ns.Triggers = { Evaluate = function(_, el) return { glow = true, name = el.name } end }
+ns.ActionGlow = function(el, display)
+  glowed[#glowed + 1] = el.name .. (display.glow and "!" or "")
+end
+ns.Viewer._GlowOnlyPass({ elements = { { name = "Rend" }, { name = "Thunder Clap" } } })
+check("a glow-only bar evaluates every element it holds", #glowed == 2)
+check("...and hands the display to the action glow", glowed[1] == "Rend!")
+ns.Viewer._GlowOnlyPass({}) -- a bar with no elements at all
+check("no elements is not an error", #glowed == 2)
+ns.Triggers, ns.ActionGlow = realTriggers, realActionGlow
+
+-- A vertical bar swaps its axes and drops the name (no room across a column)
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element,
+  { barWidth = 210, barHeight = 20, orientation = "VERTICAL" }, 920)
+check("a vertical bar fills along its long axis", holder.bar.orientation == "VERTICAL")
+check("...is as wide as it is thick", holder.width == 20)
+check("...and as tall as its length", holder.height == 210)
+check("the icon sits on top", holder.iconFrame.points.TOP)
+check("the fill hangs under the icon", holder.bar.points.TOPLEFT == holder.iconFrame)
+check("the name is not drawn", holder.nameText.shown == false)
+check("the timer moves to the bottom", holder.timeText.points.BOTTOM)
+
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element,
+  { barWidth = 210, barHeight = 20 }, 920)
+check("a horizontal bar keeps the name", holder.nameText.shown == true)
+check("...and fills sideways", holder.bar.orientation == "HORIZONTAL")
+
+-- The icon can sit at either end of the bar
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element,
+  { barWidth = 210, barHeight = 20, orientation = "VERTICAL", iconSide = "BOTTOM" }, 920)
+check("a column can put the icon at the bottom", holder.iconFrame.points.BOTTOM)
+check("the fill then starts at the top", holder.bar.points.TOPLEFT == "holder")
+check("...and stops above the icon", holder.bar.points.BOTTOMRIGHT == holder.iconFrame)
+check("the timer moves out of the icon's way", holder.timeText.points.TOP)
+
+holder = FakeHolder()
+ns.StatusBars._SetBarDisplay(holder, barDisplay, element,
+  { barWidth = 210, barHeight = 20, iconSide = "RIGHT" }, 920)
+check("a row can put the icon on the right", holder.iconFrame.points.RIGHT)
+check("the fill then ends at the icon",
+  holder.bar.points.BOTTOMRIGHT == holder.iconFrame)
+
+-- A Colour condition overrides the buff/debuff colour on a bar
+holder = FakeHolder()
+holder.bar.SetStatusBarColor = function(self, r, g, b) self.color = { r, g, b } end
+local tinted = { icon = "tex", name = "Corruption", duration = 18,
+  expirationTime = 930, stacks = 1, color = { 1, 0, 0 } }
+ns.StatusBars._SetBarDisplay(holder, tinted, element, { barWidth = 210 }, 920)
+check("a colour condition repaints the fill", holder.bar.color[1] == 1
+  and holder.bar.color[2] == 0)
 
 return T

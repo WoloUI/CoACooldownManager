@@ -535,7 +535,7 @@ end
 ns.BarLookKeys = {
   "iconSize", "spacing", "fontSize", "growth", "orientation", "perRow",
   "overflow", "barHeight", "showTimer", "showStacks", "showKeybind",
-  "reverseSweep", "showGCD", "showIcon",
+  "reverseSweep", "showGCD", "showIcon", "iconSide",
 }
 
 -- Pure: takes the source and the list, returns how many bars changed.

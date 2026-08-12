@@ -101,6 +101,49 @@ function Auras:GetAura(unit, spellRef, onlyMine, strict)
   return aura
 end
 
+-- Does the unit carry ANY aura of this dispel type ("Enrage", "Magic", "Curse",
+-- "Poison", "Disease")? The one people ask for is Enrage, which WeakAuras
+-- exposes as "debuff type - enrage" and which arrives as a BUFF on the enemy --
+-- hence both filters.
+--
+-- A LIVE sweep, not the cache: the cache is keyed by name and id, and this
+-- question has no name to look up. It also answers for a unit nobody watches
+-- (the target of a Soothe check), which the cache never would. 40 indices worst
+-- case, and it stops at the first empty slot.
+--
+-- The type strings come straight from UnitAura's 5th return, so the comparison
+-- is case-insensitive: this client is the authority on their spelling, not us.
+-- Memoised for the current tick: every element carrying the condition asks the
+-- same question in the same frame, and GetTime does not move inside one.
+local dispelSeen, dispelStamp = {}, -1
+
+function Auras:HasDispelType(unit, dtype)
+  if not (unit and dtype and dtype ~= "") or not UnitExists(unit) then return false end
+  local now = GetTime()
+  if dispelStamp ~= now then
+    dispelSeen, dispelStamp = {}, now
+  end
+  local key = unit .. "\0" .. dtype
+  local cached = dispelSeen[key]
+  if cached ~= nil then return cached end
+
+  local wanted = dtype:lower()
+  local found = false
+  for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
+    for index = 1, 40 do
+      local name, _, _, _, debuffType = UnitAura(unit, index, filter)
+      if not name then break end
+      if debuffType and debuffType:lower() == wanted then
+        found = true
+        break
+      end
+    end
+    if found then break end
+  end
+  dispelSeen[key] = found
+  return found
+end
+
 -- The icon of an aura found by NAME on any watched unit.
 --
 -- This exists because GetSpellInfo(name) cannot answer for an aura that is not
@@ -196,12 +239,16 @@ function Auras:Diagnose(query)
         -- typed (trailing space, punctuation, a rank suffix).
         for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
           for index = 1, 40 do
-            local name, _, icon, cnt, _, _, _, caster = UnitAura(unit, index, filter)
+            local name, _, icon, cnt, debuffType, _, _, caster = UnitAura(unit, index, filter)
             if not name then break end
             if name:lower():find(needle, 1, true) then
-              ns:Print(('    raw %s [%d]: "%s" caster=%s stacks=%s icon=%s'):format(
+              -- dispel type included: it is what an "Enrage" condition matches
+              -- on, and no other command can tell you whether this client
+              -- reports one for the aura you are looking at.
+              ns:Print(('    raw %s [%d]: "%s" caster=%s stacks=%s icon=%s dispelType=%s'):format(
                 filter, index, name, tostring(caster), tostring(cnt),
-                icon and "yes" or "|cffff5555nil|r"))
+                icon and "yes" or "|cffff5555nil|r",
+                (debuffType and debuffType ~= "") and debuffType or "none"))
             end
           end
         end

@@ -1550,6 +1550,8 @@ SlashCmdList["COACDM"] = function(input)
     ns.Auras:Diagnose(arg)
   elseif msg == "range" then
     ns.RangeAlert:Diagnose()
+  elseif msg == "masque" then
+    ns.DiagnoseMasque()
   elseif msg == "gcd" then
     ns.Cooldowns:DiagnoseGCD()
   elseif msg == "power" then

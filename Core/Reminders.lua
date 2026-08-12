@@ -23,16 +23,32 @@ local function EvalAuraReminder(reminder)
   }
 end
 
+-- Inventory slot and label per weapon slot. "ranged" is the RANGED/thrown slot
+-- (18): GetWeaponEnchantInfo reports it as its 7th return on this client, which is
+-- what a thrown-weapon imbue lands in. A bow or a gun cannot carry one, so the
+-- reminder is gated on the slot being filled like the other two are -- an empty
+-- or un-imbueable ranged slot simply never asks.
+local WEAPON_SLOTS = {
+  mainhand = { inv = 16, label = "main hand" },
+  offhand  = { inv = 17, label = "off hand" },
+  ranged   = { inv = 18, label = "ranged" },
+}
+
 local function EvalWeaponReminder(reminder)
-  local hasMH, _, _, hasOH = GetWeaponEnchantInfo()
+  local hasMH, _, _, hasOH, _, _, hasRanged = GetWeaponEnchantInfo()
   local slot = reminder.slot or "mainhand"
-  local invSlot = slot == "offhand" and 17 or 16
-  if not GetInventoryItemLink("player", invSlot) then return nil end -- empty slot
-  local enchanted = slot == "offhand" and hasOH or slot ~= "offhand" and hasMH
+  local info = WEAPON_SLOTS[slot] or WEAPON_SLOTS.mainhand
+  if not GetInventoryItemLink("player", info.inv) then return nil end -- empty slot
+  local enchanted = hasMH
+  if slot == "offhand" then
+    enchanted = hasOH
+  elseif slot == "ranged" then
+    enchanted = hasRanged
+  end
   if enchanted then return nil end
   return {
-    icon = GetInventoryItemTexture("player", invSlot) or "Interface\\Icons\\INV_Misc_QuestionMark",
-    text = reminder.text or ("No " .. (slot == "offhand" and "off hand" or "main hand") .. " enchant"),
+    icon = GetInventoryItemTexture("player", info.inv) or "Interface\\Icons\\INV_Misc_QuestionMark",
+    text = reminder.text or ("No " .. info.label .. " enchant"),
   }
 end
 

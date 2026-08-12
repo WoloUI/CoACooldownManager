@@ -66,6 +66,25 @@ __inventory = { [16] = "mainhand-item" } -- nothing in the off hand
 check("an empty slot never alerts",
   EVAL.weapon({ rtype = "weapon", slot = "offhand" }) == nil)
 
+-- Ranged/thrown slot (18), the 7th return of GetWeaponEnchantInfo
+__inventory = { [16] = "mainhand-item", [18] = "thrown-item" }
+__weaponEnchants = { mh = true, oh = true, ranged = false }
+local ranged = EVAL.weapon({ rtype = "weapon", slot = "ranged" })
+check("an unimbued ranged weapon alerts", ranged ~= nil)
+check("...and says which slot", ranged and ranged.text == "No ranged enchant")
+__weaponEnchants = { mh = true, oh = true, ranged = true }
+check("an imbued ranged weapon stays quiet",
+  EVAL.weapon({ rtype = "weapon", slot = "ranged" }) == nil)
+__inventory = { [16] = "mainhand-item" } -- no ranged weapon equipped
+__weaponEnchants = { mh = true, oh = true, ranged = false }
+check("no ranged weapon, no alert",
+  EVAL.weapon({ rtype = "weapon", slot = "ranged" }) == nil)
+-- An unknown slot value must not silently read the main hand's enchant as its own
+__inventory = { [16] = "mainhand-item" }
+__weaponEnchants = { mh = false }
+check("an unknown slot falls back to the main hand",
+  EVAL.weapon({ rtype = "weapon", slot = "tabard" }) ~= nil)
+
 --------------------------------------------------------------------------------
 -- Real Auras module: rank read from the aura sitting on the unit
 --------------------------------------------------------------------------------

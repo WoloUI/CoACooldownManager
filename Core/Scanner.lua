@@ -36,6 +36,13 @@ local UTILITY_WORDS = {
 local function TooltipLines(spellID)
   if not scanTip then
     scanTip = CreateFrame("GameTooltip", "CoACDMScanTooltip", nil, "GameTooltipTemplate")
+    -- Same trap the keybind scanner hit (Core/Keybinds.lua): the template's
+    -- OnTooltipSetSpell runs Ascension's GameTooltipMods, which errors on any
+    -- line that has no left text (GameTooltipMods.lua:109 indexes it unguarded).
+    -- A scan walks hundreds of spells, so that is hundreds of error reports for
+    -- lines we read ourselves anyway.
+    scanTip:SetScript("OnTooltipSetSpell", nil)
+    scanTip:SetScript("OnTooltipSetItem", nil)
   end
   scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
   scanTip:ClearLines()

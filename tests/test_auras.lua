@@ -159,6 +159,31 @@ check("strict does not affect name lookups",
   ns.Auras:GetAura("player", "Fragment", false, true) ~= nil)
 _G.__spells = nil
 
+-- Dispel type: the "Enrage" question, which has no name to look up. A live
+-- sweep, so no ForceScan first, and enrage arrives as a BUFF on the enemy.
+_G.__units = { player = true, target = true, focus = true }
+_G.__auras = {
+  target = { { name = "Berserker Fury", filter = "HELPFUL", debuffType = "Enrage" },
+             { name = "Rend", filter = "HARMFUL", debuffType = nil } },
+  focus  = { { name = "Frostbolt", filter = "HARMFUL", debuffType = "Magic" } },
+}
+check("an enrage buff on the target is found",
+  ns.Auras:HasDispelType("target", "Enrage") == true)
+check("the type is matched case-insensitively",
+  ns.Auras:HasDispelType("target", "enrage") == true)
+check("a type the unit does not carry is not found",
+  ns.Auras:HasDispelType("target", "Magic") == false)
+-- The tick memo is keyed per unit and type: GetTime is frozen in the stub, so a
+-- shared entry would answer for the wrong unit here
+check("a debuff type on another unit is found",
+  ns.Auras:HasDispelType("focus", "Magic") == true)
+check("...and does not leak onto the target",
+  ns.Auras:HasDispelType("target", "Magic") == false)
+check("a unit that does not exist has nothing",
+  ns.Auras:HasDispelType("raid7", "Enrage") == false)
+check("no type asked, nothing answered",
+  ns.Auras:HasDispelType("target", "") == false)
+
 ns.profile = nil
 _G.__auras = nil
 _G.__units = nil

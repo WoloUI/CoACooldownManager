@@ -78,6 +78,12 @@ local CONDITION_TYPES = {
   { text = "Other spell ready", value = "othercd" },
   { text = "Other spell usable", value = "otherusable" },
   { text = "Pet active", value = "petactive" },
+  -- THIS element's spell against a unit. Pair with the Colour action for the
+  -- red-when-out-of-range essentials bar.
+  { text = "Spell in range", value = "inrange" },
+  -- Any aura of a dispel type on a unit -- "Enrage" is the ask (WeakAuras calls
+  -- it "debuff type - enrage"); it needs no spell name, which is the point.
+  { text = "Unit has dispel type", value = "dispeltype" },
   -- "This" = THIS element's own aura, no spell box: for a DIFFERENT aura it is
   -- "Other aura active", which does take a name/ID.
   { text = "This element's aura up", value = "auraup" },
@@ -92,6 +98,7 @@ local OP_OPTIONS = {
 local ACTION_OPTIONS = {
   { text = "Glow", value = "glow" },
   { text = "Play sound", value = "sound" },
+  { text = "Colour", value = "color" },
   { text = "Desaturate", value = "desaturate" },
   { text = "Hide", value = "hide" },
   { text = "Show only if", value = "show" },
@@ -105,7 +112,7 @@ local JOIN_OPTIONS = {
 -- Group headers read "<label> when [All] of:" -- the action's name as a phrase
 local ACTION_LABEL = {
   show = "Show only if", hide = "Hide when", desaturate = "Desaturate when",
-  glow = "Glow when", sound = "Play sound when",
+  glow = "Glow when", sound = "Play sound when", color = "Colour when",
 }
 
 -- Actions that can carry an alert sound (glow = optional, sound = required)
@@ -138,11 +145,26 @@ local NUMERIC = { remaining = true, remainingpct = true, stacks = true, power = 
 local NEEDS_POWER = { power = true, powerpct = true }
 local NEEDS_SPELL = { otheraura = true, otherstacks = true, otherremaining = true, othercd = true,
   otherusable = true }
-local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true }
+local NEEDS_UNIT = { otheraura = true, otherstacks = true, otherremaining = true,
+  inrange = true, dispeltype = true }
+-- Which unit the selector starts on. An "other aura" is usually watched on
+-- yourself; a range check and an enrage check are about the thing you are hitting,
+-- and the evaluator defaults them the same way (Core/Triggers.lua).
+local DEFAULT_UNIT = { inrange = "target", dispeltype = "target" }
 -- Both share one name-filter box, re-labelled per type: a pet name/id, or which
 -- totem a totem condition applies to (a slot holds different totems over time)
 local NEEDS_PET = { petactive = true }
 local NEEDS_TOTEM_NAME = { totemname = true }
+-- Which dispel type an "Unit has dispel type" condition watches. The strings are
+-- what UnitAura returns, compared case-insensitively at runtime.
+local DISPEL_OPTIONS = {
+  { text = "Enrage", value = "Enrage" },
+  { text = "Magic", value = "Magic" },
+  { text = "Curse", value = "Curse" },
+  { text = "Poison", value = "Poison" },
+  { text = "Disease", value = "Disease" },
+}
+local NEEDS_DISPEL = { dispeltype = true }
 -- "Usable (ignore power)" counts a spell you only lack the resource for as
 -- usable: IsUsableSpell answers usable=false, noPower=true in that case, and the
 -- gate the trigger is really watching (a proc, a state) is still open.
@@ -163,6 +185,8 @@ local BOOL_OPTIONS = {
   auraup = { { text = "Active", value = true }, { text = "Missing", value = false } },
   totemup = { { text = "Standing", value = true }, { text = "Down", value = false } },
   totemname = { { text = "Standing", value = true }, { text = "Not standing", value = false } },
+  inrange = { { text = "In range", value = true }, { text = "Out of range", value = false } },
+  dispeltype = { { text = "Present", value = true }, { text = "Missing", value = false } },
 }
 
 --------------------------------------------------------------------------------
@@ -207,6 +231,18 @@ local function CreateGroupHeader(parent)
     local group = ns.Triggers.Group(builder.element, head.action)
     ns.PlayAlertSound(group and group.sound)
   end)
+  -- The Colour group's own colour. On the GROUP for the same reason the sound is:
+  -- with an AND group the whole group turning true is the event, so no single
+  -- condition owns the colour either.
+  head.colorLabel = W.CreateLabel(head, "Colour", 11, W.colors.inkDim)
+  head.color = W.CreateDropdown(head, 130, function(_, value)
+    local element = builder.element
+    element.condGroups = element.condGroups or {}
+    element.condGroups.color = element.condGroups.color or {}
+    element.condGroups.color.color = value
+  end)
+  head.color:SetOptions(ns.StackColors)
+
   head.muteCD = W.CreateCheckbox(head, "Silence on cooldown", function(_, checked)
     local element = builder.element
     element.condGroups = element.condGroups or {}
@@ -238,6 +274,13 @@ local function CreateConditionRow(parent)
     end
     if not NEEDS_TOTEM_NAME[value] then
       row.cond.totemName = nil
+    end
+    if not NEEDS_DISPEL[value] then
+      row.cond.dispel = nil
+    end
+    -- The unit a range/enrage check starts on is the target, not the player
+    if NEEDS_UNIT[value] then
+      row.cond.unit = row.cond.unit or DEFAULT_UNIT[value]
     end
     Rebuild()
   end)
@@ -289,6 +332,11 @@ local function CreateConditionRow(parent)
   end)
   row.power:SetOptions(POWER_OPTIONS)
 
+  row.dispel = W.CreateDropdown(row, 96, function(_, value)
+    row.cond.dispel = value
+  end)
+  row.dispel:SetOptions(DISPEL_OPTIONS)
+
   row.action = W.CreateDropdown(row, 92, function(_, value)
     row.cond.action = value
     Rebuild() -- the row moves to another group's header
@@ -324,10 +372,17 @@ local function LayoutConditionRow(row, cond)
   end
 
   if NEEDS_UNIT[ctype] then
-    row.unit:SetValue(cond.unit or "player")
+    row.unit:SetValue(cond.unit or DEFAULT_UNIT[ctype] or "player")
     later(row.unit, 66)
   else
     row.unit:Hide()
+  end
+
+  if NEEDS_DISPEL[ctype] then
+    row.dispel:SetValue(cond.dispel or "Enrage")
+    later(row.dispel, 96)
+  else
+    row.dispel:Hide()
   end
 
   if NEEDS_PET[ctype] then
@@ -717,6 +772,18 @@ function TriggerBuilder:Load(element, onChange)
         head.soundLabel:Hide(); head.sound:Hide(); head.soundPlay:Hide()
         head.muteCD:Hide()
         head:SetHeight(ROW_H)
+      end
+      -- The colour picker takes the right edge the sound would have, for the one
+      -- group that has a colour to pick
+      if action == "color" then
+        head.color:ClearAllPoints()
+        head.color:SetPoint("RIGHT", head, "TOPRIGHT", 0, -ROW_H / 2)
+        head.color:SetValue((group and group.color) or "red")
+        head.colorLabel:ClearAllPoints()
+        head.colorLabel:SetPoint("RIGHT", head.color, "LEFT", -6, 0)
+        head.color:Show(); head.colorLabel:Show()
+      else
+        head.color:Hide(); head.colorLabel:Hide()
       end
       head:Show()
       y = y - head:GetHeight()

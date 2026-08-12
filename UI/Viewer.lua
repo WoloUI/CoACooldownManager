@@ -248,7 +248,9 @@ function Viewer:UpdateVisibility()
   for _, cfg in ipairs(ns.profile.viewers) do
     local frame = frames[cfg.name]
     if frame then
-      if cfg.enabled and VisibilityAllows(cfg) then
+      -- A glow-only bar never shows, edit mode included: there is nothing to
+      -- drag, and the glow it drives lives on the action button instead.
+      if cfg.enabled and not cfg.glowOnly and VisibilityAllows(cfg) then
         frame:Show()
       else
         frame:Hide()
@@ -292,7 +294,9 @@ function Viewer:BuildAll()
     end
     frame.builtStyle = cfg.style
     local style = Styles()[cfg.style]
-    if style then
+    if cfg.glowOnly then
+      HideStyleWidgets(frame) -- draws nothing; only the action-bar glow matters
+    elseif style then
       style:Build(frame, cfg)
     end
   end
@@ -309,10 +313,29 @@ function Viewer:BuildAll()
   self:UpdateAll()
 end
 
+-- "Action glow only": a bar that draws NOTHING and exists purely to drive the
+-- glow on the real action buttons. It replaces the 1px-bar trick people were
+-- using for that (asked for 2026-08-12): the elements are still evaluated every
+-- tick, so every condition behaves exactly as it does on a visible bar, but no
+-- widget is shown and the frame itself stays hidden -- which is also why this
+-- cannot go through the style modules, whose whole job is to draw.
+local function GlowOnlyPass(cfg)
+  for _, element in ipairs(cfg.elements or {}) do
+    ns.ActionGlow(element, ns.Triggers:Evaluate(element))
+  end
+end
+Viewer._GlowOnlyPass = GlowOnlyPass -- test seam
+
 function Viewer:UpdateAll()
   for _, cfg in ipairs(ns.profile.viewers) do
     local frame = frames[cfg.name]
-    if frame and frame:IsShown() then
+    if cfg.glowOnly then
+      -- No IsShown gate: the frame is deliberately hidden. Visibility still
+      -- applies, so "only in combat" silences the glow out of combat too.
+      if cfg.enabled and VisibilityAllows(cfg) and ns.ActionGlow then
+        GlowOnlyPass(cfg)
+      end
+    elseif frame and frame:IsShown() then
       local style = Styles()[cfg.style]
       if style then
         style:Update(frame, cfg)

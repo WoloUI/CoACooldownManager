@@ -64,32 +64,72 @@ function StatusBars:Build(frame, cfg)
 end
 
 local function SetBarDisplay(holder, display, element, cfg, now)
-  local w = ns.ResolveWidth(cfg, cfg.barWidth or 250)
-  local h = cfg.barHeight or 20
-  holder:SetSize(w, h)
+  -- The two size knobs keep their meaning along the BAR's own axis: barWidth is
+  -- the length it drains over, barHeight its thickness. A vertical bar is
+  -- therefore barHeight wide and barWidth tall -- the same two numbers with the
+  -- axes swapped, rather than a second pair of settings to keep in sync.
+  local vertical = cfg.orientation == "VERTICAL"
+  local along = ns.ResolveWidth(cfg, cfg.barWidth or 250)
+  local across = cfg.barHeight or 20
+  holder:SetSize(vertical and across or along, vertical and along or across)
 
-  -- The bar is normally anchored to the right edge of the square icon. With the
-  -- icon hidden it is re-anchored to the holder instead, so it spans the whole
-  -- row rather than leaving a gap where the icon used to be. Re-anchoring
-  -- rather than sizing the icon frame to zero keeps the intent readable.
+  -- The bar is normally anchored to the far edge of the square icon (its right
+  -- edge on a row, its bottom edge on a column). With the icon hidden it is
+  -- re-anchored to the holder instead, so it spans the whole row rather than
+  -- leaving a gap where the icon used to be. Re-anchoring rather than sizing the
+  -- icon frame to zero keeps the intent readable.
   --
   -- Only on a CHANGE: this runs for every row on every tick, and re-anchoring a
   -- frame that is already where it belongs is wasted work. `nil` on a fresh
-  -- holder never equals either boolean, so the first pass always anchors.
+  -- holder never equals any layout key, so the first pass always anchors.
   local showIcon = cfg.showIcon ~= false
-  if holder._iconShown ~= showIcon then
-    holder._iconShown = showIcon
+  -- Which end of the bar the icon sits on. Stored per axis, like growth is:
+  -- TOP/BOTTOM on a column, LEFT/RIGHT on a row, first end by default.
+  local iconEnd = cfg.iconSide == (vertical and "BOTTOM" or "RIGHT")
+  local layout = (vertical and "V" or "H") .. (showIcon and "I" or "-")
+    .. (iconEnd and "2" or "1")
+  if holder._layout ~= layout then
+    holder._layout = layout
     holder.bar:ClearAllPoints()
-    holder.bar:SetPoint("BOTTOMRIGHT")
-    if showIcon then
-      holder.iconFrame:Show()
-      holder.bar:SetPoint("TOPLEFT", holder.iconFrame, "TOPRIGHT", 1, 0)
+    holder.iconFrame:ClearAllPoints()
+    -- SetOrientation is what makes the fill follow the long axis of a column:
+    -- it grows from the bottom up, so a draining aura empties from the top down.
+    holder.bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
+    if showIcon then holder.iconFrame:Show() else holder.iconFrame:Hide() end
+    if vertical then
+      holder.iconFrame:SetPoint(iconEnd and "BOTTOM" or "TOP")
+      if not showIcon then
+        holder.bar:SetPoint("TOPLEFT")
+        holder.bar:SetPoint("BOTTOMRIGHT")
+      elseif iconEnd then
+        holder.bar:SetPoint("TOPLEFT")
+        holder.bar:SetPoint("BOTTOMRIGHT", holder.iconFrame, "TOPRIGHT", 0, 1)
+      else
+        holder.bar:SetPoint("TOPLEFT", holder.iconFrame, "BOTTOMLEFT", 0, -1)
+        holder.bar:SetPoint("BOTTOMRIGHT")
+      end
+      -- A 20px-wide column has no room for the aura's name, so the column shows
+      -- the icon and the timer only. The timer goes to the END the icon is NOT
+      -- on: stacked under the icon it would sit on the fill's full half.
+      holder.timeText:ClearAllPoints()
+      holder.timeText:SetPoint(iconEnd and "TOP" or "BOTTOM", 0, iconEnd and -2 or 2)
     else
-      holder.iconFrame:Hide()
-      holder.bar:SetPoint("TOPLEFT")
+      holder.iconFrame:SetPoint(iconEnd and "RIGHT" or "LEFT")
+      if not showIcon then
+        holder.bar:SetPoint("TOPLEFT")
+        holder.bar:SetPoint("BOTTOMRIGHT")
+      elseif iconEnd then
+        holder.bar:SetPoint("TOPLEFT")
+        holder.bar:SetPoint("BOTTOMRIGHT", holder.iconFrame, "BOTTOMLEFT", -1, 0)
+      else
+        holder.bar:SetPoint("TOPLEFT", holder.iconFrame, "TOPRIGHT", 1, 0)
+        holder.bar:SetPoint("BOTTOMRIGHT")
+      end
+      holder.timeText:ClearAllPoints()
+      holder.timeText:SetPoint("RIGHT", -5, 0)
     end
   end
-  if showIcon then holder.iconFrame:SetSize(h, h) end
+  if showIcon then holder.iconFrame:SetSize(across, across) end
   local font = ns.GetFont()
   local fontSize = ns.FontSize(cfg.fontSize or 11)
   holder.nameText:SetFont(font, fontSize, "OUTLINE")
@@ -101,7 +141,9 @@ local function SetBarDisplay(holder, display, element, cfg, now)
   holder.icon:SetDesaturated(display.missing or display.desaturate)
   holder.nameText:SetText(display.name or "")
 
-  local color = element.kind == "debuff" and COLOR_DEBUFF or COLOR_BUFF
+  -- A "Colour when" condition overrides the buff/debuff default
+  local color = display.color
+    or (element.kind == "debuff" and COLOR_DEBUFF or COLOR_BUFF)
   if display.missing then
     holder.bar:SetStatusBarColor(COLOR_MISSING[1], COLOR_MISSING[2], COLOR_MISSING[3])
     holder.bar:SetMinMaxValues(0, 1)
@@ -126,25 +168,52 @@ local function SetBarDisplay(holder, display, element, cfg, now)
   if cfg.showStacks ~= false and display.stacks and display.stacks > 1 then
     holder.nameText:SetText((display.name or "") .. " (" .. display.stacks .. ")")
   end
+  -- One line rather than a guard on each of the three SetText calls above: the
+  -- text stays written, it is simply not drawn on a column.
+  if vertical then holder.nameText:Hide() else holder.nameText:Show() end
+end
+
+-- Where `count` duration bars sit, as offsets from the frame's TOPLEFT, plus the
+-- size the frame needs. Pure geometry, same deal as ns.IconGrid: the direction
+-- flips are testable offline.
+--
+-- A row of bars stacks vertically (growth UP, the default, or DOWN); a COLUMN of
+-- bars stacks sideways (growth RIGHT, the default, or LEFT). Sizes swap axes with
+-- the orientation, as in SetBarDisplay.
+function ns.BarGrid(count, cfg)
+  cfg = cfg or {}
+  local vertical = cfg.orientation == "VERTICAL"
+  local along = ns.ResolveWidth(cfg, cfg.barWidth or 250)
+  local across = cfg.barHeight or 20
+  local spacing = cfg.spacing or 3
+  local n = math.max(count, 1)
+  local stack = n * across + (n - 1) * spacing
+
+  -- Reversed directions measure from the far edge so bar 1 stays flush with the
+  -- edge the bar grows from
+  local back = vertical and (cfg.growth == "LEFT") or (not vertical and (cfg.growth or "UP") == "UP")
+
+  local offsets = {}
+  for i = 1, count do
+    local step = (i - 1) * (across + spacing)
+    local pos = back and (stack - across - step) or step
+    if vertical then
+      offsets[i] = { x = pos, y = 0 }
+    else
+      -- y grows DOWNWARD as a negative offset from TOPLEFT (never -0)
+      offsets[i] = { x = 0, y = pos ~= 0 and -pos or 0 }
+    end
+  end
+  return offsets, vertical and stack or along, vertical and along or stack
 end
 
 local function LayoutBars(frame, cfg, count)
-  local w = ns.ResolveWidth(cfg, cfg.barWidth or 250)
-  local h = cfg.barHeight or 20
-  local spacing = cfg.spacing or 3
-  local total = count > 0 and (count * h + (count - 1) * spacing) or h
-  frame:SetSize(w, total)
-
-  local growUp = (cfg.growth or "UP") == "UP"
+  local offsets, w, h = ns.BarGrid(count, cfg)
+  frame:SetSize(w, h)
   for i = 1, count do
     local bar = frame.bars[i]
     bar:ClearAllPoints()
-    local offset = (i - 1) * (h + spacing)
-    if growUp then
-      bar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, offset)
-    else
-      bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -offset)
-    end
+    bar:SetPoint("TOPLEFT", frame, "TOPLEFT", offsets[i].x, offsets[i].y)
   end
 end
 
