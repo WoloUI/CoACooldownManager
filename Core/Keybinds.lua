@@ -71,6 +71,11 @@ local Abbrev = ns.AbbrevKey
 local function ActionName(slot)
   if not scanTip then
     scanTip = CreateFrame("GameTooltip", "CoACDMKeyTip", nil, "GameTooltipTemplate")
+    -- The template's OnTooltipSetSpell runs Ascension's GameTooltipMods, which
+    -- errors on any tooltip line that has no left text (GameTooltipMods.lua:109
+    -- indexes it unguarded). We only read TextLeft1, so drop the script.
+    scanTip:SetScript("OnTooltipSetSpell", nil)
+    scanTip:SetScript("OnTooltipSetItem", nil)
   end
   scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
   scanTip:ClearLines()
