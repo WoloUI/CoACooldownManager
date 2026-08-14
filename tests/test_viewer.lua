@@ -604,7 +604,7 @@ check("no keybind map is a no-op", ns.ActionGlow(glowEl, { glow = true }) == fal
 -- Masque: one group per bar, our border yields to the skin, and no Masque at all
 -- is a silent no-op (it is an optional dependency).
 local realLibStub = _G.LibStub
-local added = {}
+local added, reskins = {}, 0
 _G.LibStub = function(name)
   if name ~= "Masque" then return nil end
   return { Group = function(_, addon, groupName)
@@ -613,7 +613,7 @@ _G.LibStub = function(name)
         added[#added + 1] = { addon = addon, group = groupName,
           regions = regions, btype = btype, button = button }
       end,
-      ReSkin = function() end,
+      ReSkin = function() reskins = reskins + 1 end,
     }
   end }
 end
@@ -635,6 +635,30 @@ borderShown = true
 local keepBtn = { border = { Hide = function() borderShown = false end } }
 ns.MasqueSkin({ cfg = { name = "MasqueBar" } }, keepBtn, {}, true)
 check("keepBorder leaves an informative border alone", borderShown == true)
+
+-- A button is created before the pass that sizes it, and Masque scales the skin
+-- off the size it sees: a 0x0 button gave textures at the texture file's own
+-- size (the giant icon when a spell was added to a live bar). It must reach
+-- Masque with a size, and the group must be re-skinned once the bar has set the
+-- real one -- once per frame, not once per button.
+ns.MasqueFlushReSkins() -- drain what the checks above queued
+reskins = 0
+-- A sizeable button, but NOT stub.MakeFrame(): its catch-all __index answers
+-- `_masque` with a function, which reads as "already skinned".
+local function SizeableButton()
+  return { _w = 0,
+    GetWidth = function(self) return self._w end,
+    SetSize = function(self, w) self._w = w end }
+end
+local fresh = SizeableButton()
+local sizedFrame = { cfg = { name = "SizedBar" } }
+ns.MasqueSkin(sizedFrame, fresh, {}, true)
+check("a button never reaches Masque at zero size", fresh:GetWidth() > 0)
+check("skinning alone does not re-skin", reskins == 0)
+ns.MasqueSkin(sizedFrame, SizeableButton(), {}, true)
+check("a re-skin is queued once per frame, not per button",
+  ns.MasqueFlushReSkins() == 1 and reskins == 1)
+check("a flush with nothing queued is free", ns.MasqueFlushReSkins() == 0)
 
 _G.LibStub = nil
 check("no Masque installed is a no-op",

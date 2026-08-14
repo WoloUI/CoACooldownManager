@@ -60,6 +60,8 @@ end
 -- creates its own Normal/backdrop textures, which is what draws the skin.
 local MASQUE_TITLE = "CoA Cooldown Manager"
 local masqueGroups = {}
+-- Frames whose group gained a button this tick (see ns.MasqueSkin)
+local reskinQueue = {}
 
 local function MasqueGroup(barName)
   if not (barName and _G.LibStub) then return nil end
@@ -84,9 +86,31 @@ function ns.MasqueSkin(frame, btn, regions, keepBorder)
   if not group or btn._masque then return false end
   btn._masque = true
   if btn.border and not keepBorder then btn.border:Hide() end
+  -- A skin sizes its textures from the button's size AT SKIN TIME, and a button
+  -- is created before the pass that sizes it from the config. A 0x0 button gets
+  -- textures sized 0, which the client then draws at the texture FILE's own
+  -- size -- the giant button reported when a spell is added to a live bar
+  -- (2026-08-14). The placeholder keeps that pass from being absurd, and the
+  -- queued re-skin below applies the real size once the bar has set it.
+  if btn.GetWidth and (btn:GetWidth() or 0) == 0 then btn:SetSize(32, 32) end
   pcall(group.AddButton, group, btn, regions, "Action")
+  reskinQueue[frame] = true
   return true
 end
+
+-- One re-skin per frame per tick, never one per button: a bar that just gained
+-- ten icons re-skins its group once.
+function ns.MasqueFlushReSkins()
+  if not next(reskinQueue) then return 0 end
+  local count = 0
+  for frame in pairs(reskinQueue) do
+    reskinQueue[frame] = nil
+    ns.MasqueReSkin(frame)
+    count = count + 1
+  end
+  return count
+end
+ns:OnTick(ns.MasqueFlushReSkins)
 
 -- A skin sizes its textures when it is applied, so a changed icon size needs a
 -- re-skin. Icon size only changes through the config, which rebuilds.
