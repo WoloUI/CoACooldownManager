@@ -378,6 +378,21 @@ check("summon hidden after expiry", not ns.Triggers:Evaluate(sEl, late).shown)
 sEl.showWhen = "always"
 d = ns.Triggers:Evaluate(sEl, late)
 check("showWhen=always grays an expired summon", d.shown and d.missing and d.desaturate)
+sEl.showWhen = "missing"
+check("showWhen=missing shows an expired summon", ns.Triggers:Evaluate(sEl, late).shown)
+check("showWhen=missing hides a running summon", not ns.Triggers:Evaluate(sEl, Ctx()).shown)
+sEl.showWhen = "present"
+
+-- A summon is present/absent like an aura, so it takes the aura show modes and
+-- defaults to "present" -- the config dropdown offered it the COOLDOWN modes and
+-- displayed "always" over an element the engine was running as "present".
+check("summon defaults to present", ns.Triggers.DefaultShowWhen("summon") == "present")
+check("aura kinds default to always", ns.Triggers.DefaultShowWhen("buff") == "always")
+check("cooldown defaults to always", ns.Triggers.DefaultShowWhen("cooldown") == "always")
+check("presence kinds are the aura ones plus summon and totem",
+  ns.Triggers.PresenceKind("summon") and ns.Triggers.PresenceKind("buff")
+    and ns.Triggers.PresenceKind("debuff") and ns.Triggers.PresenceKind("totem")
+    and not ns.Triggers.PresenceKind("cooldown") and not ns.Triggers.PresenceKind("item"))
 
 -- Numeric spell IDs resolve to the cast name
 __spells[555] = { name = "Raise Dead", rank = "", icon = "i" }

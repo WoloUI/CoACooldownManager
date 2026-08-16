@@ -607,9 +607,12 @@ function TriggerBuilder:Load(element, onChange)
   local kind = element.kind or "cooldown"
   local isAura = kind == "buff" or kind == "debuff"
   local isTrinket = kind == "trinket"
-  -- A totem is present/absent like an aura, so it takes the aura show modes
-  -- ("Always (gray when missing)"), not the cooldown ones
-  local presenceShow = isAura or kind == "totem"
+  -- A totem or a summon is present/absent like an aura, so it takes the aura
+  -- show modes ("Always (gray when missing)"), not the cooldown ones. The engine
+  -- owns that list (Triggers.PresenceKind): summon used to be handed the cooldown
+  -- modes, whose "ready"/"cooldown" values its branch never reads -- picking one
+  -- left the element permanently invisible with nothing on screen to say why.
+  local presenceShow = ns.Triggers.PresenceKind(kind)
   local y = -PAD
 
   -- The builder packs against its own width, inside its own padding. Before the
@@ -636,7 +639,7 @@ function TriggerBuilder:Load(element, onChange)
     showOptions = SHOW_ITEM
   end
   builder.show:SetOptions(showOptions)
-  builder.show:SetValue(element.showWhen or "always")
+  builder.show:SetValue(element.showWhen or ns.Triggers.DefaultShowWhen(kind))
 
   local cells = { { label = builder.kindLabel, control = builder.kind, width = 128 } }
   if isAura then

@@ -416,6 +416,28 @@ ns:On("READY", function()
 end)
 
 --------------------------------------------------------------------------------
+-- Show modes (pure, shared with the config dropdown)
+--------------------------------------------------------------------------------
+-- Kinds that are PRESENT or ABSENT rather than ready or on cooldown. They take
+-- the aura show modes (present / always-gray / missing); everything else takes
+-- the cooldown ones. A summon belongs here -- it is a planted banner or a
+-- summoned pet, which is up or it is not -- but the builder had it on the
+-- cooldown list, offering "Only when ready" for a state this branch never reads.
+local PRESENCE_KINDS = { buff = true, debuff = true, totem = true, summon = true }
+function Triggers.PresenceKind(kind)
+  return PRESENCE_KINDS[kind or "cooldown"] == true
+end
+
+-- A summon starts life as "only while active": nothing has been cast yet, and an
+-- always-visible gray icon for every pet and banner would be noise. Every other
+-- kind defaults to "always". This is the single source of that default -- the
+-- config dropdown used to hardcode "always" and display it over summon elements
+-- the engine was running as "present".
+function Triggers.DefaultShowWhen(kind)
+  return kind == "summon" and "present" or "always"
+end
+
+--------------------------------------------------------------------------------
 -- Element evaluation
 --------------------------------------------------------------------------------
 -- Returns a display table:
@@ -539,16 +561,19 @@ function Triggers:Evaluate(element, ctx)
     -- casting the spell starts a countdown of element.duration seconds
     local timer = Triggers.GetSummonTimer(ElementSpellRef(element))
     local now = ctx.now()
+    local showWhen = element.showWhen or Triggers.DefaultShowWhen("summon")
     if timer and now < timer.expirationTime then
-      display.shown = true
+      display.shown = showWhen == "always" or showWhen == "present"
       display.duration = timer.duration
       display.expirationTime = timer.expirationTime
       display.start = timer.expirationTime - timer.duration
     else
       display.missing = true
-      if (element.showWhen or "present") == "always" then
+      if showWhen == "always" then
         display.shown = true -- gray: prompts a re-summon
         display.desaturate = true
+      elseif showWhen == "missing" then
+        display.shown = true
       end
     end
   elseif element.kind == "trinket" then
