@@ -137,8 +137,8 @@ local REMINDER_TYPE_OPTIONS = {
 local SLOT_OPTIONS = {
   { text = "Main hand", value = "mainhand" },
   { text = "Off hand", value = "offhand" },
-  -- The RANGED/thrown slot: only a thrown weapon can carry an imbue, so on a bow
-  -- or a gun the reminder stays quiet (Core/Reminders.lua)
+  -- The RANGED slot: its imbue is read from the item tooltip, since this
+  -- client's GetWeaponEnchantInfo never reports it (Core/Reminders.lua)
   { text = "Ranged", value = "ranged" },
 }
 -- Where the MISSING BUFFS overlay may appear (ns.MissingBuffs.Context)

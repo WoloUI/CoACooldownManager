@@ -1610,6 +1610,29 @@ SlashCmdList["COACDM"] = function(input)
       buffs[#buffs + 1] = name
     end
     ns:Print("Your current buffs: " .. (#buffs > 0 and table.concat(buffs, ", ") or "(none)"))
+  elseif msg == "enchant" then
+    -- Weapon-imbue reminders read GetWeaponEnchantInfo(); this shows what the
+    -- client actually returns, so a missing ranged/thrown imbue can be told
+    -- apart from a client that never reports one.
+    local values = { GetWeaponEnchantInfo() }
+    local count = select("#", GetWeaponEnchantInfo())
+    local parts = {}
+    for i = 1, count do parts[i] = i .. "=" .. tostring(values[i]) end
+    ns:Print(("GetWeaponEnchantInfo returns %d values: %s"):format(
+      count, count > 0 and table.concat(parts, "  ") or "(none)"))
+    for _, s in ipairs({ { 16, "main hand" }, { 17, "off hand" }, { 18, "ranged" } }) do
+      local link = GetInventoryItemLink("player", s[1])
+      ns:Print(("slot %d (%s): %s"):format(s[1], s[2], link or "|cffff5555empty|r"))
+    end
+    for _, slot in ipairs({ "mainhand", "offhand", "ranged" }) do
+      local alert = ns.Reminders._EVALUATORS.weapon({ rtype = "weapon", slot = slot })
+      ns:Print(("  eval %s = %s"):format(slot, alert and ("ALERT: " .. alert.text) or "quiet"))
+    end
+    -- The ranged imbue is read off this tooltip, so show exactly what it says:
+    -- the wording of the timed line is what the match depends on.
+    local lines = ns.Reminders._SlotTooltipLines(18)
+    ns:Print(("slot 18 tooltip: %d line(s)"):format(#lines))
+    for i, text in ipairs(lines) do ns:Print(("  [%d] %s"):format(i, text)) end
   elseif msg == "minimap" then
     local db = ns.DB.db.global.minimap or {}
     ns.DB.db.global.minimap = db

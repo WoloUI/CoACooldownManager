@@ -66,17 +66,39 @@ __inventory = { [16] = "mainhand-item" } -- nothing in the off hand
 check("an empty slot never alerts",
   EVAL.weapon({ rtype = "weapon", slot = "offhand" }) == nil)
 
--- Ranged/thrown slot (18), the 7th return of GetWeaponEnchantInfo
-__inventory = { [16] = "mainhand-item", [18] = "thrown-item" }
-__weaponEnchants = { mh = true, oh = true, ranged = false }
+-- Ranged slot (18). GetWeaponEnchantInfo never reports it on this client, so
+-- the imbue is read off the item tooltip: the bug was an imbued bow alerting
+-- forever. Lines below are copied from the live tooltip.
+local UNIMBUED_BOW = {
+  "Charmed Ancient Bone Bow", "Heroic", "Realm Bound", "Unique-Equipped",
+  "Ranged", "52 - 98 Damage", "(27.0 damage per second)",
+  "Requires level 1 to 80 (53)", "Item Level 1",
+  "Equip: Increases attack power by 8.",
+}
+-- Same tooltip with the imbue line inserted. The unit follows the time left, so
+-- every wording the client uses has to read as imbued - a fresh 60 min one says
+-- "(1 hour)", which is exactly what slipped through.
+local function ImbuedBow(timeLeft)
+  local lines = {}
+  for i, text in ipairs(UNIMBUED_BOW) do
+    lines[#lines + 1] = text
+    if i == 7 then lines[#lines + 1] = "Weapon Craft: Burning Toxin (" .. timeLeft .. ")" end
+  end
+  return lines
+end
+__inventory = { [16] = "mainhand-item", [18] = "bow" }
+__weaponEnchants = { mh = true, oh = true }
+for _, timeLeft in ipairs({ "1 hour", "2 hours", "1 hour 30 min", "59 min", "45 sec" }) do
+  __slotTooltips = { [18] = ImbuedBow(timeLeft) }
+  check("an imbued ranged weapon stays quiet at " .. timeLeft,
+    EVAL.weapon({ rtype = "weapon", slot = "ranged" }) == nil)
+end
+-- "(27.0 damage per second)" and "(53)" are not timers
+__slotTooltips = { [18] = UNIMBUED_BOW }
 local ranged = EVAL.weapon({ rtype = "weapon", slot = "ranged" })
 check("an unimbued ranged weapon alerts", ranged ~= nil)
 check("...and says which slot", ranged and ranged.text == "No ranged enchant")
-__weaponEnchants = { mh = true, oh = true, ranged = true }
-check("an imbued ranged weapon stays quiet",
-  EVAL.weapon({ rtype = "weapon", slot = "ranged" }) == nil)
 __inventory = { [16] = "mainhand-item" } -- no ranged weapon equipped
-__weaponEnchants = { mh = true, oh = true, ranged = false }
 check("no ranged weapon, no alert",
   EVAL.weapon({ rtype = "weapon", slot = "ranged" }) == nil)
 -- An unknown slot value must not silently read the main hand's enchant as its own

@@ -99,6 +99,20 @@ function M.install(env)
 
   env.CreateFrame = function(frameType, name)
     local frame = frameType == "EditBox" and MakeEditBox() or MakeFrame()
+    -- Scanning tooltips: SetInventoryItem publishes the lines from
+    -- env.__slotTooltips[slot] as <name>TextLeft<i> globals, the way the client
+    -- does, so tooltip-reading code can be tested at all.
+    if frameType == "GameTooltip" and name then
+      local lines = {}
+      frame.NumLines = function() return #lines end
+      frame.ClearLines = function() lines = {} end
+      frame.SetInventoryItem = function(_, _, slot)
+        lines = (env.__slotTooltips or {})[slot] or {}
+        for i, text in ipairs(lines) do
+          env[name .. "TextLeft" .. i] = { GetText = function() return text end }
+        end
+      end
+    end
     -- A named frame becomes a global, as it does on the client. Tests reach the
     -- config window that way rather than through a Panel.lua local.
     if name then env[name] = frame end
@@ -224,10 +238,11 @@ function M.install(env)
   env.GetSpellCooldown = function() return 0, 0, 1 end
   env.IsUsableSpell = function() return true, false end
   env.IsSpellKnown = function(id) return env.__known and env.__known[id] and true or false end
-  -- 3.3.5 returns the thrown/ranged imbue as the 7th-9th values
+  -- The live client stops at the off hand: 6 returns, never a ranged imbue.
+  -- Reminders reads slot 18 off the tooltip instead (env.__slotTooltips).
   env.GetWeaponEnchantInfo = function()
     local we = env.__weaponEnchants or {}
-    return we.mh, 0, 0, we.oh, 0, 0, we.ranged, 0, 0
+    return we.mh, 0, 0, we.oh, 0, 0
   end
   env.GetInventoryItemLink = function(_, slot)
     local inv = env.__inventory or { [16] = "item" }

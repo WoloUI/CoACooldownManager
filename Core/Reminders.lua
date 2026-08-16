@@ -23,19 +23,58 @@ local function EvalAuraReminder(reminder)
   }
 end
 
--- Inventory slot and label per weapon slot. "ranged" is the RANGED/thrown slot
--- (18): GetWeaponEnchantInfo reports it as its 7th return on this client, which is
--- what a thrown-weapon imbue lands in. A bow or a gun cannot carry one, so the
--- reminder is gated on the slot being filled like the other two are -- an empty
--- or un-imbueable ranged slot simply never asks.
+-- Inventory slot and label per weapon slot. "ranged" is the RANGED slot (18):
+-- it carries temporary imbues on this server, but GetWeaponEnchantInfo stops at
+-- the off hand here (6 returns, no 7th), so slot 18 is read from the tooltip -
+-- see RangedIsImbued below.
 local WEAPON_SLOTS = {
   mainhand = { inv = 16, label = "main hand" },
   offhand  = { inv = 17, label = "off hand" },
   ranged   = { inv = 18, label = "ranged" },
 }
 
+-- A temporary imbue is the one tooltip line carrying a countdown:
+--   "Weapon Craft: Burning Toxin (1 hour)"   -- and "(59 min)" once it ticks down
+-- Permanent enchants and stat lines have no timer, so the countdown is what
+-- tells them apart without depending on the imbue's name or prefix. The unit
+-- changes with the time left, hence all three -- and each is matched without its
+-- closing paren so "(2 hours)" and "(1 hour 30 min)" count too.
+-- The digits must touch the unit: "(27.0 damage per second)" is not a timer.
+-- ponytail: tooltip scan on the 0.3 s reminder tick; drop it for the API return
+-- if the client ever reports the ranged slot.
+local scanTip
+local function SlotTooltipLines(inv)
+  if not scanTip then
+    scanTip = CreateFrame("GameTooltip", "CoACDMEnchantTip", nil, "GameTooltipTemplate")
+    -- Ascension's GameTooltipMods errors on lines with no left text; the lines
+    -- are read here directly, so drop its hook (same trap as Core/Scanner.lua).
+    scanTip:SetScript("OnTooltipSetItem", nil)
+  end
+  scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+  scanTip:ClearLines()
+  if not pcall(scanTip.SetInventoryItem, scanTip, "player", inv) then return {} end
+  local lines = {}
+  for i = 1, scanTip:NumLines() do
+    local fs = _G["CoACDMEnchantTipTextLeft" .. i]
+    local text = fs and fs:GetText()
+    if text then lines[#lines + 1] = text end
+  end
+  return lines
+end
+
+local TIMER_PATTERNS = { "%(%d+ sec", "%(%d+ min", "%(%d+ hour" }
+
+local function RangedIsImbued(inv)
+  for _, text in ipairs(SlotTooltipLines(inv)) do
+    for _, pattern in ipairs(TIMER_PATTERNS) do
+      if text:match(pattern) then return true end
+    end
+  end
+  return false
+end
+
 local function EvalWeaponReminder(reminder)
-  local hasMH, _, _, hasOH, _, _, hasRanged = GetWeaponEnchantInfo()
+  local hasMH, _, _, hasOH = GetWeaponEnchantInfo()
   local slot = reminder.slot or "mainhand"
   local info = WEAPON_SLOTS[slot] or WEAPON_SLOTS.mainhand
   if not GetInventoryItemLink("player", info.inv) then return nil end -- empty slot
@@ -43,7 +82,7 @@ local function EvalWeaponReminder(reminder)
   if slot == "offhand" then
     enchanted = hasOH
   elseif slot == "ranged" then
-    enchanted = hasRanged
+    enchanted = RangedIsImbued(info.inv)
   end
   if enchanted then return nil end
   return {
@@ -114,5 +153,6 @@ ns:On("READY", function()
   end)
 end)
 
--- Test seams
+-- Test seams (SlotTooltipLines is also what /cdm enchant dumps)
 Reminders._EVALUATORS = EVALUATORS
+Reminders._SlotTooltipLines = SlotTooltipLines
