@@ -342,6 +342,37 @@ local function UpdateLedger(unit, entries, total, now)
 end
 ShieldBar._UpdateLedger = UpdateLedger -- test seam
 
+-- Total mode: ONE column for every shield at once. A combined total has no
+-- "initial" to drain from -- several shields feed it and each lands at its own
+-- time -- so the reference is the PEAK the total reached, forgotten as soon as
+-- the absorb is gone so the next set of shields starts from full.
+local peaks = {}
+function ns.ShieldTotalFraction(key, amount, store)
+  store = store or peaks
+  if not amount or amount <= 0 then
+    store[key] = nil
+    return 0
+  end
+  local peak = math.max(store[key] or 0, amount)
+  store[key] = peak
+  return math.min(amount / peak, 1)
+end
+
+-- What the total column shows. With shield elements configured it is the sum of
+-- THOSE shields (the ledger already split the unit total across them); with an
+-- empty element list it is the unit's whole absorb, which is the answer to
+-- "do I have to add every spellID" -- no, leave the list empty.
+function ns.ShieldTotal(instsByUnit, unit, elements, unitTotal)
+  local insts = instsByUnit and instsByUnit[unit]
+  if not insts or not elements or #elements == 0 then return unitTotal or 0 end
+  local sum = 0
+  for _, element in ipairs(elements) do
+    local inst = insts[element]
+    if inst then sum = sum + math.max(inst.remaining, 0) end
+  end
+  return sum
+end
+
 -- No absorb API: fall back to draining with the buff's remaining time
 local function TimeFraction(display)
   if display.duration and display.duration > 0 then
@@ -441,6 +472,18 @@ function ShieldBar:Update(frame, cfg)
     local instsByUnit = {}
     for unit, entries in pairs(byUnit) do
       instsByUnit[unit] = UpdateLedger(unit, entries, UnitGetTotalAbsorbs(unit) or 0, now)
+    end
+    if (cfg.shield or {}).mode == "total" then
+      local first = (cfg.elements or {})[1]
+      local unit = (cfg.shield or {}).unit or (first and first.unit) or "player"
+      local unitTotal = UnitGetTotalAbsorbs and (UnitGetTotalAbsorbs(unit) or 0) or 0
+      local amount = ns.ShieldTotal(instsByUnit, unit, cfg.elements, unitTotal)
+      local fraction = ns.ShieldTotalFraction(cfg.name .. unit, amount)
+      local col = AcquireColumn(frame, 1)
+      SetColumnDisplay(col, fraction, math.floor(amount + 0.5), amount <= 0, cfg)
+      col:Show()
+      shown = 1
+      toShow = {}
     end
     for _, entry in ipairs(toShow) do
       shown = shown + 1

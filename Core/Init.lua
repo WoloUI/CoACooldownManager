@@ -346,6 +346,34 @@ function ns.GetGlowThickness()
   return Appearance().glowThickness or 2
 end
 
+-- Icon border: width in pixels and colour, account-wide, overridable per element
+-- (asked for 2026-08-20: "width and colors, and a border colour for specific
+-- icons"). 0 = no border at all. Masque owns the border when a skin is applied,
+-- so these do nothing on a skinned bar.
+ns.BorderSizeOptions = {
+  { text = "None", value = 0 }, { text = "1 px", value = 1 },
+  { text = "2 px", value = 2 }, { text = "3 px", value = 3 },
+  { text = "4 px", value = 4 },
+}
+
+-- Per-element width: the same list plus an entry for "whatever General says".
+-- -1 is the sentinel for that; the element stores nil.
+ns.ElementBorderSizeOptions = {
+  { text = "Global", value = -1 }, { text = "None", value = 0 },
+  { text = "1 px", value = 1 }, { text = "2 px", value = 2 },
+  { text = "3 px", value = 3 }, { text = "4 px", value = 4 },
+}
+
+function ns.GetBorderSize()
+  local size = tonumber(Appearance().borderSize)
+  if not size then return 1 end
+  return math.min(math.max(size, 0), 4)
+end
+
+function ns.GetBorderColor()
+  return Appearance().borderColor or { 0, 0, 0, 0.9 }
+end
+
 function ns.GetFrameStrata()
   local strata = Appearance().frameStrata
   return VALID_STRATA[strata] and strata or "MEDIUM"

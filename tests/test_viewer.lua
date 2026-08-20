@@ -93,6 +93,29 @@ check("refresh keeps the running value, not 1", insts[e4].remaining == 1500)
 insts = UL("player", { { element = e4, exp = 650 } }, 4000, 30.3)   -- total catches up
 check("refresh grows to the new amount", insts[e4].remaining == 4000)
 
+-- Total column: the sum of the tracked shields, or the whole unit total when no
+-- shields are listed. The fraction is measured against the peak, forgotten once
+-- the absorb is gone.
+local tE1, tE2 = {}, {}
+local totalInsts = { player = { [tE1] = { remaining = 3000 }, [tE2] = { remaining = 1500 } } }
+check("the total sums the tracked shields",
+  ns.ShieldTotal(totalInsts, "player", { tE1, tE2 }, 9999) == 4500)
+check("an untracked shield is left out of the total",
+  ns.ShieldTotal(totalInsts, "player", { tE1 }, 9999) == 3000)
+check("no elements means the unit's whole absorb",
+  ns.ShieldTotal(totalInsts, "player", {}, 9999) == 9999)
+check("an unwatched unit falls back to the unit total",
+  ns.ShieldTotal(totalInsts, "target", { tE1 }, 250) == 250)
+
+local store = {}
+check("the first reading is full", ns.ShieldTotalFraction("k", 4000, store) == 1)
+check("a drain reads against the peak", ns.ShieldTotalFraction("k", 1000, store) == 0.25)
+check("a second shield raises the peak", ns.ShieldTotalFraction("k", 8000, store) == 1)
+check("empty reads zero", ns.ShieldTotalFraction("k", 0, store) == 0)
+check("and the peak is forgotten", store.k == nil)
+check("so the next shield starts full", ns.ShieldTotalFraction("k", 500, store) == 1)
+check("a nil amount is empty, not an error", ns.ShieldTotalFraction("k", nil, store) == 0)
+
 -- Frame strata: getter defaults to MEDIUM, rejects garbage, and ApplyStrata
 -- propagates the configured value to every viewer frame.
 ns.DB = { db = { global = { appearance = {} } } }
@@ -215,6 +238,10 @@ local function FakeIcon()
   icon.SetTexture = function() end
   icon.SetDesaturated = function() end
   icon.SetVertexColor = function(_, r, g, b, a) icon.color = { r, g, b, a } end
+  icon.ClearAllPoints = function() end
+  icon.SetPoint = function(_, point, x) if point == "TOPLEFT" then icon.inset = x end end
+  icon.Show = function() icon.shown = true end
+  icon.Hide = function() icon.shown = false end
   return icon
 end
 
@@ -240,6 +267,38 @@ local btn = FakeButton()
 ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920)
 check("icons show the timer by default", btn.timeText.text == "10")
 check("icons show stacks", btn.stacksText.text == 3)
+
+-- Icon border: width and colour from Appearance, per-element colour override,
+-- width 0 hides it, and a Masque-skinned button keeps the skin's own border.
+check("the border defaults to 1px black",
+  btn.border.shown == true and btn.border.inset == -1
+    and btn.border.color[1] == 0 and btn.border.color[4] == 0.9)
+ns.DB = { db = { global = { appearance = { borderSize = 3, borderColor = { 1, 0, 0 } } } } }
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920)
+check("a configured border is applied",
+  btn.border.inset == -3 and btn.border.color[1] == 1 and btn.border.color[2] == 0)
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920,
+  { borderColor = { 0, 1, 0 } })
+check("an element colour overrides the global one", btn.border.color[2] == 1)
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920,
+  { borderSize = 1 })
+check("an element width overrides the global one", btn.border.inset == -1)
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920,
+  { borderSize = 0 })
+check("one icon can drop its border while the row keeps one",
+  btn.border.shown == false)
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920, {})
+check("an element with no overrides falls back to the global border",
+  btn.border.shown == true and btn.border.inset == -3)
+ns.DB.db.global.appearance.borderSize = 0
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920)
+check("width 0 hides the border", btn.border.shown == false)
+ns.DB.db.global.appearance.borderSize = nil
+btn._masque = true
+ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32 }, 920)
+check("a skinned button keeps the skin's border", btn.border.shown == false)
+btn._masque = nil
+ns.DB = nil
 
 btn = FakeButton()
 ns.IconRow._SetButtonDisplay(btn, iconDisplay, { iconSize = 32, showTimer = false }, 920)
@@ -571,6 +630,65 @@ check("perRow 0 means never wrap", (grid(3, { iconSize = 10, spacing = 2, perRow
   == "0,0 12,0 24,0")
 local _, ew, eh = grid(0, ROW)
 check("an empty row still reserves one icon", ew == 10 and eh == 10)
+
+-- Per-icon sizes: the row packs around them instead of assuming one step, and a
+-- smaller icon is centred in the thickness of its line.
+local function vgrid(count, cfg, sizes)
+  local offsets, w, h = ns.IconGrid(count, cfg, sizes)
+  local parts = {}
+  for i, o in ipairs(offsets) do parts[i] = o.x .. "," .. o.y end
+  return table.concat(parts, " "), w, h
+end
+
+local VROW = { iconSize = 10, spacing = 2 }
+at, w, h = vgrid(3, VROW, { [2] = 20 })
+check("a bigger icon takes its own room", at == "0,-5 12,0 34,-5")
+check("the row is as wide as the sizes it holds", w == 44)
+check("the row is as tall as its tallest icon", h == 20)
+
+at = vgrid(3, { iconSize = 10, spacing = 2, growth = "LEFT" }, { [2] = 20 })
+check("grow left packs the same sizes from the right edge", at == "34,-5 12,0 0,-5")
+
+at, w, h = vgrid(3, { iconSize = 10, spacing = 2, orientation = "VERTICAL" }, { [2] = 20 })
+check("a column packs downward around a bigger icon", at == "5,0 0,-12 5,-34")
+check("the column is as wide as its widest icon", w == 20)
+
+at, w, h = vgrid(3, { iconSize = 10, spacing = 2, perRow = 2 }, { [1] = 20 })
+check("a wrapped row measures each line on its own", at == "0,0 22,-5 0,-22")
+check("the wrapped row is as wide as its longest line", w == 32)
+check("the wrapped row stacks by line thickness", h == 32)
+
+check("no sizes at all is the plain row", (vgrid(3, VROW)) == "0,0 12,0 24,0")
+check("an empty sizes list is the plain row too",
+  (vgrid(3, VROW, {})) == "0,0 12,0 24,0")
+
+check("element sizes are nil when nothing overrides",
+  ns.ElementSizes({ elements = { {}, {} } }) == nil)
+check("element sizes are collected by element index",
+  ns.ElementSizes({ elements = { {}, { iconSize = 44 } } })[2] == 44)
+check("no element list is no sizes", ns.ElementSizes({}) == nil)
+
+--------------------------------------------------------------------------------
+-- Growth offset: the stored position is the FIRST icon's, and the row extends in
+-- the growth direction from there. CENTER keeps the old centre-out row.
+local function off(growth, point, w, h)
+  local dx, dy = ns.GrowthOffset(growth, point, w, h, 10)
+  return dx .. "," .. dy
+end
+-- 4 icons of 10 with 2 spacing = 46 wide, 36 of slack, half of it is the shift
+check("grow right hangs the row to the right", off("RIGHT", "CENTER", 46, 10) == "18,0")
+check("grow left hangs it to the left", off("LEFT", "CENTER", 46, 10) == "-18,0")
+check("grow up hangs a column upward", off("UP", "CENTER", 10, 46) == "0,18")
+check("grow down hangs it downward", off("DOWN", "CENTER", 10, 46) == "0,-18")
+check("center growth never moves", off("CENTER", "CENTER", 46, 10) == "0,0")
+check("no growth set never moves", off(nil, "CENTER", 46, 10) == "0,0")
+check("a single icon needs no shift", off("RIGHT", "CENTER", 10, 10) == "0,0")
+check("an anchor that already pins the left edge is left alone",
+  off("RIGHT", "LEFT", 46, 10) == "0,0")
+check("hanging off a parent's bottom still grows sideways",
+  off("LEFT", "TOP", 46, 10) == "-18,0")
+check("an anchor that already pins the top is left alone",
+  off("UP", "BOTTOM", 10, 46) == "0,0")
 
 --------------------------------------------------------------------------------
 -- Action-bar glow: opt-in per element, mirrors the element's own glow onto the

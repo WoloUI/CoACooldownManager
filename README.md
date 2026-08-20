@@ -59,7 +59,7 @@ Eight display styles per bar:
 | **Bars** | Duration status bars that drain smoothly |
 | **Power** | 1–2 auto-detected resources, energy ticks, combo points |
 | **Stacks** | CoA pseudo-resources as segments or a continuous bar, two auras combined (see below) |
-| **Shield** | A vertical curved segment column that drains with your absorb shields |
+| **Shield** | A vertical curved segment column that drains with your absorb shields — one per shield, or one `Columns: One total` for the lot |
 | **Swing** | Swing timer |
 | **Cast** | Cast bar |
 | **Reminders** | Text alert rows |
@@ -79,7 +79,9 @@ Each bar tracks five kinds of element: **spells**, **items** (consumables),
   divider per point instead of one flat fill.
 - Per-bar `Timer` toggle, so target debuffs can show just their stack count.
 - **Rows or columns, with a wrap.** An icon bar's `Layout` is Row or Column, `Growth` runs
-  left/right (or up/down for a column), and `Per line` wraps the extras onto another line —
+  left/right (or up/down for a column) and the bar *extends that way* from where you put it
+  (the stored position is the first icon's; `Center` keeps the old centre-out row), and
+  `Per line` wraps the extras onto another line —
   `Overflow` says which way those lines stack. `Width mode: Match bar` measures the real
   shape, so a bar following a column is one icon wide.
 - **Item families.** Comma-separate a consumable's tiers, best first
@@ -89,6 +91,13 @@ Each bar tracks five kinds of element: **spells**, **items** (consumables),
 - **Apply look to all bars** copies one bar's sizes, spacing, font, growth and toggles onto
   every other bar of the same style — 20 bars no longer means setting the same three numbers
   20 times.
+- **Per-icon size.** An element can carry its own `Icon size`, and the row *packs around
+  it*: one 56px cooldown in a row of 32px icons pushes its neighbours over instead of
+  overlapping them, and the smaller ones centre in the line. Blank = the bar's size.
+- **Icon borders.** Width (none to 4px) and colour, account-wide in `General`, and both
+  overridable **per icon** in the element's own settings (`Border px` + `Border` swatch,
+  `Auto` clears them) — one icon can be red and 3px in a row of thin black ones, or carry
+  no border at all. A Masque skin overrides all of it.
 - **[Masque](https://github.com/bkader/Masque-WoTLK) support**, one skin group per bar, so
   Essentials and Utility can look different. Install it and the groups appear on their own;
   without it nothing changes.
@@ -233,7 +242,8 @@ hover, left-click to hide, right-click to cancel. Per-profile, and re-hides on s
 Config is **per character**, which is what you actually want on a classless server —
 layouts live per character so anchors never bleed between alts. Named profiles are
 account-wide **templates**, loaded *by copy* on assignment: deleting a template never
-touches the character copies that came from it. Import/export via `!CDM1!` base64
+touches the character copies that came from it. Bar **positions travel with the template**
+and are restored when you load it into the spec you are playing. Import/export via `!CDM1!` base64
 strings, parsed by a hand-written token parser (never `loadstring`).
 
 ### Spell scanner

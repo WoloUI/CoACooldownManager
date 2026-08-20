@@ -124,6 +124,23 @@ for _, kind in ipairs({ "cooldown", "buff", "debuff", "trinket", "item", "totem"
   check("the trigger builder renders for " .. kind, fine)
 end
 
+-- On an icon bar the builder grows a border cell, plus an Auto button ONLY when
+-- the element carries its own colour (both paths differ in cell count)
+for _, override in ipairs({ true, false }) do
+  check("the trigger builder renders the border cell, override=" .. tostring(override),
+    (function()
+      local el = { kind = "cooldown", name = "Fireball", conditions = {},
+        borderColor = override and { 1, 0, 0 } or nil,
+        borderSize = override and 3 or nil,
+        iconSize = override and 48 or nil }
+      local fine, e = pcall(function()
+        ns.TriggerBuilder:Load(el, function() end, "icons")
+      end)
+      if not fine then print("  trigger border: " .. tostring(e)) end
+      return fine
+    end)())
+end
+
 -- Conditions bucketed across two actions: one group header per action, each with
 -- its own join, and a sound on the glow group.
 check("the trigger builder renders grouped conditions", (function()

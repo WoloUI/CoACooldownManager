@@ -230,6 +230,11 @@ function DB:Init()
   -- `viewers`.
   db.global.configWindow = db.global.configWindow or {}
   db.global.profiles = db.global.profiles or {}     -- named profile templates (account-wide library)
+  -- Bar POSITIONS per template. Kept beside the templates instead of inside
+  -- them: a profile's `viewers` never held positions (those live per character
+  -- in `char.layouts`), so saving a profile silently dropped the layout the user
+  -- had just arranged -- reported 2026-08-17.
+  db.global.profileLayouts = db.global.profileLayouts or {}
   -- Aggro alert overlay (screen-space, shared by every character like the minimap)
   db.global.aggro = db.global.aggro or {
     enabled = true, size = 256, color = { 1, 0.1, 0.1 }, pulse = true,
@@ -351,10 +356,28 @@ function DB:GetNamedProfileNames()
   return names
 end
 
+-- The positions of a profile's bars, as a { [viewerName] = anchor } snapshot.
+-- Only the bars the profile actually has: a layout carries entries for every bar
+-- the CHARACTER ever had, and dragging those into an unrelated template would
+-- resurrect them on import.
+function DB:LayoutSnapshot(profile)
+  local snapshot = {}
+  local layout = self:GetLayout()
+  for _, viewer in ipairs((profile or {}).viewers or {}) do
+    if layout[viewer.name] then
+      snapshot[viewer.name] = ns.CopyTable(layout[viewer.name])
+    end
+  end
+  return snapshot
+end
+
 -- Snapshots the ACTIVE setup under a name (overwrites an existing name).
+-- Positions come along: "save profile" that lost the layout was the single most
+-- reported surprise.
 function DB:SaveProfileAs(name)
   if not name or name == "" then return nil, "give the profile a name" end
   self.db.global.profiles[name] = ns.CopyTable(self.profile)
+  self.db.global.profileLayouts[name] = self:LayoutSnapshot(self.profile)
   return true
 end
 
@@ -388,6 +411,8 @@ function DB:DuplicateNamedProfile(sourceName, newName)
     end
   end
   self.db.global.profiles[finalName] = ns.CopyTable(source)
+  local sourceLayout = self.db.global.profileLayouts[sourceName]
+  self.db.global.profileLayouts[finalName] = sourceLayout and ns.CopyTable(sourceLayout) or nil
   return true, finalName
 end
 
@@ -406,6 +431,16 @@ function DB:AssignProfile(specKey, profileName)
     copy.tracking = copy.tracking or DefaultTracking()
     self.char.specs[specKey] = copy
     if specKey == self:GetSpecKey() then
+      -- Positions are per CHARACTER and shared by its specs, so they are only
+      -- applied for the spec being played: loading a profile onto spec 2 must
+      -- not drag the bars the player is looking at right now.
+      local saved = self.db.global.profileLayouts[profileName]
+      if saved then
+        local layout = self:GetLayout()
+        for viewerName, anchor in pairs(saved) do
+          layout[viewerName] = ns.CopyTable(anchor)
+        end
+      end
       self:ActivateProfile()
       ns:Fire("PROFILE_CHANGED")
     end
@@ -415,6 +450,7 @@ end
 -- Deletes the template only; character copies loaded from it are untouched.
 function DB:DeleteNamedProfile(name)
   self.db.global.profiles[name] = nil
+  self.db.global.profileLayouts[name] = nil
   for specKey, assigned in pairs(self.char.assignments) do
     if assigned == name then self.char.assignments[specKey] = nil end
   end
@@ -716,12 +752,7 @@ function DB:ExportProfile()
     -- `groups` is gone with the buff-group reminder type; older strings may
     -- still carry it and are simply ignored on import.
   }
-  local layout = self:GetLayout()
-  for _, viewer in ipairs(self.profile.viewers) do
-    if layout[viewer.name] then
-      payload.layout[viewer.name] = layout[viewer.name]
-    end
-  end
+  payload.layout = self:LayoutSnapshot(self.profile)
   return PREFIX .. B64Encode(Serialize(payload))
 end
 

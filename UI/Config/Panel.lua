@@ -27,6 +27,11 @@ local POSITION_OPTIONS = {
   { text = "Left of parent", value = "left" },
   { text = "Right of parent", value = "right" },
 }
+-- Shields: one column per tracked buff, or one column for the lot
+local SHIELD_MODE_OPTIONS = {
+  { text = "One per shield", value = "split" },
+  { text = "One total", value = "total" },
+}
 local WIDTH_MODE_OPTIONS = {
   { text = "Fixed", value = "fixed" },
   { text = "Match bar", value = "match" },
@@ -964,6 +969,24 @@ function Config:BuildControls()
   end)
   c.genGlowThick:SetOptions(ns.GlowThicknessOptions)
   c.genGlowHint = W.CreateLabel(parent, "Lines and thickness apply to the Pixel style; speed applies to all.", 10, W.colors.inkDim)
+  c.genBorderLabel = W.CreateLabel(parent, "Icon border", 12, W.colors.inkDim)
+  c.genBorder = W.CreateDropdown(parent, 80, function(_, value)
+    AppearanceCfg().borderSize = value
+    Touch()
+  end)
+  c.genBorder:SetOptions(ns.BorderSizeOptions)
+  c.genBorderColorLabel = W.CreateLabel(parent, "Border color", 12, W.colors.inkDim)
+  c.genBorderColor = W.CreateColorSwatch(parent, function(_, color)
+    AppearanceCfg().borderColor = color
+    Touch()
+  end)
+  c.genBorderReset = W.CreateButton(parent, "Auto", 44, 20, function()
+    AppearanceCfg().borderColor = nil
+    Touch()
+    Config:Render()
+  end)
+  c.genBorderHint = W.CreateLabel(parent,
+    "Icon bars only, and a Masque skin overrides it. A single icon can carry its\nown border color in its element settings.", 10, W.colors.inkDim)
   c.genStrataLabel = W.CreateLabel(parent, "Frame layer", 12, W.colors.inkDim)
   c.genStrata = W.CreateDropdown(parent, 120, function(_, value)
     AppearanceCfg().frameStrata = value
@@ -1222,6 +1245,13 @@ function Config:BuildControls()
     ShieldCfg().curve = math.min(math.max(tonumber(text) or 12, -40), 40)
     Touch()
   end, "12")
+  c.shieldModeLabel = W.CreateLabel(parent, "Columns", 12, W.colors.inkDim)
+  c.shieldMode = W.CreateDropdown(parent, 130, function(_, value)
+    ShieldCfg().mode = value == "total" and "total" or nil
+    Touch()
+    Config:Render()
+  end)
+  c.shieldMode:SetOptions(SHIELD_MODE_OPTIONS)
   c.shieldColorLabel = W.CreateLabel(parent, "Color", 12, W.colors.inkDim)
   c.shieldColor = W.CreateColorSwatch(parent, function(_, color)
     ShieldCfg().color = color
@@ -1232,7 +1262,7 @@ function Config:BuildControls()
     Touch()
   end)
   c.shieldHint = W.CreateLabel(parent,
-    "Each tracked shield buff shows as a curved column that drains with the\nabsorb left on the unit (negative curve bows left). Add the shield spells\nas Buff elements below.", 10, W.colors.inkDim)
+    "One per shield: a curved column per tracked buff, draining with the absorb\nleft on the unit (negative curve bows left). One total: a single column for\nevery shield at once -- with Buff elements below it totals only those, and\nwith none at all it totals every absorb on the unit.", 10, W.colors.inkDim)
 
   -- Swing bar (config resolved at click time: pooled controls)
   local function SwingCfg()
@@ -1674,7 +1704,7 @@ function Config:BuildControls()
 
   -- Profiles view
   c.profHint = W.CreateLabel(parent,
-    "Saved profiles are TEMPLATES visible from all your characters. Picking one\nfor a spec below loads an independent COPY: later changes stay on this\ncharacter. Use 'Save current as' again to update the saved template.", 10, W.colors.inkDim)
+    "Saved profiles are TEMPLATES visible from all your characters. Picking one\nfor a spec below loads an independent COPY: later changes stay on this\ncharacter. Bar POSITIONS are saved with it and restored when you load it\ninto the spec you are playing. Use 'Save current as' again to update the\nsaved template.", 10, W.colors.inkDim)
   c.profNewName = W.CreateEditBox(parent, 170, 20, nil, "profile name")
   c.profSaveBtn = W.CreateButton(parent, "Save current as", 110, 20, function()
     local name = c.profNewName:GetText()
@@ -2379,7 +2409,7 @@ local function RenderElementList(c, viewer, y, isReminders)
       c.trigger:ClearAllPoints()
       c.trigger:SetPoint("TOPLEFT", 16, y - 4)
       c.trigger:SetPoint("RIGHT", win.content, "RIGHT", 0, 0)
-      ns.TriggerBuilder:Load(el, function() Config:Render() end)
+      ns.TriggerBuilder:Load(el, function() Config:Render() end, viewer.style)
       y = y - c.trigger:GetHeight() - 12
     end
   end
@@ -2575,6 +2605,24 @@ function Config:Render()
     c2.genGlowThick:Show()
     y2 = y2 - 24
     c2.genGlowHint:SetPoint("TOPLEFT", 0, y2); c2.genGlowHint:Show()
+    y2 = y2 - 34
+    c2.genBorderLabel:SetPoint("TOPLEFT", 0, y2 - 4); c2.genBorderLabel:Show()
+    c2.genBorder:SetPoint("TOPLEFT", 80, y2)
+    c2.genBorder:SetValue(ns.GetBorderSize())
+    c2.genBorder:Show()
+    -- Same reason as the per-element swatch: say when the colour shown is the
+    -- built-in default rather than something the user picked.
+    c2.genBorderColorLabel:SetText(appearance.borderColor and "Border color"
+      or "Border color (default)")
+    c2.genBorderColorLabel:SetPoint("TOPLEFT", 175, y2 - 4); c2.genBorderColorLabel:Show()
+    c2.genBorderColor:SetPoint("TOPLEFT", 318, y2)
+    c2.genBorderColor:SetColor(ns.GetBorderColor())
+    c2.genBorderColor:Show()
+    if appearance.borderColor then
+      c2.genBorderReset:SetPoint("TOPLEFT", 344, y2); c2.genBorderReset:Show()
+    end
+    y2 = y2 - 24
+    c2.genBorderHint:SetPoint("TOPLEFT", 0, y2); c2.genBorderHint:Show()
     y2 = y2 - 24
     c2.genHint:SetPoint("TOPLEFT", 0, y2); c2.genHint:Show()
     y2 = y2 - 40
@@ -3239,7 +3287,8 @@ function Config:Render()
         .. "Comma-separate tiers (best first) to have it fall back as you run out;\n"
         .. "Show = 'Only while carried' hides the slot when you have none."
     elseif style == "shield" then
-      addHint = "Add your shield spells as Buff elements (name, ID, or drag from the spellbook)."
+      addHint = "Add your shield spells as Buff elements (name, ID, or drag from the"
+        .. " spellbook). A total column with no elements shows every absorb on the unit."
     elseif style == "bars" then
       -- The most-asked support question: a duration bar sits there empty with
       -- dashes because the element's Show mode is "Always (gray when missing)",
@@ -3438,7 +3487,9 @@ function Config:Render()
     c.shieldCurve:SetText(tostring(viewer.shield.curve or 12))
     c.spacing:SetText(tostring(viewer.spacing or 10))
     c.fontSize:SetText(tostring(viewer.fontSize or 11))
+    c.shieldMode:SetValue(viewer.shield.mode == "total" and "total" or "split")
     y = ns.FormCells(y, {
+      { label = c.shieldModeLabel,  control = c.shieldMode,  width = 138 },
       { label = c.shieldSegLabel,   control = c.shieldSegs,  width = 64 },
       { label = c.shieldWLabel,     control = c.shieldW,     width = 78 },
       { label = c.shieldHLabel,     control = c.shieldH,     width = 78 },

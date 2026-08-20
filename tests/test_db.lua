@@ -205,6 +205,38 @@ ns.DB:DeleteNamedProfile("Tpl")
 check("deleting the template keeps the loaded copy", ns.DB:GetViewer("LocalOnly") ~= nil)
 check("delete clears the loaded-from label", ns.DB.char.assignments[ns.DB:GetSpecKey()] == nil)
 
+-- A saved profile carries the bar POSITIONS with it (reported 2026-08-17: the
+-- template restored the bars and their spells, then left them where the
+-- character's own layout had them).
+do
+  local essential = ns.DB:GetViewer("Essential")
+  ns.DB:SetAnchor(essential, { parent = "FREE", point = "CENTER", x = 111, y = 222 })
+  ns.DB:SaveProfileAs("Placed")
+  local saved = CoACDM_DB.global.profileLayouts.Placed
+  check("saving a profile snapshots the positions",
+    saved and saved.Essential and saved.Essential.x == 111)
+  check("the snapshot only holds the profile's own bars", saved.NotABar == nil)
+  ns.DB:SetAnchor(essential, { parent = "FREE", point = "CENTER", x = 0, y = 0 })
+  ns.DB:AssignProfile(ns.DB:GetSpecKey(), "Placed")
+  local restored = ns.DB:GetAnchor(ns.DB:GetViewer("Essential"))
+  check("loading it puts the bars back", restored.x == 111 and restored.y == 222)
+  ns.DB:SetAnchor(ns.DB:GetViewer("Essential"), { parent = "FREE", point = "CENTER", x = 5, y = 5 })
+  check("the snapshot is a copy, not a live reference",
+    CoACDM_DB.global.profileLayouts.Placed.Essential.x == 111)
+  -- Positions are per character and shared by its specs, so another spec's
+  -- assignment must not drag the bars being looked at right now
+  ns.DB:AssignProfile("talents2", "Placed")
+  check("assigning to another spec leaves this spec's positions alone",
+    ns.DB:GetAnchor(ns.DB:GetViewer("Essential")).x == 5)
+  local okCopy, copyName = ns.DB:DuplicateNamedProfile("Placed")
+  check("duplicating carries the positions too",
+    okCopy and CoACDM_DB.global.profileLayouts[copyName].Essential.x == 111)
+  ns.DB:DeleteNamedProfile("Placed")
+  check("deleting the template drops its positions",
+    CoACDM_DB.global.profileLayouts.Placed == nil)
+  ns.DB:DeleteNamedProfile(copyName)
+end
+
 -- Duplicating a saved template
 ns.DB:SaveProfileAs("Dup")
 local dupSrcViewers = #CoACDM_DB.global.profiles.Dup.viewers

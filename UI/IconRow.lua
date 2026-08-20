@@ -6,6 +6,44 @@ ns.IconRow = IconRow
 --------------------------------------------------------------------------------
 -- Button pool per viewer frame
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- Border
+--------------------------------------------------------------------------------
+-- Width and colour come from Appearance (account-wide); an element can carry its
+-- own `borderColor` to mark one icon out of the row. Width 0 hides it.
+--
+-- Re-applied on every update because both can change under a live bar, but only
+-- touched when something actually differs: this runs once per icon per tick.
+-- A Masque skin owns the border, so a skinned button is left alone.
+function ns.ApplyIconBorder(btn, element)
+  local border = btn.border
+  if not border then return end
+  if btn._masque then
+    border:Hide()
+    return
+  end
+  -- An element can override the width as well as the colour. `or` is safe with 0
+  -- here: in Lua 0 is truthy, so "None" on one icon stays None.
+  local size = (element and element.borderSize)
+    or (ns.GetBorderSize and ns.GetBorderSize()) or 1
+  if size <= 0 then
+    border:Hide()
+    return
+  end
+  local color = (element and element.borderColor)
+    or (ns.GetBorderColor and ns.GetBorderColor()) or { 0, 0, 0, 0.9 }
+  local key = size .. ":" .. color[1] .. "," .. color[2] .. "," .. color[3]
+    .. "," .. (color[4] or 0.9)
+  if btn._borderKey ~= key then
+    btn._borderKey = key
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT", -size, size)
+    border:SetPoint("BOTTOMRIGHT", size, -size)
+    border:SetVertexColor(color[1], color[2], color[3], color[4] or 0.9)
+  end
+  border:Show()
+end
+
 local function CreateButton(parent)
   local btn = CreateFrame("Frame", nil, parent)
 
@@ -14,11 +52,9 @@ local function CreateButton(parent)
   ns.CropIcon(btn.icon)
 
   btn.border = btn:CreateTexture(nil, "OVERLAY")
-  btn.border:SetPoint("TOPLEFT", -1, 1)
-  btn.border:SetPoint("BOTTOMRIGHT", 1, -1)
   btn.border:SetTexture("Interface\\Buttons\\WHITE8X8")
-  btn.border:SetVertexColor(0, 0, 0, 0.9)
   btn.border:SetDrawLayer("BACKGROUND", -1)
+  ns.ApplyIconBorder(btn)
 
   btn.cooldown = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
   btn.cooldown:SetAllPoints()
@@ -204,9 +240,10 @@ function IconRow:Build(frame, cfg)
   MasqueReSkin(frame)
 end
 
-local function SetButtonDisplay(btn, display, cfg, now)
-  local size = cfg.iconSize or 32
+local function SetButtonDisplay(btn, display, cfg, now, element)
+  local size = (element and element.iconSize) or cfg.iconSize or 32
   btn:SetSize(size, size)
+  ns.ApplyIconBorder(btn, element)
   local font = ns.GetFont()
   btn.timeText:SetFont(font, ns.FontSize(cfg.fontSize or 12), "OUTLINE")
   btn.stacksText:SetFont(font, ns.FontSize(math.max((cfg.fontSize or 12) - 2, 8)), "OUTLINE")
@@ -301,20 +338,39 @@ end
 --
 -- CENTER growth needs no special case: the frame itself is centred on its
 -- anchor, so the icons just fill forward inside it.
-function ns.IconGrid(count, cfg)
+function ns.IconGrid(count, cfg, sizes)
   cfg = cfg or {}
-  local size = cfg.iconSize or 32
-  local step = size + (cfg.spacing or 5)
+  local base = cfg.iconSize or 32
+  local spacing = cfg.spacing or 5
   local vertical = cfg.orientation == "VERTICAL"
   local growth = cfg.growth or (vertical and "DOWN" or "CENTER")
+  local function sizeOf(i) return (sizes and sizes[i]) or base end
 
+  local n = math.max(count, 1)
   local perLine = math.max(math.floor(tonumber(cfg.perRow) or 0), 0)
-  if perLine == 0 then perLine = math.max(count, 1) end
-  local lines = math.max(math.ceil(math.max(count, 1) / perLine), 1)
-  local along = math.min(math.max(count, 1), perLine) -- icons on the longest line
+  if perLine == 0 then perLine = n end
+  local lines = math.max(math.ceil(n / perLine), 1)
 
-  local alongPx = along * step - (cfg.spacing or 5)
-  local acrossPx = lines * step - (cfg.spacing or 5)
+  -- Per line: how long it runs, and how thick it is (the biggest icon on it).
+  -- With one size everywhere this is the old `along * step - spacing`.
+  local lineAlong, lineAcross = {}, {}
+  for line = 0, lines - 1 do
+    local along, across = 0, 0
+    for i = line * perLine + 1, math.min(n, (line + 1) * perLine) do
+      local size = sizeOf(i)
+      along = along + size + spacing
+      if size > across then across = size end
+    end
+    lineAlong[line] = math.max(along - spacing, 0)
+    lineAcross[line] = across
+  end
+
+  local alongPx, acrossPx = 0, 0
+  for line = 0, lines - 1 do
+    if lineAlong[line] > alongPx then alongPx = lineAlong[line] end
+    acrossPx = acrossPx + lineAcross[line] + spacing
+  end
+  acrossPx = math.max(acrossPx - spacing, 0)
   local width = vertical and acrossPx or alongPx
   local height = vertical and alongPx or acrossPx
 
@@ -324,26 +380,58 @@ function ns.IconGrid(count, cfg)
   local overflow = cfg.overflow or (vertical and "RIGHT" or "DOWN")
   local backAcross = (vertical and overflow == "LEFT") or (not vertical and overflow == "UP")
 
+  -- Where each line starts across the bar, in line order
+  local crossStart, cursor = {}, 0
+  for line = 0, lines - 1 do
+    crossStart[line] = cursor
+    cursor = cursor + lineAcross[line] + spacing
+  end
+
   local offsets = {}
+  local alongStart = 0
   for i = 1, count do
     local line = math.floor((i - 1) / perLine)
     local pos = (i - 1) % perLine
-    local a = backAlong and ((vertical and height or width) - size - pos * step)
-      or pos * step
-    local c = backAcross and ((vertical and width or height) - size - line * step)
-      or line * step
+    if pos == 0 then alongStart = 0 end
+    local size = sizeOf(i)
+    local a = backAlong and (alongPx - alongStart - size) or alongStart
+    local c = backAcross
+      and (acrossPx - crossStart[line] - lineAcross[line])
+      or crossStart[line]
+    -- A smaller icon is centred in the thickness of its line, so a row with one
+    -- big icon reads as one row and not as a staircase
+    c = c + (lineAcross[line] - size) / 2
     -- y grows DOWNWARD as a negative offset from TOPLEFT (never -0, which is a
     -- real value in Lua and reads as a bug in anything that prints it)
     local down = vertical and a or c
     down = down ~= 0 and -down or 0
     offsets[i] = { x = vertical and c or a, y = down }
+    alongStart = alongStart + size + spacing
   end
   return offsets, width, height
 end
 
-local function LayoutRow(frame, cfg, count)
-  local offsets, width, height = ns.IconGrid(count, cfg)
+-- The per-element icon sizes for a bar, or nil when every icon is the bar's own
+-- size (the common case: no list to build, no allocation per tick).
+function ns.ElementSizes(cfg)
+  local elements = cfg and cfg.elements
+  if not elements then return nil end
+  local sizes, any = {}, false
+  for i, element in ipairs(elements) do
+    if element.iconSize then
+      sizes[i] = element.iconSize
+      any = true
+    end
+  end
+  return any and sizes or nil
+end
+
+local function LayoutRow(frame, cfg, count, sizes)
+  local offsets, width, height = ns.IconGrid(count, cfg, sizes)
   frame:SetSize(width, height)
+  -- The row just changed size, so where it hangs off its anchor changed with it
+  -- (grow left/right pins an edge; see ns.GrowthOffset)
+  if ns.PositionFrame then ns.PositionFrame(frame) end
   for i = 1, count do
     local btn = frame.buttons[i]
     btn:ClearAllPoints()
@@ -354,6 +442,9 @@ end
 function IconRow:Update(frame, cfg)
   local now = GetTime()
   local shown = 0
+  -- Sizes of the icons actually SHOWN, in the order they are laid out: an
+  -- element hidden by a show filter must not leave a gap the size of its icon.
+  local sizes
   if ns.TestMode and ns.TestMode.active then
     shown = ns.TestMode:FillIcons(frame, cfg, AcquireButton, SetButtonDisplay)
   else
@@ -365,7 +456,11 @@ function IconRow:Update(frame, cfg)
       if display.shown then
         shown = shown + 1
         local btn = AcquireButton(frame, shown)
-        SetButtonDisplay(btn, display, cfg, now)
+        SetButtonDisplay(btn, display, cfg, now, element)
+        if element.iconSize then
+          sizes = sizes or {}
+          sizes[shown] = element.iconSize
+        end
         btn:Show()
       end
     end
@@ -375,7 +470,7 @@ function IconRow:Update(frame, cfg)
       frame.buttons[i]:Hide()
     end
   end
-  LayoutRow(frame, cfg, shown)
+  LayoutRow(frame, cfg, shown, sizes)
 end
 
 IconRow._SetButtonDisplay = SetButtonDisplay

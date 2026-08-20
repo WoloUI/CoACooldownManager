@@ -527,6 +527,36 @@ function TriggerBuilder:Create(parent)
     builder.element.onlyMine = checked
   end)
 
+  -- Border colour for THIS icon, overriding the account-wide one in Appearance
+  -- (asked for 2026-08-20). "Auto" clears it back to the global colour.
+  -- Per-icon size. Blank = the bar's own size; the row packs around whatever
+  -- each icon ends up being, so one big cooldown does not overlap its neighbours.
+  builder.iconSizeLabel = W.CreateLabel(builder, "Icon size (blank = bar)", 11, W.colors.inkDim)
+  builder.iconSize = W.CreateEditBox(builder, 60, 20, function(self, text)
+    if not builder.element then return end
+    local value = tonumber(text)
+    builder.element.iconSize = value and math.min(math.max(value, 8), 128) or nil
+    ns.Config:Render()
+  end, "e.g. 48")
+
+  builder.borderSizeLabel = W.CreateLabel(builder, "Border px", 11, W.colors.inkDim)
+  builder.borderSize = W.CreateDropdown(builder, 84, function(_, value)
+    if not builder.element then return end
+    builder.element.borderSize = value >= 0 and value or nil
+  end)
+  builder.borderSize:SetOptions(ns.ElementBorderSizeOptions)
+  builder.borderLabel = W.CreateLabel(builder, "Border", 11, W.colors.inkDim)
+  builder.border = W.CreateColorSwatch(builder, function(_, color)
+    builder.element.borderColor = color
+  end)
+  builder.borderResetLabel = W.CreateLabel(builder, " ", 11, W.colors.inkDim)
+  builder.borderReset = W.CreateButton(builder, "Auto", 44, 20, function()
+    if not builder.element then return end
+    builder.element.borderColor = nil
+    builder.element.borderSize = nil
+    ns.Config:Render()
+  end)
+
   -- Mirror this element's glow onto the action-bar button that holds the same
   -- spell. Every condition already built applies, "aura missing" included -- so
   -- "glow when it falls off" is a trigger, not a second setting.
@@ -593,10 +623,13 @@ function TriggerBuilder:Create(parent)
   return builder
 end
 
-function TriggerBuilder:Load(element, onChange)
+-- `style` is the OWNING bar's style: a couple of controls (the per-icon border
+-- colour) only mean something on an icon bar.
+function TriggerBuilder:Load(element, onChange, style)
   if not builder then return end
   builder.element = element
   builder.onChange = onChange
+  builder.style = style
   if not element then
     builder:Hide()
     return
@@ -684,6 +717,34 @@ function TriggerBuilder:Load(element, onChange)
     builder.icd:Hide()
     builder.cdSpellLabel:Hide()
     builder.cdSpell:Hide()
+  end
+  -- Per-icon border colour. Only on icon bars: a duration bar has no icon border
+  -- to paint, and the swatch would be a dead control.
+  if builder.style == "icons" then
+    -- A swatch showing the inherited colour looks exactly like one showing an
+    -- override, so the LABEL says which it is and the Auto button (which clears
+    -- the override) only exists when there is one to clear.
+    local own = element.borderColor
+    builder.border:SetColor(own or (ns.GetBorderColor and ns.GetBorderColor()))
+    builder.borderLabel:SetText(own and "Border" or "Border (global)")
+    builder.iconSize:SetText(element.iconSize and tostring(element.iconSize) or "")
+    cells[#cells + 1] = { label = builder.iconSizeLabel, control = builder.iconSize, width = 132 }
+    builder.borderSize:SetValue(element.borderSize or -1)
+    cells[#cells + 1] = { label = builder.borderSizeLabel, control = builder.borderSize, width = 92 }
+    -- "Border (global)" is wider than the swatch, so the cell has to hold the
+    -- label or it runs into whatever cell lands next to it
+    cells[#cells + 1] = { label = builder.borderLabel, control = builder.border,
+      width = own and 46 or 92 }
+    if own or element.borderSize then
+      cells[#cells + 1] = { label = builder.borderResetLabel, control = builder.borderReset, width = 48 }
+    else
+      builder.borderResetLabel:Hide(); builder.borderReset:Hide()
+    end
+  else
+    builder.borderLabel:Hide(); builder.border:Hide()
+    builder.borderResetLabel:Hide(); builder.borderReset:Hide()
+    builder.borderSizeLabel:Hide(); builder.borderSize:Hide()
+    builder.iconSizeLabel:Hide(); builder.iconSize:Hide()
   end
   y = ns.FormCells(y, cells, paneW, PAD)
 

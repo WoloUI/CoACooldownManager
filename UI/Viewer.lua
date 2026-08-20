@@ -96,12 +96,72 @@ end
 -- first pass, and a bar stranded in the middle of the screen looks like a bug.
 Viewer.pendingFrameAnchor = false
 
+--------------------------------------------------------------------------------
+-- Growth
+--------------------------------------------------------------------------------
+-- "Grow right" has to mean the row EXTENDS right from where it is pinned. A bar
+-- frame is sized from its visible content and anchored by a point that is
+-- centred on the growth axis, so on its own every setting drew the same
+-- centre-out row (reported 2026-08-20).
+--
+-- The reference is ONE icon: the stored x/y stay the position of the first icon,
+-- and the rest of the row extends in the growth direction. A CENTER growth (the
+-- default on every shipped bar) has no offset, so no existing layout moves.
+--
+-- The offset is skipped on the axis the anchor point already pins: a bar hanging
+-- off its parent's LEFT side has its right edge fixed by the anchor itself.
+local H_CENTRED = { CENTER = true, TOP = true, BOTTOM = true }
+local V_CENTRED = { CENTER = true, LEFT = true, RIGHT = true }
+
+function ns.GrowthOffset(growth, point, liveW, liveH, base)
+  base = base or 0
+  point = point or "CENTER"
+  if growth == "LEFT" or growth == "RIGHT" then
+    if not H_CENTRED[point] then return 0, 0 end
+    local slack = ((liveW or base) - base) / 2
+    if slack <= 0 then return 0, 0 end
+    return growth == "RIGHT" and slack or -slack, 0
+  elseif growth == "UP" or growth == "DOWN" then
+    if not V_CENTRED[point] then return 0, 0 end
+    local slack = ((liveH or base) - base) / 2
+    if slack <= 0 then return 0, 0 end
+    return 0, growth == "UP" and slack or -slack
+  end
+  return 0, 0
+end
+
+-- Only icon rows for now: a duration-bar stack's growth is its stacking ORDER,
+-- and pinning an edge there would move every existing Buffs bar.
+local function GrowthOffsetFor(frame)
+  local cfg = frame.cfg
+  if not cfg or cfg.style ~= "icons" then return 0, 0 end
+  return ns.GrowthOffset(cfg.growth, frame._anchor and frame._anchor.point,
+    frame:GetWidth(), frame:GetHeight(), cfg.iconSize or 32)
+end
+
+-- Applies the stored anchor plus the growth offset for the frame's CURRENT size.
+-- The style layouts call this after they resize, which is where the size a
+-- centred row has to be corrected for is known.
+function ns.PositionFrame(frame)
+  local a = frame and frame._anchor
+  if not a or not a.target then return end
+  local dx, dy = GrowthOffsetFor(frame)
+  frame:ClearAllPoints()
+  frame:SetPoint(a.point, a.target, a.relPoint, a.x + dx, a.y + dy)
+end
+
+local function Pin(frame, point, target, relPoint, x, y)
+  frame._anchor = { point = point, target = target, relPoint = relPoint,
+    x = x or 0, y = y or 0 }
+  ns.PositionFrame(frame)
+end
+
 local function ApplyAnchor(frame, cfg, resolving)
   local anchor = ns.DB:GetAnchor(cfg)
   frame:ClearAllPoints()
   if anchor.parent == "FREE" or not anchor.parent then
     local point, relPoint = ns.ResolveAnchorPoints(anchor, false)
-    frame:SetPoint(point, UIParent, relPoint, anchor.x or 0, anchor.y or 0)
+    Pin(frame, point, UIParent, relPoint, anchor.x, anchor.y)
     return
   end
 
@@ -110,11 +170,11 @@ local function ApplyAnchor(frame, cfg, resolving)
     local target = _G[frameName]
     if type(target) == "table" and target.GetObjectType then
       local point, relPoint = ns.ResolveAnchorPoints(anchor, true)
-      frame:SetPoint(point, target, relPoint, anchor.x or 0, anchor.y or 0)
+      Pin(frame, point, target, relPoint, anchor.x, anchor.y)
       return
     end
     Viewer.pendingFrameAnchor = true
-    frame:SetPoint("CENTER", UIParent, "CENTER", anchor.x or 0, anchor.y or 0)
+    Pin(frame, "CENTER", UIParent, "CENTER", anchor.x, anchor.y)
     return
   end
 
@@ -122,11 +182,11 @@ local function ApplyAnchor(frame, cfg, resolving)
   local parentFrame = parentCfg and frames[anchor.parent]
   if not parentFrame or resolving[anchor.parent] then
     -- Missing parent or cycle: fall back to screen anchoring
-    frame:SetPoint("CENTER", UIParent, "CENTER", anchor.x or 0, anchor.y or 0)
+    Pin(frame, "CENTER", UIParent, "CENTER", anchor.x, anchor.y)
     return
   end
   local point, relPoint = ns.ResolveAnchorPoints(anchor, true)
-  frame:SetPoint(point, parentFrame, relPoint, anchor.x or 0, anchor.y or 0)
+  Pin(frame, point, parentFrame, relPoint, anchor.x, anchor.y)
 end
 
 -- Layer all bars at the configured strata so the user can push them behind
@@ -190,7 +250,7 @@ function ns.ConfiguredWidth(cfg)
     -- Same geometry the row itself lays out with, so a column or a wrapped row
     -- is followed at its real width. An empty row still reserves one icon.
     local count = math.max(#(cfg.elements or {}), 1)
-    local _, width = ns.IconGrid(count, cfg)
+    local _, width = ns.IconGrid(count, cfg, ns.ElementSizes(cfg))
     return width
   elseif style == "bars" then
     return cfg.barWidth or 250
